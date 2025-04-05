@@ -1,0 +1,4 @@
+scrapegraphai
+playwright
+langchain_openai
+certifi

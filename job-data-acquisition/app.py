@@ -1,0 +1,118 @@
+#%%
+import os
+import json
+import logging
+from datetime import datetime
+from scrapegraphai.graphs import SmartScraperGraph
+
+# Load configuration from settings.json
+def load_config():
+    config_path = "settings.json"
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading configuration: {e}")
+        return None
+
+# Get configuration
+CONFIG = load_config()
+
+# Set up logging
+def setup_logging():
+    log_dir = CONFIG["logging"]["log_directory"]
+    os.makedirs(log_dir, exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = f"{log_dir}/scraper_{timestamp}.log"
+    
+    logging.basicConfig(
+        level=getattr(logging, CONFIG["logging"]["log_level"]),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ]
+    )
+    
+    return logging.getLogger("job_scraper")
+
+# Define the extraction prompt
+EXTRACTION_PROMPT = """
+Extract **all** job postings from the page. For each job listing, return a JSON object with the following fields:
+1. Job Title
+2. Company Name
+3. Job Description
+4. Required Skills
+5. Location
+6. Salary Range
+7. Posting Date
+8. Application URL
+
+**Output** should be a **JSON array** of objects, one for each of the job listing found on the page.
+"""
+
+# Configure the ScrapeGraph pipeline
+def configure_scraper(source_url):
+    scraper_config = CONFIG["scraper"]
+
+    graph_config = {
+        "llm": scraper_config["llm"],
+        "verbose": scraper_config["verbose"],
+        "headless": scraper_config["headless"],
+        "output_format": scraper_config["output_format"]
+    }
+
+    scraper = SmartScraperGraph(
+        prompt=EXTRACTION_PROMPT,
+        source=source_url,
+        config=graph_config
+    )
+
+    return scraper
+
+
+
+# Function to run the scraper and save results
+def run_scraper():
+    logger = setup_logging()
+    target_urls = CONFIG["target_urls"]
+    all_results = []
+
+    for url in target_urls:
+        try:
+            logger.info(f"Starting scraping job for: {url}")
+            
+            scraper = configure_scraper(url)
+            results = scraper.run()
+
+            all_results.append(results)
+
+            logger.info(f"Successfully scraped data from {url}")
+
+        except Exception as e:
+            logger.error(f"Error scraping {url}: {e}")
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = CONFIG["data_storage"]["output_directory"]
+    file_prefix = CONFIG["data_storage"]["file_prefix"]
+    output_file = f"{output_dir}/{file_prefix}{timestamp}.json"
+
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(all_results, f, indent=2, ensure_ascii=False)
+
+    logger.info(f"Scraping completed. Results saved to: {output_file}")
+    return output_file
+
+
+# Main execution
+if __name__ == "__main__":
+    if CONFIG is None:
+        print("Failed to load configuration. Exiting.")
+    else:
+        output_file = run_scraper()
+        print(f"Job data extraction complete. Data saved to: {output_file}")
+
+# %%
