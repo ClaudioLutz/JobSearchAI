@@ -1,4 +1,4 @@
-#%%
+
 import os
 import json
 import logging
@@ -52,10 +52,9 @@ Extract **all** job postings from the page. For each job listing, return a JSON 
 **Output** should be a **JSON array** of objects, one for each of the job listing found on the page.
 """
 
-# Configure the ScrapeGraph pipeline
-def configure_scraper(source_url):
+# Configure the ScrapeGraph pipeline with page number
+def configure_scraper(source_url, page):
     scraper_config = CONFIG["scraper"]
-
     graph_config = {
         "llm": scraper_config["llm"],
         "verbose": scraper_config["verbose"],
@@ -63,14 +62,16 @@ def configure_scraper(source_url):
         "output_format": scraper_config["output_format"]
     }
 
+    # Construct the URL using proper pagination query parameter
+    paginated_url = f"{source_url}{page}"
+
     scraper = SmartScraperGraph(
         prompt=EXTRACTION_PROMPT,
-        source=source_url,
+        source=paginated_url,
         config=graph_config
     )
 
     return scraper
-
 
 
 # Function to run the scraper and save results
@@ -80,18 +81,19 @@ def run_scraper():
     all_results = []
 
     for url in target_urls:
-        try:
-            logger.info(f"Starting scraping job for: {url}")
-            
-            scraper = configure_scraper(url)
-            results = scraper.run()
+        for page in range(1, 500):  # Loop from page 1 to 50
+            try:
+                logger.info(f"Starting scraping job for: {url}{page}")
+                
+                scraper = configure_scraper(url, page)
+                results = scraper.run()
 
-            all_results.append(results)
+                all_results.append(results)
 
-            logger.info(f"Successfully scraped data from {url}")
+                logger.info(f"Successfully scraped data from {url}{page}")
 
-        except Exception as e:
-            logger.error(f"Error scraping {url}: {e}")
+            except Exception as e:
+                logger.error(f"Error scraping {url}{page}: {e}")
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = CONFIG["data_storage"]["output_directory"]
@@ -106,7 +108,6 @@ def run_scraper():
     logger.info(f"Scraping completed. Results saved to: {output_file}")
     return output_file
 
-
 # Main execution
 if __name__ == "__main__":
     if CONFIG is None:
@@ -114,5 +115,3 @@ if __name__ == "__main__":
     else:
         output_file = run_scraper()
         print(f"Job data extraction complete. Data saved to: {output_file}")
-
-# %%
