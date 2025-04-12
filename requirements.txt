@@ -1,0 +1,7 @@
+openai>=1.0.0
+python-dotenv>=1.0.0
+PyMuPDF>=1.22.0
+python-docx>=0.8.11
+pathlib>=1.0.1
+flask>=2.0.0
+werkzeug>=2.0.0

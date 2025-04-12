@@ -1,4 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Logs
+*.log
+
+# Environment variables
+.env
+
+# Job data and matches
+job_matches_*.json
+job_matches_*.md
+
+# Virtual environments
+venv/
+ENV/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Original entries
 job-data-acquisition/configs/settings.json
 job-data-acquisition/venv
 job-data-acquisition/job-data-acquisition
 job-data-acquisition/settings.json
+
+# CV data - may contain personal information
+process_cv/cv-data/input/
+process_cv/cv-data/processed/
+process_cv/cv-data/*.pdf
