@@ -97,7 +97,8 @@ def upload_cv():
             processed_dir = 'process_cv/cv-data/processed'
             os.makedirs(processed_dir, exist_ok=True)
             
-            summary_filename = os.path.splitext(filename)[0] + '_summary.txt'
+            # Create summary filename without any nested path
+            summary_filename = os.path.splitext(os.path.basename(filename))[0] + '_summary.txt'
             summary_path = os.path.join(processed_dir, summary_filename)
             
             with open(summary_path, 'w', encoding='utf-8') as f:
@@ -197,15 +198,26 @@ def download_report(report_file):
 @app.route('/view_cv_summary/<cv_file>')
 def view_cv_summary(cv_file):
     """View a CV summary"""
-    # Get the summary file path
-    summary_filename = os.path.splitext(cv_file)[0] + '_summary.txt'
+    # Get the summary file path - ensure we're using just the basename
+    base_filename = os.path.basename(cv_file)
+    summary_filename = os.path.splitext(base_filename)[0] + '_summary.txt'
     summary_path = os.path.join('process_cv/cv-data/processed', summary_filename)
     
     try:
         # Check if the summary file exists
         if not os.path.exists(summary_path):
             # Process the CV to generate a summary
-            cv_path = os.path.join('process_cv/cv-data', cv_file)
+            # Determine if the CV is in the input directory or directly in cv-data
+            cv_path_input = os.path.join('process_cv/cv-data/input', cv_file)
+            cv_path_direct = os.path.join('process_cv/cv-data', cv_file)
+            
+            if os.path.exists(cv_path_input):
+                cv_path = cv_path_input
+            elif os.path.exists(cv_path_direct):
+                cv_path = cv_path_direct
+            else:
+                return jsonify({'error': f'CV file not found: {cv_file}'})
+                
             cv_text = extract_cv_text(cv_path)
             cv_summary = summarize_cv(cv_text)
             
