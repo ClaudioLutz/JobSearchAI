@@ -31,12 +31,12 @@ load_dotenv(dotenv_path=env_path)
 # Initialize the OpenAI client
 client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-def load_latest_job_data(max_jobs=10):
+def load_latest_job_data(max_jobs=50):
     """
     Load the most recent job data file
     
     Args:
-        max_jobs (int): Maximum number of job listings to return (default: 10)
+        max_jobs (int): Maximum number of job listings to return (default: 50)
     """
     job_data_dir = Path("job-data-acquisition/job-data-acquisition/data")
     logger.info(f"Looking for job data files in: {job_data_dir.absolute()}")
@@ -209,8 +209,8 @@ def match_jobs_with_cv(cv_path, min_score=6, max_results=10):
         cv_summary = summarize_cv(cv_text)
         logger.info(f"Successfully summarized CV, length: {len(cv_summary)} characters")
         
-        # Load job data
-        job_listings = load_latest_job_data()
+        # Load job data - pass max_results to load_latest_job_data to process more job listings
+        job_listings = load_latest_job_data(max_jobs=max_results)
         if not job_listings:
             logger.error("No job listings found")
             return []
@@ -309,18 +309,14 @@ if __name__ == "__main__":
     # Path to the CV
     cv_path = "process_cv/cv-data/Lebenslauf_Claudio Lutz.pdf"
     
-    # Set the maximum number of job listings to process
-    max_jobs = 10
+    # Set the maximum number of job listings to process and results to return
+    max_jobs = 50
     
     # Lower the minimum score threshold to see more matches
     min_score = 3
     
-    # Override the load_latest_job_data function to limit the number of jobs
-    original_load_latest_job_data = load_latest_job_data
-    load_latest_job_data = lambda: original_load_latest_job_data(max_jobs)
-    
-    # Match jobs with CV
-    matches = match_jobs_with_cv(cv_path, min_score=min_score, max_results=10)
+    # Match jobs with CV - max_results parameter will be passed to load_latest_job_data
+    matches = match_jobs_with_cv(cv_path, min_score=min_score, max_results=max_jobs)
     
     # Generate report
     report_file = generate_report(matches)
