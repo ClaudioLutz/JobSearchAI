@@ -143,24 +143,24 @@ def evaluate_job_match(cv_summary, job_listing):
     Salary Range: {job_listing.get('Salary Range', 'N/A')}
     Posting Date: {job_listing.get('Posting Date', 'N/A')}
 
-    Evaluate:
-    1. Skills match (1-10): How well do the candidate's skills match the job requirements?
-    2. Experience match (1-10): Is the candidate's experience level appropriate?
-    3. Location compatibility (Yes/No): Does the job location align with candidate preferences?
-    4. Education fit (1-10): How well does the candidate's education match requirements?
-    5. Overall match score (1-10): Considering all factors, how suitable is this candidate?
-    6. Reasoning: Briefly explain your evaluation.
+    # Bewertung:
+    # 1. Fähigkeiten-Übereinstimmung (1-10): Wie gut passen die Fähigkeiten des Kandidaten zu den Anforderungen der Stelle?
+    # 2. Erfahrungspassung (1-10): Ist das Erfahrungsniveau des Kandidaten angemessen?
+    # 3. Standortkompatibilität (Yes/No): Entspricht der Arbeitsort den Präferenzen des Kandidaten?
+    # 4. Ausbildungsübereinstimmung (1-10): Wie gut passt die Ausbildung des Kandidaten zu den Anforderungen?
+    # 5. Gesamtübereinstimmung (1-10): Wie geeignet ist der Kandidat insgesamt, unter Berücksichtigung aller Faktoren?
+    # 6. Begründung: Erklären Sie kurz Ihre Bewertung.
     """
-    
+
     json_part = """
-    Return your evaluation in JSON format with the following structure:
+    Geben Sie Ihre Bewertung im JSON-Format mit folgender Struktur zurück:
     {
         "skills_match": 8,
         "experience_match": 7,
         "location_compatibility": "Yes",
         "education_fit": 9,
         "overall_match": 8,
-        "reasoning": "Your reasoning here"
+        "reasoning": "Ihre Begründung hier"
     }
     """
     
