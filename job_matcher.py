@@ -59,28 +59,34 @@ def load_latest_job_data(max_jobs=50):
     try:
         with open(latest_file, 'r', encoding='utf-8') as f:
             job_data = json.load(f)
-        
-        # Check if the data has a nested structure with a "content" array
+
+        # Check if the data has a nested structure with one or more "content" arrays
         if isinstance(job_data, dict) and "content" in job_data:
             # The content field contains an array of job listings
             job_listings = job_data["content"]
             logger.info(f"Found nested structure with {len(job_listings)} job listings in 'content' array")
-        elif isinstance(job_data, list) and len(job_data) > 0 and isinstance(job_data[0], dict) and "content" in job_data[0]:
-            # The first item in the array has a content field that contains job listings
-            job_listings = job_data[0]["content"]
-            logger.info(f"Found nested structure with {len(job_listings)} job listings in first item's 'content' array")
+        elif isinstance(job_data, list):
+            # Initialize an empty list to gather all job listings
+            job_listings = []
+            for item in job_data:
+                if isinstance(item, dict) and "content" in item:
+                    job_listings.extend(item["content"])
+                else:
+                    # If the item isn't in a nested structure, assume it is a job listing
+                    job_listings.append(item)
+            logger.info(f"Found nested structure with {len(job_listings)} total job listings across all items")
         else:
             # Assume the data is a flat array of job listings
             job_listings = job_data
             logger.info("Using flat job data structure")
-        
+
         # Limit the number of job listings to process
         limited_data = job_listings[:max_jobs] if max_jobs > 0 else job_listings
-        
+
         # Print the first job listing to see its structure
         if limited_data:
             logger.info(f"First job listing structure: {json.dumps(limited_data[0], indent=2)}")
-        
+
         logger.info(f"Successfully loaded {len(job_listings)} job listings from {latest_file}")
         logger.info(f"Processing {len(limited_data)} job listings (limited by max_jobs={max_jobs})")
         return limited_data
@@ -191,9 +197,15 @@ def evaluate_job_match(cv_summary, job_listing):
             "reasoning": f"Error evaluating match: {str(e)}"
         }
 
-def match_jobs_with_cv(cv_path, min_score=6, max_results=10):
+def match_jobs_with_cv(cv_path, min_score=6, max_jobs=50, max_results=10):
     """
     Match jobs with a CV and return the top matches
+    
+    Args:
+        cv_path (str): Path to the CV file
+        min_score (int): Minimum overall match score (default: 6)
+        max_jobs (int): Maximum number of job listings to process (default: 50)
+        max_results (int): Maximum number of results to return (default: 10)
     """
     try:
         # Extract and summarize CV
@@ -209,8 +221,8 @@ def match_jobs_with_cv(cv_path, min_score=6, max_results=10):
         cv_summary = summarize_cv(cv_text)
         logger.info(f"Successfully summarized CV, length: {len(cv_summary)} characters")
         
-        # Load job data - pass max_results to load_latest_job_data to process more job listings
-        job_listings = load_latest_job_data(max_jobs=max_results)
+        # Load job data - pass max_jobs to load_latest_job_data to control how many job listings to process
+        job_listings = load_latest_job_data(max_jobs=max_jobs)
         if not job_listings:
             logger.error("No job listings found")
             return []
@@ -309,14 +321,13 @@ if __name__ == "__main__":
     # Path to the CV
     cv_path = "process_cv/cv-data/Lebenslauf_Claudio Lutz.pdf"
     
-    # Set the maximum number of job listings to process and results to return
-    max_jobs = 50
+    # Set parameters for job matching
+    max_jobs = 50     # Maximum number of job listings to process
+    max_results = 10  # Maximum number of results to return
+    min_score = 3     # Minimum match score threshold
     
-    # Lower the minimum score threshold to see more matches
-    min_score = 3
-    
-    # Match jobs with CV - max_results parameter will be passed to load_latest_job_data
-    matches = match_jobs_with_cv(cv_path, min_score=min_score, max_results=max_jobs)
+    # Match jobs with CV
+    matches = match_jobs_with_cv(cv_path, min_score=min_score, max_jobs=max_jobs, max_results=max_results)
     
     # Generate report
     report_file = generate_report(matches)

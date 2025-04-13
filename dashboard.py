@@ -118,6 +118,7 @@ def run_job_matcher():
     """Run the job matcher with the selected CV"""
     cv_path = request.form.get('cv_path')
     min_score = int(request.form.get('min_score', 3))
+    max_jobs = int(request.form.get('max_jobs', 50))
     max_results = int(request.form.get('max_results', 10))
     
     if not cv_path:
@@ -128,8 +129,8 @@ def run_job_matcher():
     full_cv_path = os.path.join('process_cv/cv-data', cv_path)
     
     try:
-        # Match jobs with CV
-        matches = match_jobs_with_cv(full_cv_path, min_score=min_score, max_results=max_results)
+        # Match jobs with CV - pass both max_jobs and max_results
+        matches = match_jobs_with_cv(full_cv_path, min_score=min_score, max_jobs=max_jobs, max_results=max_results)
         
         if not matches:
             flash('No job matches found')
