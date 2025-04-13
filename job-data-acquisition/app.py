@@ -7,7 +7,9 @@ from scrapegraphai.graphs import SmartScraperGraph
 
 # Load configuration from settings.json
 def load_config():
-    config_path = "settings.json"
+    # Get the directory where this script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(script_dir, "settings.json")
     try:
         with open(config_path, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -20,14 +22,21 @@ CONFIG = load_config()
 
 # Set up logging
 def setup_logging():
-    log_dir = CONFIG["logging"]["log_directory"]
+    if CONFIG is None:
+        # Default logging configuration if CONFIG is None
+        log_dir = "job-data-acquisition/logs"
+        log_level = "INFO"
+    else:
+        log_dir = CONFIG["logging"]["log_directory"]
+        log_level = CONFIG["logging"]["log_level"]
+    
     os.makedirs(log_dir, exist_ok=True)
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = f"{log_dir}/scraper_{timestamp}.log"
     
     logging.basicConfig(
-        level=getattr(logging, CONFIG["logging"]["log_level"]),
+        level=getattr(logging, log_level),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
             logging.FileHandler(log_file),
@@ -35,7 +44,11 @@ def setup_logging():
         ]
     )
     
-    return logging.getLogger("job_scraper")
+    logger = logging.getLogger("job_scraper")
+    if CONFIG is None:
+        logger.error("Configuration not loaded. Using default logging settings.")
+    
+    return logger
 
 # Define the extraction prompt
 EXTRACTION_PROMPT = """
@@ -54,6 +67,9 @@ Extract **all** job postings from the page. For each job listing, return a JSON 
 
 # Configure the ScrapeGraph pipeline with page number
 def configure_scraper(source_url, page):
+    if CONFIG is None:
+        raise ValueError("Configuration not loaded. Cannot configure scraper.")
+    
     scraper_config = CONFIG["scraper"]
     graph_config = {
         "llm": scraper_config["llm"],
@@ -77,11 +93,19 @@ def configure_scraper(source_url, page):
 # Function to run the scraper and save results
 def run_scraper():
     logger = setup_logging()
+    
+    if CONFIG is None:
+        logger.error("Configuration not loaded. Cannot run scraper.")
+        return None
+    
     target_urls = CONFIG["target_urls"]
     all_results = []
+    max_pages = CONFIG["scraper"].get("max_pages", 50)  # Default to 50 if not specified
+    
+    logger.info(f"Starting scraping with max_pages set to: {max_pages}")
 
     for url in target_urls:
-        for page in range(1, 500):  # Loop from page 1 to 50
+        for page in range(1, max_pages + 1):  # Loop from page 1 to max_pages
             try:
                 logger.info(f"Starting scraping job for: {url}{page}")
                 

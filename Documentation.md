@@ -60,7 +60,7 @@ The system consists of four main components:
 1. Loads configuration from `settings.json`
 2. Sets up logging
 3. Configures the ScrapeGraph scraper with a prompt to extract job details
-4. Scrapes job listings from the configured URLs (ostjob.ch)
+4. Scrapes job listings from the configured URLs (ostjob.ch) up to the configured maximum number of pages
 5. Saves the extracted data to a timestamped JSON file in the `data` directory
 
 **Output Format**:
@@ -256,8 +256,15 @@ python app.py
 ```
 
 This will:
-1. Scrape job listings from ostjob.ch
+1. Scrape job listings from ostjob.ch (up to the maximum number of pages configured in settings.json)
 2. Save the data to a timestamped JSON file in the `job-data-acquisition/job-data-acquisition/data` directory
+
+#### Configuring the Job Scraper
+
+You can modify the following parameters in `job-data-acquisition/settings.json`:
+
+- `max_pages`: Maximum number of pages to scrape (default: 50)
+- Other scraper settings like model, temperature, etc.
 
 ### Processing a CV Manually
 
@@ -291,6 +298,7 @@ Once the dashboard is running, you can:
    - Click the "Run Job Matcher" button
    - View the results on the results page
 3. **Run the Job Scraper**:
+   - Set the maximum number of pages to scrape (default: 50)
    - Click the "Run Job Scraper" button to get new job listings
    - This may take several minutes depending on the number of pages to scrape
 4. **View and Download Reports**:

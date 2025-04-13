@@ -152,9 +152,25 @@ def run_job_matcher():
 def run_job_scraper():
     """Run the job data acquisition component"""
     try:
+        # Get max_pages parameter from the form
+        max_pages = int(request.form.get('max_pages', 50))
+        
+        # Update the settings.json file with the max_pages parameter
+        settings_path = os.path.join(os.path.dirname(__file__), 'job-data-acquisition', 'settings.json')
+        
+        # Read the current settings
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+        
+        # Update the max_pages parameter
+        settings['scraper']['max_pages'] = max_pages
+        
+        # Write the updated settings back to the file
+        with open(settings_path, 'w', encoding='utf-8') as f:
+            json.dump(settings, f, indent=4, ensure_ascii=False)
+        
         # Import the job scraper module using importlib for more robust importing
         import importlib.util
-        import os
         
         # Get the absolute path to the app.py file
         app_path = os.path.join(os.path.dirname(__file__), 'job-data-acquisition', 'app.py')
@@ -170,7 +186,11 @@ def run_job_scraper():
         # Run the scraper
         output_file = run_scraper()
         
-        flash(f'Job data acquisition completed. Data saved to: {output_file}')
+        if output_file is None:
+            flash('Job data acquisition failed. Check the logs for details.')
+            logger.error('Job scraper returned None. Check the job-data-acquisition logs for details.')
+        else:
+            flash(f'Job data acquisition completed. Data saved to: {output_file}')
     except Exception as e:
         flash(f'Error running job scraper: {str(e)}')
         logger.error(f'Error running job scraper: {str(e)}')

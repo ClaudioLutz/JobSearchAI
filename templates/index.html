@@ -85,6 +85,11 @@
                     <div class="card-body">
                         <p>Run the job data acquisition component to scrape job listings from ostjob.ch.</p>
                         <form action="{{ url_for('run_job_scraper') }}" method="post">
+                            <div class="mb-3">
+                                <label for="max_pages" class="form-label">Maximum Pages to Scrape</label>
+                                <input type="number" class="form-control" id="max_pages" name="max_pages" min="1" max="500" value="50">
+                                <div class="form-text">Maximum number of pages to scrape from the job listing website.</div>
+                            </div>
                             <button type="submit" class="btn btn-warning">Run Job Scraper</button>
                         </form>
                     </div>

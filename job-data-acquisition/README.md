@@ -52,6 +52,7 @@ job-data-acquisition/
 The application is configured through the `configs/settings.json` file, which includes:
 
 - Scraper settings (model, token limits, temperature, etc.)
+  - `max_pages`: Maximum number of pages to scrape (default: 50)
 - Target URLs to scrape
 - Data storage configuration
 - Logging settings
