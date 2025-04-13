@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
 from werkzeug.utils import secure_filename
+import urllib.parse
 
 # Add the current directory to the Python path to find modules
 import sys
@@ -13,6 +14,7 @@ sys.path.append('.')
 # Import from existing modules
 from process_cv.cv_processor import extract_cv_text, summarize_cv
 from job_matcher import match_jobs_with_cv, generate_report, load_latest_job_data
+from motivation_letter_generator import main as generate_motivation_letter
 
 # Set up logging
 logging.basicConfig(
@@ -238,6 +240,115 @@ def download_report(report_file):
     except Exception as e:
         flash(f'Error downloading report: {str(e)}')
         logger.error(f'Error downloading report: {str(e)}')
+        return redirect(url_for('index'))
+
+@app.route('/generate_motivation_letter', methods=['POST'])
+def generate_motivation_letter_route():
+    """Generate a motivation letter for a job"""
+    try:
+        # Get the CV path and job URL from the form
+        cv_path = request.form.get('cv_path')
+        job_url = request.form.get('job_url')
+        report_file = request.form.get('report_file')
+        
+        logger.info(f"Generating motivation letter for CV: {cv_path} and job URL: {job_url}")
+        
+        if not cv_path or not job_url:
+            logger.error(f"Missing CV path or job URL: cv_path={cv_path}, job_url={job_url}")
+            flash('Missing CV path or job URL')
+            return redirect(url_for('index'))
+        
+        # Check if the CV file exists
+        if not os.path.exists(cv_path):
+            logger.error(f"CV file not found: {cv_path}")
+            flash(f'CV file not found: {cv_path}')
+            return redirect(url_for('view_results', report_file=report_file))
+        
+        # Generate the motivation letter
+        logger.info(f"Calling generate_motivation_letter with cv_path={cv_path}, job_url={job_url}")
+        result = generate_motivation_letter(cv_path, job_url)
+        
+        if not result:
+            logger.error("Failed to generate motivation letter, result is None")
+            flash('Failed to generate motivation letter')
+            return redirect(url_for('view_results', report_file=report_file))
+        
+        logger.info(f"Successfully generated motivation letter: {result['file_path']}")
+        
+        # Get the job details
+        job_details = {}
+        try:
+            # Extract the job ID from the URL
+            job_id = job_url.split('/')[-1]
+            logger.info(f"Extracted job ID: {job_id}")
+            
+            # Find the job data file
+            job_data_dir = Path('job-data-acquisition/job-data-acquisition/data')
+            logger.info(f"Job data directory: {job_data_dir}")
+            
+            if job_data_dir.exists():
+                # Get the latest job data file
+                job_data_files = list(job_data_dir.glob('job_data_*.json'))
+                logger.info(f"Found {len(job_data_files)} job data files")
+                
+                if job_data_files:
+                    latest_job_data_file = max(job_data_files, key=os.path.getctime)
+                    logger.info(f"Latest job data file: {latest_job_data_file}")
+                    
+                    # Load the job data
+                    with open(latest_job_data_file, 'r', encoding='utf-8') as f:
+                        job_data = json.load(f)
+                    
+                    logger.info(f"Loaded job data with {len(job_data[0]['content'])} jobs")
+                    
+                    # Find the job with the matching ID
+                    for i, job in enumerate(job_data[0]['content']):
+                        # Extract the job ID from the Application URL
+                        job_application_url = job.get('Application URL', '')
+                        logger.info(f"Job {i+1} Application URL: {job_application_url}")
+                        
+                        if job_id in job_application_url:
+                            logger.info(f"Found matching job: {job.get('Job Title', 'N/A')} at {job.get('Company Name', 'N/A')}")
+                            job_details = job
+                            break
+                    
+                    # If no exact match found, use the first job as a fallback
+                    if not job_details and job_data[0]['content']:
+                        logger.info("No exact match found, using first job as fallback")
+                        job_details = job_data[0]['content'][0]
+        except Exception as e:
+            logger.error(f'Error getting job details: {str(e)}')
+            import traceback
+            logger.error(traceback.format_exc())
+        
+        # Render the motivation letter template
+        logger.info("Rendering motivation letter template")
+        return render_template('motivation_letter.html', 
+                              motivation_letter=result['motivation_letter'],
+                              file_path=result['file_path'],
+                              job_details=job_details,
+                              report_file=report_file)
+    except Exception as e:
+        flash(f'Error generating motivation letter: {str(e)}')
+        logger.error(f'Error generating motivation letter: {str(e)}')
+        import traceback
+        logger.error(traceback.format_exc())
+        return redirect(url_for('index'))
+
+@app.route('/download_motivation_letter')
+def download_motivation_letter():
+    """Download a generated motivation letter"""
+    file_path = request.args.get('file_path')
+    
+    if not file_path:
+        flash('No file path provided')
+        return redirect(url_for('index'))
+    
+    try:
+        return send_file(file_path, as_attachment=True)
+    except Exception as e:
+        flash(f'Error downloading motivation letter: {str(e)}')
+        logger.error(f'Error downloading motivation letter: {str(e)}')
         return redirect(url_for('index'))
 
 @app.route('/view_cv_summary/<cv_file>')

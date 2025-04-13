@@ -5,3 +5,9 @@ python-docx>=0.8.11
 pathlib>=1.0.1
 flask>=2.0.0
 werkzeug>=2.0.0
+beautifulsoup4>=4.9.3
+requests>=2.25.1
+scrapegraphai
+playwright
+langchain_openai
+certifi

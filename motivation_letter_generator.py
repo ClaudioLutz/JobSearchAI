@@ -1,0 +1,433 @@
+import os
+import logging
+import json
+import openai
+from pathlib import Path
+from datetime import datetime
+import importlib.util
+import sys
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("motivation_letter_generator.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger("motivation_letter_generator")
+
+def load_cv_summary(cv_path):
+    """Load the CV summary from the processed CV file"""
+    try:
+        # Get the summary file path
+        base_filename = os.path.basename(cv_path)
+        summary_filename = os.path.splitext(base_filename)[0] + '_summary.txt'
+        summary_path = os.path.join('process_cv/cv-data/processed', summary_filename)
+        
+        # Check if the summary file exists
+        if not os.path.exists(summary_path):
+            logger.error(f"CV summary file not found: {summary_path}")
+            return None
+        
+        # Load the CV summary
+        with open(summary_path, 'r', encoding='utf-8') as f:
+            summary = f.read()
+        
+        return summary
+    except Exception as e:
+        logger.error(f"Error loading CV summary: {str(e)}")
+        return None
+
+def get_job_details_using_scrapegraph(job_url):
+    """Get job details using ScrapeGraph AI similar to job-data-acquisition/app.py"""
+    try:
+        logger.info(f"Getting job details using ScrapeGraph AI for URL: {job_url}")
+        
+        # Load the job-data-acquisition app module
+        app_path = os.path.join(os.path.dirname(__file__), 'job-data-acquisition', 'app.py')
+        
+        if not os.path.exists(app_path):
+            logger.error(f"Job data acquisition app not found at: {app_path}")
+            return None
+        
+        # Load the module
+        spec = importlib.util.spec_from_file_location("app_module", app_path)
+        app_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(app_module)
+        
+        # Get the configuration
+        config = app_module.load_config()
+        if not config:
+            logger.error("Failed to load ScrapeGraph configuration")
+            return None
+        
+        # Define a specific extraction prompt for a single job page
+        extraction_prompt = """
+        Extract and summarize detailed information about this specific job posting. Focus on providing a comprehensive summary of the job requirements, responsibilities, and company expectations. Return a JSON object with the following fields:
+        1. Job Title
+        2. Company Name
+        3. Job Description (provide a detailed summary of the job description)
+        4. Required Skills (list all skills and qualifications mentioned in the posting)
+        5. Responsibilities (summarize the main responsibilities of the role)
+        6. Company Information (summarize any information about the company culture, values, or background)
+        7. Location
+        8. Salary Range (if available)
+        9. Posting Date (if available)
+        10. Application URL
+
+        For the Job Description, Required Skills, Responsibilities, and Company Information fields, be thorough and include all relevant details from the posting. This information will be used to create a personalized motivation letter.
+
+        **Output** should be a **JSON object** with these fields for this specific job posting.
+        """
+        
+        # Configure the scraper
+        scraper_config = config["scraper"]
+        graph_config = {
+            "llm": scraper_config["llm"],
+            "verbose": scraper_config["verbose"],
+            "headless": scraper_config["headless"],
+            "output_format": scraper_config["output_format"]
+        }
+        
+        # Import ScrapeGraph
+        try:
+            from scrapegraphai.graphs import SmartScraperGraph
+        except ImportError:
+            logger.error("ScrapeGraph AI library not installed. Please install it with: pip install scrapegraphai")
+            return None
+        
+        # Create and run the scraper
+        scraper = SmartScraperGraph(
+            prompt=extraction_prompt,
+            source=job_url,
+            config=graph_config
+        )
+        
+        # Run the scraper
+        result = scraper.run()
+        
+        # Process the result
+        if result and 'content' in result:
+            # The result might be an array with one item or directly the job object
+            job_details = result['content'][0] if isinstance(result['content'], list) else result['content']
+            
+            # Ensure all required fields are present
+            if not job_details.get('Job Title'):
+                job_details['Job Title'] = 'Unknown_Job'
+            if not job_details.get('Company Name'):
+                job_details['Company Name'] = 'Unknown_Company'
+            if not job_details.get('Location'):
+                job_details['Location'] = 'Unknown_Location'
+            if not job_details.get('Job Description'):
+                job_details['Job Description'] = 'No description available'
+            if not job_details.get('Required Skills'):
+                job_details['Required Skills'] = 'No specific skills listed'
+            
+            # Add the application URL if not present
+            if not job_details.get('Application URL'):
+                job_details['Application URL'] = job_url
+            
+            logger.info(f"Successfully extracted job details using ScrapeGraph AI")
+            logger.info(f"Job Title: {job_details['Job Title']}")
+            logger.info(f"Company Name: {job_details['Company Name']}")
+            
+            # Log all extracted fields for debugging
+            logger.info("--- Extracted Job Details ---")
+            for key, value in job_details.items():
+                # Truncate long values for logging
+                log_value = value
+                if isinstance(log_value, str) and len(log_value) > 100:
+                    log_value = log_value[:100] + "... [truncated]"
+                logger.info(f"{key}: {log_value}")
+            logger.info("---------------------------")
+            
+            return job_details
+        else:
+            logger.error("ScrapeGraph AI returned no content")
+            return None
+    except Exception as e:
+        logger.error(f"Error getting job details using ScrapeGraph AI: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return None
+
+def get_job_details_from_scraped_data(job_url):
+    """Get job details from pre-scraped data"""
+    try:
+        # Extract the job ID from the URL
+        # Example URL: https://www.ostjob.ch/jobs/detail/12345
+        logger.info(f"Getting job details from pre-scraped data for URL: {job_url}")
+        job_id = job_url.split('/')[-1]
+        logger.info(f"Extracted job ID: {job_id}")
+        
+        # Find the job data file
+        job_data_dir = Path('job-data-acquisition/job-data-acquisition/data')
+        logger.info(f"Job data directory: {job_data_dir}")
+        if not job_data_dir.exists():
+            logger.error(f"Job data directory not found: {job_data_dir}")
+            return None
+        
+        # Get the latest job data file
+        job_data_files = list(job_data_dir.glob('job_data_*.json'))
+        logger.info(f"Found {len(job_data_files)} job data files")
+        if not job_data_files:
+            logger.error("No job data files found")
+            return None
+        
+        latest_job_data_file = max(job_data_files, key=os.path.getctime)
+        logger.info(f"Latest job data file: {latest_job_data_file}")
+        
+        # Load the job data
+        with open(latest_job_data_file, 'r', encoding='utf-8') as f:
+            job_data = json.load(f)
+        
+        logger.info(f"Loaded job data with {len(job_data[0]['content'])} jobs")
+        
+        # Find the job with the matching ID
+        for i, job in enumerate(job_data[0]['content']):
+            # Extract the job ID from the Application URL
+            job_application_url = job.get('Application URL', '')
+            logger.info(f"Job {i+1} Application URL: {job_application_url}")
+            
+            if job_id in job_application_url:
+                logger.info(f"Found matching job: {job.get('Job Title', 'N/A')} at {job.get('Company Name', 'N/A')}")
+                
+                # Log all extracted fields for debugging
+                logger.info("--- Extracted Job Details from Pre-scraped Data ---")
+                for key, value in job.items():
+                    # Truncate long values for logging
+                    log_value = value
+                    if isinstance(log_value, str) and len(log_value) > 100:
+                        log_value = log_value[:100] + "... [truncated]"
+                    logger.info(f"{key}: {log_value}")
+                logger.info("------------------------------------------")
+                
+                return job
+        
+        # If no exact match found, try a more flexible approach
+        logger.info("No exact match found, trying more flexible matching")
+        for i, job in enumerate(job_data[0]['content']):
+            # Try to match based on partial URL or other identifiers
+            job_application_url = job.get('Application URL', '')
+            job_title = job.get('Job Title', '')
+            company_name = job.get('Company Name', '')
+            
+            logger.info(f"Checking job {i+1}: {job_title} at {company_name}")
+            
+            # Return the first job as a fallback
+            if i == 0:
+                logger.info(f"Using first job as fallback: {job_title} at {company_name}")
+                return job
+        
+        logger.error(f"Job with ID {job_id} not found in job data")
+        return None
+    except Exception as e:
+        logger.error(f"Error getting job details from pre-scraped data: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return None
+
+def get_job_details(job_url):
+    """Get job details from the job URL, first trying to use ScrapeGraph AI, then falling back to pre-scraped data"""
+    try:
+        # First try to get job details using ScrapeGraph AI
+        logger.info(f"Attempting to get job details using ScrapeGraph AI for URL: {job_url}")
+        
+        # Check if scrapegraphai is installed
+        try:
+            import scrapegraphai
+            job_details = get_job_details_using_scrapegraph(job_url)
+        except ImportError:
+            logger.warning("ScrapeGraph AI library not installed, skipping direct scraping")
+            job_details = None
+        
+        if job_details:
+            logger.info("Successfully got job details using ScrapeGraph AI")
+            return job_details
+        
+        # If ScrapeGraph AI fails or is not installed, fall back to pre-scraped data
+        logger.info("Getting job details from pre-scraped data")
+        job_details = get_job_details_from_scraped_data(job_url)
+        
+        if job_details:
+            logger.info("Successfully got job details from pre-scraped data")
+            return job_details
+        
+        # If all methods fail, return a default job details object
+        logger.warning("All methods to get job details failed, using default values")
+        return {
+            'Job Title': 'Unknown_Job',
+            'Company Name': 'Unknown_Company',
+            'Location': 'Unknown_Location',
+            'Job Description': 'No description available',
+            'Required Skills': 'No specific skills listed',
+            'Application URL': job_url
+        }
+    except Exception as e:
+        logger.error(f"Error getting job details: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        
+        # Return default values in case of error
+        return {
+            'Job Title': 'Unknown_Job',
+            'Company Name': 'Unknown_Company',
+            'Location': 'Unknown_Location',
+            'Job Description': 'No description available',
+            'Required Skills': 'No specific skills listed',
+            'Application URL': job_url
+        }
+
+def generate_motivation_letter(cv_summary, job_details):
+    """Generate a motivation letter using GPT-4o"""
+    try:
+        # Get OpenAI API key from environment variable
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        if not openai_api_key:
+            # Try to get it from the .env file in process_cv directory
+            env_path = os.path.join('process_cv', '.env')
+            if os.path.exists(env_path):
+                with open(env_path, 'r') as f:
+                    for line in f:
+                        if line.startswith('OPENAI_API_KEY='):
+                            openai_api_key = line.strip().split('=')[1]
+                            break
+        
+        if not openai_api_key:
+            logger.error("OpenAI API key not found")
+            return None
+        
+        # Initialize OpenAI client
+        client = openai.OpenAI(api_key=openai_api_key)
+        
+        # Prepare the prompt
+        prompt = f"""
+        Schreibe ein Motivationsschreiben aus den Informationen von der Webseite und dem Lebenslauf:
+        
+        ## Lebenslauf des Bewerbers:
+        {cv_summary}
+        
+        ## Stellenangebot (von der Webseite):
+        Titel: {job_details.get('Job Title', 'N/A')}
+        Firma: {job_details.get('Company Name', 'N/A')}
+        Ort: {job_details.get('Location', 'N/A')}
+        
+        Beschreibung: 
+        {job_details.get('Job Description', 'N/A')}
+        
+        Erforderliche Fähigkeiten: 
+        {job_details.get('Required Skills', 'N/A')}
+        
+        Verantwortlichkeiten: 
+        {job_details.get('Responsibilities', 'Keine spezifischen Verantwortlichkeiten aufgeführt.')}
+        
+        Unternehmensinformationen: 
+        {job_details.get('Company Information', 'Keine spezifischen Unternehmensinformationen verfügbar.')}
+        
+        Das Motivationsschreiben sollte:
+        1. Professionell und überzeugend sein
+        2. Die Qualifikationen und Erfahrungen des Bewerbers KONKRET mit den Anforderungen der Stelle verknüpfen
+        3. Die Motivation des Bewerbers für die Stelle und das Unternehmen zum Ausdruck bringen
+        4. Etwa eine Seite lang sein (ca. 300-400 Wörter)
+        5. Auf Deutsch verfasst sein
+        6. Im formalen Bewerbungsstil mit Anrede, Einleitung, Hauptteil, Schluss und Grußformel sein
+        7. SPEZIFISCH auf die Stellenanforderungen und Verantwortlichkeiten eingehen, die aus der Webseite extrahiert wurden
+        8. Die Stärken des Bewerbers hervorheben, die besonders relevant für diese Position sind
+        9. Auf die Unternehmenskultur und -werte eingehen, wenn diese Informationen verfügbar sind
+        10. KONKRETE BEISPIELE aus dem Lebenslauf des Bewerbers verwenden, die zeigen, wie er/sie die Anforderungen erfüllt
+        
+        WICHTIG: Verwende die detaillierten Informationen aus der Stellenbeschreibung, um ein personalisiertes und spezifisches Motivationsschreiben zu erstellen. Gehe auf konkrete Anforderungen und Verantwortlichkeiten ein und zeige, wie der Bewerber diese erfüllen kann.
+        
+        Bitte formatiere das Motivationsschreiben mit Absätzen und gib es im HTML-Format zurück.
+        """
+        
+        # Generate the motivation letter using GPT-4o
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "Du bist ein professioneller Bewerbungsberater, der Motivationsschreiben für Stellenbewerbungen erstellt."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=1500
+        )
+        
+        # Extract the generated motivation letter
+        motivation_letter = response.choices[0].message.content
+        
+        # Save the motivation letter
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Sanitize job title and company name to avoid path issues
+        job_title = job_details.get('Job Title', 'job')
+        company_name = job_details.get('Company Name', 'company')
+        
+        # Replace problematic characters and limit length
+        job_title = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in job_title)
+        company_name = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in company_name)
+        
+        # Limit length to avoid excessively long filenames
+        job_title = job_title.replace(' ', '_')[:30]
+        company_name = company_name.replace(' ', '_')[:30]
+        
+        # Create the motivation letters directory if it doesn't exist
+        motivation_letters_dir = Path('motivation_letters')
+        motivation_letters_dir.mkdir(exist_ok=True)
+        
+        # Save the motivation letter to a file
+        filename = f"motivation_letter_{job_title}_{company_name}_{timestamp}.html"
+        motivation_letter_file = motivation_letters_dir / filename
+        
+        logger.info(f"Saving motivation letter to file: {motivation_letter_file}")
+        with open(motivation_letter_file, 'w', encoding='utf-8') as f:
+            f.write(motivation_letter)
+        
+        return {
+            'motivation_letter': motivation_letter,
+            'file_path': str(motivation_letter_file)
+        }
+    except Exception as e:
+        logger.error(f"Error generating motivation letter: {str(e)}")
+        return None
+
+def main(cv_path, job_url):
+    """Main function to generate a motivation letter"""
+    logger.info(f"Starting motivation letter generation for CV: {cv_path} and job URL: {job_url}")
+    
+    # Load the CV summary
+    cv_summary = load_cv_summary(cv_path)
+    if not cv_summary:
+        logger.error("Failed to load CV summary")
+        return None
+    
+    logger.info("Successfully loaded CV summary")
+    
+    # Get the job details
+    job_details = get_job_details(job_url)
+    if not job_details:
+        logger.error("Failed to get job details")
+        return None
+    
+    logger.info("Successfully got job details")
+    
+    # Generate the motivation letter
+    result = generate_motivation_letter(cv_summary, job_details)
+    if not result:
+        logger.error("Failed to generate motivation letter")
+        return None
+    
+    logger.info(f"Successfully generated motivation letter: {result['file_path']}")
+    return result
+
+if __name__ == "__main__":
+    # Example usage
+    cv_path = "process_cv/cv-data/Lebenslauf_Claudio Lutz.pdf"
+    job_url = "https://www.ostjob.ch/jobs/detail/12345"
+    result = main(cv_path, job_url)
+    
+    if result:
+        print(f"Motivation letter generated successfully: {result['file_path']}")
+    else:
+        print("Failed to generate motivation letter")

@@ -69,6 +69,12 @@
                                             {% if match.application_url and match.application_url != 'N/A' %}
                                                 {% set path = match.application_url.split('/', 3)[3] if match.application_url.startswith('http://127.0.0.1:5000/') and match.application_url.count('/') >= 3 else (match.application_url.split('/', 1)[1] if match.application_url.startswith('127.0.0.1:5000/') and match.application_url.count('/') >= 1 else match.application_url) %}
                                                 <a href="https://www.ostjob.ch/{{ path }}" target="_blank" class="btn btn-sm btn-outline-success">Link zum Inserat</a>
+                                                <form action="{{ url_for('generate_motivation_letter_route') }}" method="post" class="d-inline">
+                                                    <input type="hidden" name="cv_path" value="process_cv/cv-data/Lebenslauf_Claudio Lutz.pdf">
+                                                    <input type="hidden" name="job_url" value="https://www.ostjob.ch/{{ path }}">
+                                                    <input type="hidden" name="report_file" value="{{ report_file }}">
+                                                    <button type="submit" class="btn btn-sm btn-outline-primary">Motivationsschreiben erstellen</button>
+                                                </form>
                                             {% endif %}
                                         </td>
                                     </tr>
@@ -113,6 +119,12 @@
                             {% if match.application_url and match.application_url != 'N/A' %}
                                 {% set path = match.application_url.split('/', 3)[3] if match.application_url.startswith('http://127.0.0.1:5000/') and match.application_url.count('/') >= 3 else (match.application_url.split('/', 1)[1] if match.application_url.startswith('127.0.0.1:5000/') and match.application_url.count('/') >= 1 else match.application_url) %}
                                 <a href="https://www.ostjob.ch/{{ path }}" target="_blank" class="btn btn-primary">Link zum Inserat</a>
+                                <form action="{{ url_for('generate_motivation_letter_route') }}" method="post" class="mt-2">
+                                    <input type="hidden" name="cv_path" value="process_cv/cv-data/Lebenslauf_Claudio Lutz.pdf">
+                                    <input type="hidden" name="job_url" value="https://www.ostjob.ch/{{ path }}">
+                                    <input type="hidden" name="report_file" value="{{ report_file }}">
+                                    <button type="submit" class="btn btn-outline-primary w-100">Motivationsschreiben erstellen</button>
+                                </form>
                             {% else %}
                                 <button class="btn btn-secondary" disabled>No Application URL</button>
                             {% endif %}

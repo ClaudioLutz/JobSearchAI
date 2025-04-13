@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Motivationsschreiben - JobsearchAI</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <style>
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            .print-container {
+                padding: 0;
+                margin: 0;
+            }
+            body {
+                font-size: 12pt;
+            }
+        }
+        .motivation-letter {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.5;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4 print-container">
+        <div class="d-flex justify-content-between align-items-center mb-4 no-print">
+            <h1>Motivationsschreiben</h1>
+            <div>
+                <a href="{{ url_for('view_results', report_file=report_file) }}" class="btn btn-outline-secondary me-2">Zurück zu den Ergebnissen</a>
+                <button onclick="window.print()" class="btn btn-primary me-2">Drucken</button>
+                <a href="{{ url_for('download_motivation_letter', file_path=file_path) }}" class="btn btn-success">Herunterladen</a>
+            </div>
+        </div>
+        
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-info alert-dismissible fade show no-print" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <!-- Job and Company Info -->
+        <div class="card mb-4 no-print">
+            <div class="card-header">
+                <h2 class="h5 mb-0">Stelleninformation</h2>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Stellentitel:</strong> {{ job_details.get('Job Title', 'N/A') }}</p>
+                        <p><strong>Unternehmen:</strong> {{ job_details.get('Company Name', 'N/A') }}</p>
+                        <p><strong>Standort:</strong> {{ job_details.get('Location', 'N/A') }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Erforderliche Fähigkeiten:</strong> {{ job_details.get('Required Skills', 'N/A') }}</p>
+                        <p><strong>Bewerbungs-URL:</strong> <a href="{{ job_details.get('Application URL', '#') }}" target="_blank">{{ job_details.get('Application URL', 'N/A') }}</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Motivation Letter -->
+        <div class="card">
+            <div class="card-header no-print">
+                <h2 class="h5 mb-0">Motivationsschreiben</h2>
+            </div>
+            <div class="card-body motivation-letter">
+                {{ motivation_letter|safe }}
+            </div>
+        </div>
+        
+        <!-- Disclaimer -->
+        <div class="mt-4 text-muted small no-print">
+            <p>Dieses Motivationsschreiben wurde automatisch mit Hilfe von KI generiert. Bitte überprüfen und passen Sie es an Ihre persönlichen Bedürfnisse an, bevor Sie es für eine tatsächliche Bewerbung verwenden.</p>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
