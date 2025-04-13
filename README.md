@@ -4,11 +4,12 @@ A system that matches job listings with candidate CVs using AI-powered semantic 
 
 ## Components
 
-The system consists of three main components:
+The system consists of four main components:
 
 1. **Job Data Acquisition**: Scrapes job listings from ostjob.ch and saves them in a structured JSON format.
 2. **CV Processor**: Extracts and summarizes information from candidate CVs.
 3. **Job Matcher**: Matches job listings with candidate profiles using semantic understanding.
+4. **Motivation Letter Generator**: Creates personalized motivation letters based on the candidate's CV and job details.
 
 ## How It Works
 
@@ -73,6 +74,33 @@ You can modify the following parameters in `job_matcher.py`:
 - `min_score`: Minimum overall match score (default: 6)
 - `max_results`: Maximum number of results to include in the report (default: 10)
 - `cv_path`: Path to the CV file
+
+### Using the Dashboard
+
+```python
+python dashboard.py
+```
+
+This will:
+1. Start the Flask web server at http://localhost:5000
+2. Provide a web interface for interacting with all components of the system
+
+The dashboard allows you to:
+- Upload and process CVs
+- Run the job matcher with a selected CV
+- Run the job scraper to get new job listings
+- View job match results
+- Generate motivation letters for specific job postings
+
+### Generating Motivation Letters
+
+Motivation letters can be generated through the dashboard:
+1. View job match results
+2. Click the "Motivationsschreiben erstellen" button next to a job listing
+3. The system will:
+   - Extract detailed job information from the website
+   - Create a personalized motivation letter based on your CV and the job details
+   - Display the letter in a new page with options to print or download
 
 ## Output
 

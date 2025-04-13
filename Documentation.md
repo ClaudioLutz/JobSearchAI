@@ -6,12 +6,13 @@ JobsearchAI is a system that matches job listings with candidate CVs using AI-po
 
 ## System Architecture
 
-The system consists of four main components:
+The system consists of five main components:
 
 1. **Job Data Acquisition**: Scrapes job listings from ostjob.ch and saves them in a structured JSON format.
 2. **CV Processor**: Extracts and summarizes information from candidate CVs.
 3. **Job Matcher**: Matches job listings with candidate profiles using semantic understanding.
-4. **Dashboard**: Provides a web interface for interacting with all components of the system.
+4. **Motivation Letter Generator**: Creates personalized motivation letters based on the candidate's CV and job details.
+5. **Dashboard**: Provides a web interface for interacting with all components of the system.
 
 ### Component Interaction
 
@@ -156,7 +157,56 @@ The system consists of four main components:
   - Reasoning for the match
   - Application URL
 
-### 4. Dashboard
+### 4. Motivation Letter Generator
+
+**Purpose**: Create personalized motivation letters based on the candidate's CV and job details.
+
+**Key Files**:
+- `motivation_letter_generator.py`: Main script for generating motivation letters
+- `templates/motivation_letter.html`: Template for displaying the generated letter
+
+**Technologies**:
+- OpenAI GPT-4o model for generating personalized motivation letters
+- ScrapeGraph AI for extracting detailed job information from websites
+- Flask for web interface integration
+- HTML/CSS for letter formatting and display
+
+**Process**:
+1. Extracts detailed job information directly from the job posting website using ScrapeGraph AI
+2. Loads the processed CV summary
+3. Combines the job details and CV information to generate a personalized motivation letter
+4. Formats the letter in HTML with proper structure and styling
+5. Saves the generated letter to a file with a timestamp in the filename
+
+**Features**:
+- Direct web scraping of job details for up-to-date information
+- Fallback mechanism to use pre-scraped data if web scraping fails
+- Detailed logging for troubleshooting
+- HTML formatting for professional presentation
+- Print and download options
+
+**Functions**:
+- `load_cv_summary(cv_path)`: Loads the CV summary from the processed CV file
+- `get_job_details_using_scrapegraph(job_url)`: Extracts job details directly from the website
+- `get_job_details_from_scraped_data(job_url)`: Gets job details from pre-scraped data as a fallback
+- `get_job_details(job_url)`: Main function that tries both methods to get job details
+- `generate_motivation_letter(cv_summary, job_details)`: Generates the motivation letter using GPT-4o
+- `main(cv_path, job_url)`: Main function that orchestrates the entire process
+
+**Output Format**:
+- HTML file with a professionally formatted motivation letter
+- The letter includes:
+  - Candidate's contact information
+  - Company address
+  - Date
+  - Subject line
+  - Formal greeting
+  - Introduction paragraph
+  - Main body highlighting relevant skills and experience
+  - Closing paragraph
+  - Formal closing and signature
+
+### 5. Dashboard
 
 **Purpose**: Provide a web interface for interacting with all components of the system.
 
@@ -186,6 +236,10 @@ The system consists of four main components:
    - Configure matching parameters (min_score, max_results)
    - View job match results
    - Download job match reports
+4. **Motivation Letter Generation**:
+   - Generate personalized motivation letters for specific job postings
+   - View generated letters in a professional format
+   - Print or download motivation letters in HTML format
 
 **Process**:
 1. Provides a web interface at http://localhost:5000
@@ -194,6 +248,8 @@ The system consists of four main components:
 4. Allows users to run the job matcher with a selected CV
 5. Displays job match results in a user-friendly format
 6. Provides options to download job match reports
+7. Allows users to generate personalized motivation letters for specific job postings
+8. Displays generated motivation letters with options to print or download
 
 **Functions**:
 - `index()`: Render the main dashboard page
@@ -203,6 +259,8 @@ The system consists of four main components:
 - `view_results()`: View job match results
 - `download_report()`: Download a job match report
 - `view_cv_summary()`: View a CV summary
+- `generate_motivation_letter_route()`: Generate a motivation letter for a specific job
+- `download_motivation_letter()`: Download a generated motivation letter
 
 ## System Requirements
 
@@ -305,6 +363,12 @@ Once the dashboard is running, you can:
    - View job match reports on the dashboard
    - Click the "View" button to see detailed results
    - Click the "Download" button to download the report
+5. **Generate Motivation Letters**:
+   - From the job match results page, click the "Motivationsschreiben erstellen" button next to a job listing
+   - The system will extract detailed job information from the website
+   - A personalized motivation letter will be generated based on your CV and the job details
+   - View the generated letter in a professional format
+   - Use the "Print" button to print the letter or "Download" to save it as an HTML file
 
 ## Implementation Details
 
@@ -344,9 +408,13 @@ JobsearchAI/
 ├── dashboard.log                             # Log file for dashboard
 ├── job_matcher.py                            # Main job matching script
 ├── job_matcher.log                           # Log file for job matcher
+├── motivation_letter_generator.py            # Motivation letter generation script
+├── motivation_letter_generator.log           # Log file for motivation letter generator
 ├── README.md                                 # Project README
 ├── requirements.txt                          # Project dependencies
 ├── job_matches/                              # Directory for job match reports
+├── motivation_letters/                       # Directory for generated motivation letters
+│   └── .gitkeep                              # Empty file to ensure directory is tracked by git
 ├── static/                                   # Static files for dashboard
 │   ├── css/                                  # CSS styles
 │   │   └── styles.css                        # Dashboard styles
@@ -354,6 +422,7 @@ JobsearchAI/
 │       └── main.js                           # Dashboard JavaScript
 ├── templates/                                # HTML templates for dashboard
 │   ├── index.html                            # Main dashboard page
+│   ├── motivation_letter.html                # Motivation letter display template
 │   └── results.html                          # Job match results page
 ├── job-data-acquisition/                     # Job data acquisition component
 │   ├── app.py                                # Main scraper script
@@ -379,6 +448,8 @@ The system uses Python's built-in logging module to log information, warnings, a
 
 - Job matcher logs are saved to `job_matcher.log`
 - Job data acquisition logs are saved to `job-data-acquisition/logs/scraper_[timestamp].log`
+- Motivation letter generator logs are saved to `motivation_letter_generator.log`
+- Dashboard logs are saved to `dashboard.log`
 
 ## Future Improvements
 
@@ -394,6 +465,11 @@ Potential future improvements include:
 8. User feedback mechanism to improve matching algorithm
 9. Mobile-responsive dashboard for use on smartphones and tablets
 10. Email notifications for new job matches
+11. Customizable motivation letter templates and styles
+12. Option to edit generated motivation letters directly in the browser
+13. Multiple language support for motivation letters
+14. Ability to save and manage multiple versions of motivation letters for the same job
+15. Integration with email clients to send applications directly from the system
 
 ## Troubleshooting
 
@@ -430,6 +506,14 @@ If you encounter issues with the dashboard:
    - Ensure the `settings.json` file is correctly configured
    - Check that the ScrapeGraph AI library is installed
    - Look for error messages in the scraper logs
+
+5. **Motivation Letter Generation Issues**:
+   - Verify that the ScrapeGraph AI library is installed correctly
+   - Check that the OpenAI API key is correctly set in `process_cv/.env`
+   - Ensure the job URL is valid and accessible
+   - Check the `motivation_letter_generator.log` file for detailed error messages
+   - If web scraping fails, the system will fall back to using pre-scraped data
+   - If the generated letter lacks specific job details, check if the job website structure has changed
 
 ### Debugging
 
