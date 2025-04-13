@@ -152,9 +152,20 @@ def run_job_matcher():
 def run_job_scraper():
     """Run the job data acquisition component"""
     try:
-        # Import the job scraper module
-        sys.path.append('job-data-acquisition')
-        from app import run_scraper
+        # Import the job scraper module using importlib for more robust importing
+        import importlib.util
+        import os
+        
+        # Get the absolute path to the app.py file
+        app_path = os.path.join(os.path.dirname(__file__), 'job-data-acquisition', 'app.py')
+        
+        # Load the module
+        spec = importlib.util.spec_from_file_location("app_module", app_path)
+        app_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(app_module)
+        
+        # Get the run_scraper function
+        run_scraper = app_module.run_scraper
         
         # Run the scraper
         output_file = run_scraper()
