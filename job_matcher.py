@@ -307,7 +307,18 @@ def generate_report(matches, output_file=None, output_dir="job_matches"):
         report += f"**Education Fit:** {match['education_fit']}/10\n"
         report += f"**Location Compatibility:** {match['location_compatibility']}\n"
         report += f"**Reasoning:** {match['reasoning']}\n"
-        report += f"**Application URL:** {match['application_url']}\n\n"
+        # Extract path and create proper ostjob.ch URL
+        application_url = match['application_url']
+        if application_url != 'N/A':
+            if application_url.startswith("http://127.0.0.1:5000/") and application_url.count('/') >= 3:
+                # Extract path from http://127.0.0.1:5000/path
+                path = application_url.split('/', 3)[3]
+                application_url = f"https://www.ostjob.ch/{path}"
+            elif application_url.startswith("127.0.0.1:5000/") and application_url.count('/') >= 1:
+                # Extract path from 127.0.0.1:5000/path
+                path = application_url.split('/', 1)[1]
+                application_url = f"https://www.ostjob.ch/{path}"
+        report += f"**Application URL:** {application_url}\n\n"
     
     # Save the report
     report_file = str(json_file_path).replace(".json", ".md")

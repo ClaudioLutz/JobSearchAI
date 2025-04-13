@@ -209,6 +209,19 @@ def view_results(report_file):
         with open(json_path, 'r', encoding='utf-8') as f:
             matches = json.load(f)
         
+        # Fix application URLs - extract path and create proper ostjob.ch URL
+        for match in matches:
+            if match.get('application_url') and match['application_url'] != 'N/A':
+                url = match['application_url']
+                if url.startswith("http://127.0.0.1:5000/") and url.count('/') >= 3:
+                    # Extract path from http://127.0.0.1:5000/path
+                    path = url.split('/', 3)[3]
+                    match['application_url'] = f"https://www.ostjob.ch/{path}"
+                elif url.startswith("127.0.0.1:5000/") and url.count('/') >= 1:
+                    # Extract path from 127.0.0.1:5000/path
+                    path = url.split('/', 1)[1]
+                    match['application_url'] = f"https://www.ostjob.ch/{path}"
+        
         return render_template('results.html', matches=matches, report_file=report_file)
     except Exception as e:
         flash(f'Error loading results: {str(e)}')
