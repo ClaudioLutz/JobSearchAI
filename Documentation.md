@@ -318,6 +318,11 @@ The system consists of six main components:
    - View generated letters in a professional format
    - Print or download motivation letters in HTML format
    - Download motivation letters in Word format
+5. **User Feedback and Progress Tracking**:
+   - Visual button feedback when actions are initiated (loading spinners)
+   - Real-time progress tracking for long-running operations
+   - Detailed status messages during processing
+   - Background processing for long operations to keep UI responsive
 
 **Process**:
 1. Provides a web interface at http://localhost:5000
@@ -538,6 +543,30 @@ The system includes robust error handling:
 - Format detection to handle both new and legacy output formats
 - Logging of errors and warnings at all stages
 - Graceful handling of missing files or API issues
+
+### User Feedback and Progress Tracking
+
+The system provides real-time feedback to users during long-running operations:
+
+1. **Button State Management**:
+   - Buttons show loading spinners when clicked
+   - Buttons are disabled during processing to prevent multiple submissions
+   - Original button text is restored when operations complete
+
+2. **Progress Tracking System**:
+   - Backend progress tracking for long-running operations
+   - Operations run in background threads to keep the UI responsive
+   - Real-time progress updates via a status API endpoint
+
+3. **Visual Progress Feedback**:
+   - Progress modal with a progress bar shows real-time completion percentage
+   - Detailed status messages inform users about current processing steps
+   - Error messages are displayed if operations fail
+
+4. **Implementation**:
+   - Client-side: JavaScript functions in `static/js/main.js` handle button states and progress updates
+   - Server-side: Flask routes in `dashboard.py` track operation progress and provide status updates
+   - Operations like job scraping, job matching, and motivation letter generation use this system
 
 ## File Structure
 

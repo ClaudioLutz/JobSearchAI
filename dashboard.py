@@ -1,9 +1,12 @@
 import os
 import json
 import logging
+import threading
+import time
+import uuid
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify, session
 from werkzeug.utils import secure_filename
 import urllib.parse
 
@@ -32,6 +35,10 @@ logger = logging.getLogger("dashboard")
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # For flash messages
 
+# Progress tracking
+operation_progress = {}
+operation_status = {}
+
 # Configure upload folder
 UPLOAD_FOLDER = 'process_cv/cv-data/input'
 ALLOWED_EXTENSIONS = {'pdf', 'docx'}
@@ -42,6 +49,56 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def start_operation(operation_type):
+    """Start tracking a new operation"""
+    operation_id = str(uuid.uuid4())
+    operation_progress[operation_id] = 0
+    operation_status[operation_id] = {
+        'type': operation_type,
+        'status': 'starting',
+        'message': f'Starting {operation_type}...',
+        'start_time': datetime.now().isoformat()
+    }
+    return operation_id
+
+def update_operation_progress(operation_id, progress, status=None, message=None):
+    """Update the progress of an operation"""
+    if operation_id in operation_progress:
+        operation_progress[operation_id] = progress
+        
+        if status or message:
+            if operation_id in operation_status:
+                if status:
+                    operation_status[operation_id]['status'] = status
+                if message:
+                    operation_status[operation_id]['message'] = message
+                operation_status[operation_id]['updated_time'] = datetime.now().isoformat()
+    
+    logger.info(f"Operation {operation_id}: {progress}% complete - {message}")
+
+def complete_operation(operation_id, status='completed', message='Operation completed'):
+    """Mark an operation as completed"""
+    if operation_id in operation_progress:
+        operation_progress[operation_id] = 100
+        
+        if operation_id in operation_status:
+            operation_status[operation_id]['status'] = status
+            operation_status[operation_id]['message'] = message
+            operation_status[operation_id]['completed_time'] = datetime.now().isoformat()
+    
+    logger.info(f"Operation {operation_id} {status}: {message}")
+
+@app.route('/operation_status/<operation_id>')
+def get_operation_status(operation_id):
+    """Get the status of an operation"""
+    if operation_id in operation_progress and operation_id in operation_status:
+        return jsonify({
+            'progress': operation_progress[operation_id],
+            'status': operation_status[operation_id]
+        })
+    else:
+        return jsonify({'error': 'Operation not found'}), 404
 
 @app.route('/')
 def index():
@@ -132,20 +189,42 @@ def run_job_matcher():
     full_cv_path = os.path.join('process_cv/cv-data', cv_path)
     
     try:
-        # Match jobs with CV - pass both max_jobs and max_results
-        matches = match_jobs_with_cv(full_cv_path, min_score=min_score, max_jobs=max_jobs, max_results=max_results)
+        # Start tracking the operation
+        operation_id = start_operation('job_matching')
         
-        if not matches:
-            flash('No job matches found')
-            return redirect(url_for('index'))
+        # Define a function to run the job matcher in a background thread
+        def run_job_matcher_task():
+            try:
+                # Update status
+                update_operation_progress(operation_id, 10, 'processing', 'Loading job data...')
+                
+                # Match jobs with CV - pass both max_jobs and max_results
+                matches = match_jobs_with_cv(full_cv_path, min_score=min_score, max_jobs=max_jobs, max_results=max_results)
+                
+                if not matches:
+                    update_operation_progress(operation_id, 100, 'completed', 'No job matches found')
+                    return
+                
+                # Update status
+                update_operation_progress(operation_id, 80, 'processing', 'Generating report...')
+                
+                # Generate report
+                report_file = generate_report(matches)
+                
+                # Complete the operation
+                complete_operation(operation_id, 'completed', f'Job matching completed. Results saved to: {report_file}')
+            except Exception as e:
+                logger.error(f'Error in job matcher task: {str(e)}')
+                complete_operation(operation_id, 'failed', f'Error running job matcher: {str(e)}')
         
-        # Generate report
-        report_file = generate_report(matches)
+        # Start the background thread
+        thread = threading.Thread(target=run_job_matcher_task)
+        thread.daemon = True
+        thread.start()
         
-        flash(f'Job matching completed. Results saved to: {report_file}')
-        
-        # Redirect to results page
-        return redirect(url_for('view_results', report_file=os.path.basename(report_file)))
+        # Return immediately with the operation ID
+        flash(f'Job matcher started. Please wait while the results are being processed. (operation_id={operation_id})')
+        return redirect(url_for('index'))
     except Exception as e:
         flash(f'Error running job matcher: {str(e)}')
         logger.error(f'Error running job matcher: {str(e)}')
@@ -158,47 +237,72 @@ def run_job_scraper():
         # Get max_pages parameter from the form
         max_pages = int(request.form.get('max_pages', 50))
         
-        # Update the settings.json file with the max_pages parameter
-        settings_path = os.path.join(os.path.dirname(__file__), 'job-data-acquisition', 'settings.json')
+        # Start tracking the operation
+        operation_id = start_operation('job_scraping')
         
-        # Read the current settings
-        with open(settings_path, 'r', encoding='utf-8') as f:
-            settings = json.load(f)
+        # Define a function to run the job scraper in a background thread
+        def run_job_scraper_task():
+            try:
+                # Update status
+                update_operation_progress(operation_id, 10, 'processing', 'Updating settings...')
+                
+                # Update the settings.json file with the max_pages parameter
+                settings_path = os.path.join(os.path.dirname(__file__), 'job-data-acquisition', 'settings.json')
+                
+                # Read the current settings
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    settings = json.load(f)
+                
+                # Update the max_pages parameter
+                settings['scraper']['max_pages'] = max_pages
+                
+                # Write the updated settings back to the file
+                with open(settings_path, 'w', encoding='utf-8') as f:
+                    json.dump(settings, f, indent=4, ensure_ascii=False)
+                
+                # Update status
+                update_operation_progress(operation_id, 20, 'processing', 'Starting job scraper...')
+                
+                # Import the job scraper module using importlib for more robust importing
+                import importlib.util
+                
+                # Get the absolute path to the app.py file
+                app_path = os.path.join(os.path.dirname(__file__), 'job-data-acquisition', 'app.py')
+                
+                # Load the module
+                spec = importlib.util.spec_from_file_location("app_module", app_path)
+                app_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(app_module)
+                
+                # Get the run_scraper function
+                run_scraper = app_module.run_scraper
+                
+                # Update status
+                update_operation_progress(operation_id, 30, 'processing', 'Scraping job listings...')
+                
+                # Run the scraper
+                output_file = run_scraper()
+                
+                if output_file is None:
+                    complete_operation(operation_id, 'failed', 'Job data acquisition failed. Check the logs for details.')
+                else:
+                    complete_operation(operation_id, 'completed', f'Job data acquisition completed. Data saved to: {output_file}')
+            except Exception as e:
+                logger.error(f'Error in job scraper task: {str(e)}')
+                complete_operation(operation_id, 'failed', f'Error running job scraper: {str(e)}')
         
-        # Update the max_pages parameter
-        settings['scraper']['max_pages'] = max_pages
+        # Start the background thread
+        thread = threading.Thread(target=run_job_scraper_task)
+        thread.daemon = True
+        thread.start()
         
-        # Write the updated settings back to the file
-        with open(settings_path, 'w', encoding='utf-8') as f:
-            json.dump(settings, f, indent=4, ensure_ascii=False)
-        
-        # Import the job scraper module using importlib for more robust importing
-        import importlib.util
-        
-        # Get the absolute path to the app.py file
-        app_path = os.path.join(os.path.dirname(__file__), 'job-data-acquisition', 'app.py')
-        
-        # Load the module
-        spec = importlib.util.spec_from_file_location("app_module", app_path)
-        app_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(app_module)
-        
-        # Get the run_scraper function
-        run_scraper = app_module.run_scraper
-        
-        # Run the scraper
-        output_file = run_scraper()
-        
-        if output_file is None:
-            flash('Job data acquisition failed. Check the logs for details.')
-            logger.error('Job scraper returned None. Check the job-data-acquisition logs for details.')
-        else:
-            flash(f'Job data acquisition completed. Data saved to: {output_file}')
+        # Return immediately with the operation ID
+        flash(f'Job scraper started. Please wait while the job listings are being scraped. (operation_id={operation_id})')
+        return redirect(url_for('index'))
     except Exception as e:
         flash(f'Error running job scraper: {str(e)}')
         logger.error(f'Error running job scraper: {str(e)}')
-    
-    return redirect(url_for('index'))
+        return redirect(url_for('index'))
 
 @app.route('/view_results/<report_file>')
 def view_results(report_file):
@@ -265,100 +369,122 @@ def generate_motivation_letter_route():
             flash(f'CV file not found: {cv_path}')
             return redirect(url_for('view_results', report_file=report_file))
         
-        # Generate the motivation letter
-        logger.info(f"Calling generate_motivation_letter with cv_path={cv_path}, job_url={job_url}")
-        result = generate_motivation_letter(cv_path, job_url)
+        # Start tracking the operation
+        operation_id = start_operation('motivation_letter_generation')
         
-        if not result:
-            logger.error("Failed to generate motivation letter, result is None")
-            flash('Failed to generate motivation letter')
-            return redirect(url_for('view_results', report_file=report_file))
-        
-        logger.info(f"Successfully generated motivation letter")
-        
-        # Check if we have JSON data (new format) or HTML (old format)
-        has_json = 'motivation_letter_json' in result and 'json_file_path' in result
-        
-        if has_json:
-            logger.info(f"Generated JSON motivation letter: {result['json_file_path']}")
-            
-            # Generate Word document from JSON
-            docx_path = json_to_docx(result['motivation_letter_json'])
-            logger.info(f"Generated Word document: {docx_path}")
-            
-            # Store the docx path in the result
-            result['docx_file_path'] = docx_path
-        else:
-            logger.info(f"Generated HTML motivation letter: {result['file_path']}")
-        
-        # Get the job details
-        job_details = {}
-        try:
-            # Extract the job ID from the URL
-            job_id = job_url.split('/')[-1]
-            logger.info(f"Extracted job ID: {job_id}")
-            
-            # Find the job data file
-            job_data_dir = Path('job-data-acquisition/job-data-acquisition/data')
-            logger.info(f"Job data directory: {job_data_dir}")
-            
-            if job_data_dir.exists():
-                # Get the latest job data file
-                job_data_files = list(job_data_dir.glob('job_data_*.json'))
-                logger.info(f"Found {len(job_data_files)} job data files")
+        # Define a function to run the motivation letter generator in a background thread
+        def generate_motivation_letter_task():
+            try:
+                # Update status
+                update_operation_progress(operation_id, 10, 'processing', 'Extracting job details...')
                 
-                if job_data_files:
-                    latest_job_data_file = max(job_data_files, key=os.path.getctime)
-                    logger.info(f"Latest job data file: {latest_job_data_file}")
+                # Generate the motivation letter
+                logger.info(f"Calling generate_motivation_letter with cv_path={cv_path}, job_url={job_url}")
+                result = generate_motivation_letter(cv_path, job_url)
+                
+                if not result:
+                    logger.error("Failed to generate motivation letter, result is None")
+                    complete_operation(operation_id, 'failed', 'Failed to generate motivation letter')
+                    return
+                
+                # Update status
+                update_operation_progress(operation_id, 70, 'processing', 'Formatting motivation letter...')
+                
+                logger.info(f"Successfully generated motivation letter")
+                
+                # Check if we have JSON data (new format) or HTML (old format)
+                has_json = 'motivation_letter_json' in result and 'json_file_path' in result
+                
+                if has_json:
+                    logger.info(f"Generated JSON motivation letter: {result['json_file_path']}")
                     
-                    # Load the job data
-                    with open(latest_job_data_file, 'r', encoding='utf-8') as f:
-                        job_data = json.load(f)
+                    # Update status
+                    update_operation_progress(operation_id, 80, 'processing', 'Creating Word document...')
                     
-                    logger.info(f"Loaded job data with {len(job_data[0]['content'])} jobs")
+                    # Generate Word document from JSON
+                    docx_path = json_to_docx(result['motivation_letter_json'])
+                    logger.info(f"Generated Word document: {docx_path}")
                     
-                    # Find the job with the matching ID
-                    for i, job in enumerate(job_data[0]['content']):
-                        # Extract the job ID from the Application URL
-                        job_application_url = job.get('Application URL', '')
-                        logger.info(f"Job {i+1} Application URL: {job_application_url}")
+                    # Store the docx path in the result
+                    result['docx_file_path'] = docx_path
+                else:
+                    logger.info(f"Generated HTML motivation letter: {result['file_path']}")
+                
+                # Update status
+                update_operation_progress(operation_id, 90, 'processing', 'Getting job details...')
+                
+                # Get the job details
+                job_details = {}
+                try:
+                    # Extract the job ID from the URL
+                    job_id = job_url.split('/')[-1]
+                    logger.info(f"Extracted job ID: {job_id}")
+                    
+                    # Find the job data file
+                    job_data_dir = Path('job-data-acquisition/job-data-acquisition/data')
+                    logger.info(f"Job data directory: {job_data_dir}")
+                    
+                    if job_data_dir.exists():
+                        # Get the latest job data file
+                        job_data_files = list(job_data_dir.glob('job_data_*.json'))
+                        logger.info(f"Found {len(job_data_files)} job data files")
                         
-                        if job_id in job_application_url:
-                            logger.info(f"Found matching job: {job.get('Job Title', 'N/A')} at {job.get('Company Name', 'N/A')}")
-                            job_details = job
-                            break
-                    
-                    # If no exact match found, use the first job as a fallback
-                    if not job_details and job_data[0]['content']:
-                        logger.info("No exact match found, using first job as fallback")
-                        job_details = job_data[0]['content'][0]
-        except Exception as e:
-            logger.error(f'Error getting job details: {str(e)}')
-            import traceback
-            logger.error(traceback.format_exc())
+                        if job_data_files:
+                            latest_job_data_file = max(job_data_files, key=os.path.getctime)
+                            logger.info(f"Latest job data file: {latest_job_data_file}")
+                            
+                            # Load the job data
+                            with open(latest_job_data_file, 'r', encoding='utf-8') as f:
+                                job_data = json.load(f)
+                            
+                            logger.info(f"Loaded job data with {len(job_data[0]['content'])} jobs")
+                            
+                            # Find the job with the matching ID
+                            for i, job in enumerate(job_data[0]['content']):
+                                # Extract the job ID from the Application URL
+                                job_application_url = job.get('Application URL', '')
+                                logger.info(f"Job {i+1} Application URL: {job_application_url}")
+                                
+                                if job_id in job_application_url:
+                                    logger.info(f"Found matching job: {job.get('Job Title', 'N/A')} at {job.get('Company Name', 'N/A')}")
+                                    job_details = job
+                                    break
+                            
+                            # If no exact match found, use the first job as a fallback
+                            if not job_details and job_data[0]['content']:
+                                logger.info("No exact match found, using first job as fallback")
+                                job_details = job_data[0]['content'][0]
+                except Exception as e:
+                    logger.error(f'Error getting job details: {str(e)}')
+                    import traceback
+                    logger.error(traceback.format_exc())
+                
+                # Complete the operation
+                complete_operation(operation_id, 'completed', 'Motivation letter generated successfully')
+                
+                # Store the result in the operation status for retrieval
+                operation_status[operation_id]['result'] = {
+                    'has_json': has_json,
+                    'motivation_letter_content': result['motivation_letter_html'] if has_json else result['motivation_letter'],
+                    'html_file_path': result['html_file_path'] if has_json else result['file_path'],
+                    'docx_file_path': result['docx_file_path'] if has_json else None,
+                    'job_details': job_details,
+                    'report_file': report_file
+                }
+            except Exception as e:
+                logger.error(f'Error in motivation letter generation task: {str(e)}')
+                import traceback
+                logger.error(traceback.format_exc())
+                complete_operation(operation_id, 'failed', f'Error generating motivation letter: {str(e)}')
         
-        # Render the motivation letter template
-        logger.info("Rendering motivation letter template")
+        # Start the background thread
+        thread = threading.Thread(target=generate_motivation_letter_task)
+        thread.daemon = True
+        thread.start()
         
-        # Determine which content to pass to the template
-        if has_json:
-            # Use the HTML version generated from JSON
-            motivation_letter_content = result['motivation_letter_html']
-            html_file_path = result['html_file_path']
-            docx_file_path = result['docx_file_path']
-        else:
-            # Use the old format
-            motivation_letter_content = result['motivation_letter']
-            html_file_path = result['file_path']
-            docx_file_path = None
-        
-        return render_template('motivation_letter.html', 
-                              motivation_letter=motivation_letter_content,
-                              file_path=html_file_path,
-                              docx_file_path=docx_file_path,
-                              has_docx=has_json,
-                              job_details=job_details,
-                              report_file=report_file)
+        # Return immediately with the operation ID
+        flash(f'Motivation letter generation started. Please wait while the letter is being created. (operation_id={operation_id})')
+        return redirect(url_for('view_results', report_file=report_file))
     except Exception as e:
         flash(f'Error generating motivation letter: {str(e)}')
         logger.error(f'Error generating motivation letter: {str(e)}')
@@ -465,50 +591,81 @@ def run_combined_process():
         # Construct the full path to the CV
         full_cv_path = os.path.join('process_cv/cv-data', cv_path)
         
-        # Step 1: Update the settings.json file with the max_pages parameter
-        settings_path = os.path.join(os.path.dirname(__file__), 'job-data-acquisition', 'settings.json')
+        # Start tracking the operation
+        operation_id = start_operation('combined_process')
         
-        # Read the current settings
-        with open(settings_path, 'r', encoding='utf-8') as f:
-            settings = json.load(f)
+        # Define a function to run the combined process in a background thread
+        def run_combined_process_task():
+            try:
+                # Update status
+                update_operation_progress(operation_id, 5, 'processing', 'Updating settings...')
+                
+                # Step 1: Update the settings.json file with the max_pages parameter
+                settings_path = os.path.join(os.path.dirname(__file__), 'job-data-acquisition', 'settings.json')
+                
+                # Read the current settings
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    settings = json.load(f)
+                
+                # Update the max_pages parameter
+                settings['scraper']['max_pages'] = max_pages
+                
+                # Write the updated settings back to the file
+                with open(settings_path, 'w', encoding='utf-8') as f:
+                    json.dump(settings, f, indent=4, ensure_ascii=False)
+                
+                # Update status
+                update_operation_progress(operation_id, 10, 'processing', 'Starting job scraper...')
+                
+                # Step 2: Run the job scraper
+                import importlib.util
+                app_path = os.path.join(os.path.dirname(__file__), 'job-data-acquisition', 'app.py')
+                spec = importlib.util.spec_from_file_location("app_module", app_path)
+                app_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(app_module)
+                
+                # Run the scraper
+                output_file = app_module.run_scraper()
+                
+                if output_file is None:
+                    complete_operation(operation_id, 'failed', 'Job data acquisition failed. Check the logs for details.')
+                    return
+                
+                # Update status
+                update_operation_progress(operation_id, 60, 'processing', 'Job data acquisition completed. Starting job matcher...')
+                
+                # Step 3: Run the job matcher with the newly acquired data
+                matches = match_jobs_with_cv(full_cv_path, min_score=min_score, max_jobs=max_jobs, max_results=max_results)
+                
+                if not matches:
+                    complete_operation(operation_id, 'completed', 'No job matches found')
+                    return
+                
+                # Update status
+                update_operation_progress(operation_id, 90, 'processing', 'Generating report...')
+                
+                # Step 4: Generate report
+                report_file = generate_report(matches)
+                
+                # Complete the operation
+                complete_operation(operation_id, 'completed', f'Combined process completed. Results saved to: {report_file}')
+                
+                # Store the report file in the operation status for retrieval
+                operation_status[operation_id]['report_file'] = os.path.basename(report_file)
+            except Exception as e:
+                logger.error(f'Error in combined process task: {str(e)}')
+                import traceback
+                logger.error(traceback.format_exc())
+                complete_operation(operation_id, 'failed', f'Error running combined process: {str(e)}')
         
-        # Update the max_pages parameter
-        settings['scraper']['max_pages'] = max_pages
+        # Start the background thread
+        thread = threading.Thread(target=run_combined_process_task)
+        thread.daemon = True
+        thread.start()
         
-        # Write the updated settings back to the file
-        with open(settings_path, 'w', encoding='utf-8') as f:
-            json.dump(settings, f, indent=4, ensure_ascii=False)
-        
-        # Step 2: Run the job scraper
-        import importlib.util
-        app_path = os.path.join(os.path.dirname(__file__), 'job-data-acquisition', 'app.py')
-        spec = importlib.util.spec_from_file_location("app_module", app_path)
-        app_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(app_module)
-        
-        # Run the scraper
-        output_file = app_module.run_scraper()
-        
-        if output_file is None:
-            flash('Job data acquisition failed. Check the logs for details.')
-            return redirect(url_for('index'))
-            
-        flash(f'Job data acquisition completed. Data saved to: {output_file}')
-        
-        # Step 3: Run the job matcher with the newly acquired data
-        matches = match_jobs_with_cv(full_cv_path, min_score=min_score, max_jobs=max_jobs, max_results=max_results)
-        
-        if not matches:
-            flash('No job matches found')
-            return redirect(url_for('index'))
-        
-        # Step 4: Generate report
-        report_file = generate_report(matches)
-        
-        flash(f'Job matching completed. Results saved to: {report_file}')
-        
-        # Redirect to results page
-        return redirect(url_for('view_results', report_file=os.path.basename(report_file)))
+        # Return immediately with the operation ID
+        flash(f'Combined process started. Please wait while the job listings are being scraped and matched. (operation_id={operation_id})')
+        return redirect(url_for('index'))
     except Exception as e:
         flash(f'Error running combined process: {str(e)}')
         logger.error(f'Error running combined process: {str(e)}')

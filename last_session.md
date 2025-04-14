@@ -122,3 +122,168 @@ if result:
 The system now correctly handles both the new JSON format (which includes 'json_file_path' and 'html_file_path') and the old HTML format (which includes 'file_path'). This ensures that motivation letters can be generated in both HTML and Word formats without errors.
 
 The dashboard.py file already had the necessary logic to handle both formats, so no changes were needed there.
+
+# Session Summary: Adding Button Feedback and Progress Tracking
+
+## Overview
+
+In this session, I implemented button feedback and progress tracking for long-running operations in the JobsearchAI dashboard. These enhancements provide users with immediate visual feedback when buttons are clicked and detailed progress information during long operations like job scraping, job matching, and motivation letter generation.
+
+## Implementation Steps
+
+### 1. Added Button State Feedback
+
+First, I updated the `static/js/main.js` file to add button loading state functionality:
+
+- Created a `setButtonLoading` function that:
+  - Shows a spinner and "Processing..." text when a button is clicked
+  - Disables the button to prevent multiple submissions
+  - Stores the original button text for restoration later
+  - Restores the original button text when processing completes
+- Applied this functionality to all form submissions
+
+```javascript
+function setButtonLoading(button, isLoading) {
+  if (isLoading) {
+    // Store original text
+    button.setAttribute('data-original-text', button.innerHTML);
+    // Replace with loading spinner + text
+    button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Processing...';
+    button.disabled = true;
+  } else {
+    // Restore original text
+    button.innerHTML = button.getAttribute('data-original-text');
+    button.disabled = false;
+  }
+}
+```
+
+### 2. Added Progress Tracking System
+
+I updated the `dashboard.py` file to add a progress tracking system for long-running operations:
+
+- Added global dictionaries to store operation progress and status
+- Created functions to start, update, and complete operations
+- Added an API endpoint to check operation status
+- Modified long-running operations to run in background threads
+- Added progress updates throughout the operation lifecycle
+
+Key functions added:
+```python
+def start_operation(operation_type):
+    """Start tracking a new operation"""
+    operation_id = str(uuid.uuid4())
+    operation_progress[operation_id] = 0
+    operation_status[operation_id] = {
+        'type': operation_type,
+        'status': 'starting',
+        'message': f'Starting {operation_type}...',
+        'start_time': datetime.now().isoformat()
+    }
+    return operation_id
+
+def update_operation_progress(operation_id, progress, status=None, message=None):
+    """Update the progress of an operation"""
+    if operation_id in operation_progress:
+        operation_progress[operation_id] = progress
+        
+        if status or message:
+            if operation_id in operation_status:
+                if status:
+                    operation_status[operation_id]['status'] = status
+                if message:
+                    operation_status[operation_id]['message'] = message
+                operation_status[operation_id]['updated_time'] = datetime.now().isoformat()
+    
+    logger.info(f"Operation {operation_id}: {progress}% complete - {message}")
+
+def complete_operation(operation_id, status='completed', message='Operation completed'):
+    """Mark an operation as completed"""
+    if operation_id in operation_progress:
+        operation_progress[operation_id] = 100
+        
+        if operation_id in operation_status:
+            operation_status[operation_id]['status'] = status
+            operation_status[operation_id]['message'] = message
+            operation_status[operation_id]['completed_time'] = datetime.now().isoformat()
+    
+    logger.info(f"Operation {operation_id} {status}: {message}")
+```
+
+### 3. Added Progress Modal and Status Polling
+
+I enhanced the `static/js/main.js` file to add a progress modal and status polling:
+
+- Created a function to check operation status via AJAX
+- Added a progress modal with a progress bar to display operation progress
+- Implemented polling to periodically check operation status
+- Updated the UI based on status updates
+- Added logic to handle operation completion and errors
+
+```javascript
+function checkOperationStatus(operationId, onComplete) {
+    const statusUrl = `/operation_status/${operationId}`;
+    
+    // Create progress modal if it doesn't exist
+    let progressModal = document.getElementById('progressModal');
+    if (!progressModal) {
+        // Create modal HTML...
+    }
+    
+    // Show the progress modal
+    const bsProgressModal = new bootstrap.Modal(progressModal);
+    bsProgressModal.show();
+    
+    // Start polling for status updates
+    const pollInterval = setInterval(() => {
+        fetch(statusUrl)
+            .then(response => response.json())
+            .then(data => {
+                // Update progress bar and status message
+                // Check if operation is complete
+            })
+            .catch(error => {
+                // Handle errors
+            });
+    }, 1000); // Poll every second
+}
+```
+
+### 4. Updated Flash Messages
+
+I updated the flash messages in `dashboard.py` to include the operation ID:
+
+```python
+flash(f'Job matcher started. Please wait while the results are being processed. (operation_id={operation_id})')
+```
+
+This allows the JavaScript to extract the operation ID and start polling for status updates.
+
+### 5. Updated Documentation
+
+Finally, I updated the `Documentation.md` file to include information about the new features:
+
+- Added "User Feedback and Progress Tracking" to the Dashboard features list
+- Created a detailed section under "Implementation Details" to describe these features
+- Documented the client-side and server-side components of the system
+
+## Result
+
+The system now provides:
+
+1. **Immediate Visual Feedback**: Buttons show loading spinners and are disabled when clicked
+2. **Real-time Progress Updates**: A progress modal shows the current status of long-running operations
+3. **Detailed Status Messages**: Users can see what's happening during each step of the process
+4. **Background Processing**: Long operations run in background threads, keeping the UI responsive
+
+These enhancements significantly improve the user experience, especially for operations like job scraping and motivation letter generation that can take several minutes to complete.
+
+## Future Improvements
+
+Potential future improvements could include:
+
+- Adding more detailed progress steps for complex operations
+- Implementing a persistent notification system for completed operations
+- Adding the ability to cancel long-running operations
+- Enhancing the progress modal with more visual elements (icons, animations)
+- Adding estimated time remaining for long operations
