@@ -29,6 +29,12 @@ var/
 # Job data and matches
 job_matches_*.json
 job_matches_*.md
+job_matches/
+
+# Generated motivation letters
+motivation_letters/*.html
+motivation_letters/*.docx
+motivation_letters/*.json
 
 # Virtual environments
 venv/
@@ -45,6 +51,9 @@ job-data-acquisition/configs/settings.json
 job-data-acquisition/venv
 job-data-acquisition/job-data-acquisition
 job-data-acquisition/settings.json
+job-data-acquisition/job-data-acquisition/data/
+job-data-acquisition/logs/
+logs/
 
 # CV data - may contain personal information
 process_cv/cv-data/input/
