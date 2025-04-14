@@ -66,6 +66,7 @@ def get_job_details_using_scrapegraph(job_url):
         # Define a specific extraction prompt for a single job page
         extraction_prompt = """
         Extract and summarize detailed information about this specific job posting. Focus on providing a comprehensive summary of the job requirements, responsibilities, and company expectations. Return a JSON object with the following fields:
+        Mind you it could be "Arbeitsvermittler" which would not be the direct company to apply to.
         1. Job Title
         2. Company Name
         3. Job Description (provide a detailed summary of the job description)
@@ -280,6 +281,78 @@ def get_job_details(job_url):
             'Application URL': job_url
         }
 
+def json_to_html(motivation_letter_json):
+    """Convert motivation letter JSON to HTML format"""
+    try:
+        # Extract fields from JSON
+        candidate_name = motivation_letter_json.get('candidate_name', '')
+        candidate_address = motivation_letter_json.get('candidate_address', '')
+        candidate_city = motivation_letter_json.get('candidate_city', '')
+        candidate_email = motivation_letter_json.get('candidate_email', '')
+        candidate_phone = motivation_letter_json.get('candidate_phone', '')
+        
+        company_name = motivation_letter_json.get('company_name', '')
+        company_department = motivation_letter_json.get('company_department', '')
+        company_address = motivation_letter_json.get('company_address', '')
+        
+        date = motivation_letter_json.get('date', '')
+        subject = motivation_letter_json.get('subject', '')
+        greeting = motivation_letter_json.get('greeting', '')
+        introduction = motivation_letter_json.get('introduction', '')
+        
+        body_paragraphs = motivation_letter_json.get('body_paragraphs', [])
+        
+        closing = motivation_letter_json.get('closing', '')
+        signature = motivation_letter_json.get('signature', '')
+        full_name = motivation_letter_json.get('full_name', '')
+        
+        # Create HTML content
+        html_content = f"""<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Motivationsschreiben</title>
+</head>
+<body>
+    <p>{candidate_name}<br>
+    {candidate_address}<br>
+    {candidate_city}<br>
+    {candidate_email}<br>
+    {candidate_phone}</p>
+
+    <p>{company_name}<br>
+    {company_department}<br>
+    {company_address}</p>
+
+    <p>{date}</p>
+
+    <h2>{subject}</h2>
+
+    <p>{greeting},</p>
+
+    <p>{introduction}</p>
+"""
+        
+        # Add body paragraphs
+        for paragraph in body_paragraphs:
+            html_content += f"    <p>{paragraph}</p>\n"
+        
+        # Add closing and signature
+        html_content += f"""
+    <p>{closing}</p>
+
+    <p>{signature},<br>
+    {full_name}</p>
+</body>
+</html>
+"""
+        
+        return html_content
+    except Exception as e:
+        logger.error(f"Error converting JSON to HTML: {str(e)}")
+        return "<p>Error generating HTML content</p>"
+
 def generate_motivation_letter(cv_summary, job_details):
     """Generate a motivation letter using GPT-4o"""
     try:
@@ -303,34 +376,34 @@ def generate_motivation_letter(cv_summary, job_details):
         client = openai.OpenAI(api_key=openai_api_key)
         
         # Prepare the prompt
-        prompt = f"""
+        prompt = """
         Schreibe ein Motivationsschreiben aus den Informationen von der Webseite und dem Lebenslauf:
         
         ## Lebenslauf des Bewerbers:
-        {cv_summary}
+        {}
         
         ## Stellenangebot (von der Webseite):
-        Titel: {job_details.get('Job Title', 'N/A')}
-        Firma: {job_details.get('Company Name', 'N/A')}
-        Ort: {job_details.get('Location', 'N/A')}
+        Titel: {}
+        Firma: {}
+        Ort: {}
         
         Beschreibung: 
-        {job_details.get('Job Description', 'N/A')}
+        {}
         
         Erforderliche Fähigkeiten: 
-        {job_details.get('Required Skills', 'N/A')}
+        {}
         
         Verantwortlichkeiten: 
-        {job_details.get('Responsibilities', 'Keine spezifischen Verantwortlichkeiten aufgeführt.')}
+        {}
         
         Unternehmensinformationen: 
-        {job_details.get('Company Information', 'Keine spezifischen Unternehmensinformationen verfügbar.')}
+        {}
         
         Das Motivationsschreiben sollte:
         1. Professionell und überzeugend sein
         2. Die Qualifikationen und Erfahrungen des Bewerbers KONKRET mit den Anforderungen der Stelle verknüpfen
         3. Die Motivation des Bewerbers für die Stelle und das Unternehmen zum Ausdruck bringen
-        4. Etwa eine Seite lang sein (ca. 300-400 Wörter)
+        4. Etwa eine halbe Seite lang sein (ca. 200-300 Wörter)
         5. Auf Deutsch verfasst sein
         6. Im formalen Bewerbungsstil mit Anrede, Einleitung, Hauptteil, Schluss und Grußformel sein
         7. SPEZIFISCH auf die Stellenanforderungen und Verantwortlichkeiten eingehen, die aus der Webseite extrahiert wurden
@@ -340,54 +413,148 @@ def generate_motivation_letter(cv_summary, job_details):
         
         WICHTIG: Verwende die detaillierten Informationen aus der Stellenbeschreibung, um ein personalisiertes und spezifisches Motivationsschreiben zu erstellen. Gehe auf konkrete Anforderungen und Verantwortlichkeiten ein und zeige, wie der Bewerber diese erfüllen kann.
         
-        Bitte formatiere das Motivationsschreiben mit Absätzen und gib es im HTML-Format zurück.
-        """
+        Gib das Motivationsschreiben als JSON-Objekt mit folgender Struktur zurück:
+        
+        ```json
+        {{
+          "candidate_name": "Vollständiger Name des Bewerbers",
+          "candidate_address": "Straße und Hausnummer",
+          "candidate_city": "PLZ und Ort",
+          "candidate_email": "E-Mail-Adresse",
+          "candidate_phone": "Telefonnummer",
+          "company_name": "Name des Unternehmens",
+          "company_department": "Abteilung (falls bekannt, sonst 'Personalabteilung')",
+          "company_address": "Adresse des Unternehmens (falls bekannt)",
+          "date": "Ort, den [aktuelles Datum]",
+          "subject": "Bewerbung als [Stellentitel]",
+          "greeting": "Anrede (z.B. 'Sehr geehrte Damen und Herren')",
+          "introduction": "Einleitungsabsatz",
+          "body_paragraphs": [
+            "Erster Hauptabsatz",
+            "Zweiter Hauptabsatz",
+            "Dritter Hauptabsatz (falls nötig)"
+          ],
+          "closing": "Schlussabsatz",
+          "signature": "Grußformel (z.B. 'Mit freundlichen Grüßen')",
+          "full_name": "Vollständiger Name des Bewerbers"
+        }}
+        ```
+        
+        Stelle sicher, dass alle Felder korrekt befüllt sind und das JSON-Format gültig ist.
+        """.format(
+            cv_summary,
+            job_details.get('Job Title', 'N/A'),
+            job_details.get('Company Name', 'N/A'),
+            job_details.get('Location', 'N/A'),
+            job_details.get('Job Description', 'N/A'),
+            job_details.get('Required Skills', 'N/A'),
+            job_details.get('Responsibilities', 'Keine spezifischen Verantwortlichkeiten aufgeführt.'),
+            job_details.get('Company Information', 'Keine spezifischen Unternehmensinformationen verfügbar.')
+        )
         
         # Generate the motivation letter using GPT-4o
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Du bist ein professioneller Bewerbungsberater, der Motivationsschreiben für Stellenbewerbungen erstellt."},
+                {"role": "system", "content": "Du bist ein professioneller Bewerbungsberater, der Motivationsschreiben für Stellenbewerbungen erstellt. Gib deine Antwort als valides JSON-Objekt zurück."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
-            max_tokens=1500
+            max_tokens=1500,
+            response_format={"type": "json_object"}  # Ensure JSON response
         )
         
-        # Extract the generated motivation letter
-        motivation_letter = response.choices[0].message.content
+        # Extract the generated motivation letter as JSON
+        motivation_letter_json_str = response.choices[0].message.content
         
-        # Save the motivation letter
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        # Sanitize job title and company name to avoid path issues
-        job_title = job_details.get('Job Title', 'job')
-        company_name = job_details.get('Company Name', 'company')
-        
-        # Replace problematic characters and limit length
-        job_title = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in job_title)
-        company_name = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in company_name)
-        
-        # Limit length to avoid excessively long filenames
-        job_title = job_title.replace(' ', '_')[:30]
-        company_name = company_name.replace(' ', '_')[:30]
-        
-        # Create the motivation letters directory if it doesn't exist
-        motivation_letters_dir = Path('motivation_letters')
-        motivation_letters_dir.mkdir(exist_ok=True)
-        
-        # Save the motivation letter to a file
-        filename = f"motivation_letter_{job_title}_{company_name}_{timestamp}.html"
-        motivation_letter_file = motivation_letters_dir / filename
-        
-        logger.info(f"Saving motivation letter to file: {motivation_letter_file}")
-        with open(motivation_letter_file, 'w', encoding='utf-8') as f:
-            f.write(motivation_letter)
-        
-        return {
-            'motivation_letter': motivation_letter,
-            'file_path': str(motivation_letter_file)
-        }
+        try:
+            # Parse the JSON response
+            motivation_letter_json = json.loads(motivation_letter_json_str)
+            logger.info("Successfully parsed motivation letter JSON")
+            
+            # Convert JSON to HTML for backward compatibility
+            html_content = json_to_html(motivation_letter_json)
+            
+            # Save the motivation letter (both JSON and HTML)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # Sanitize job title and company name to avoid path issues
+            job_title = job_details.get('Job Title', 'job')
+            company_name = job_details.get('Company Name', 'company')
+            
+            # Replace problematic characters and limit length
+            job_title = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in job_title)
+            company_name = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in company_name)
+            
+            # Limit length to avoid excessively long filenames
+            job_title = job_title.replace(' ', '_')[:30]
+            company_name = company_name.replace(' ', '_')[:30]
+            
+            # Create the motivation letters directory if it doesn't exist
+            motivation_letters_dir = Path('motivation_letters')
+            motivation_letters_dir.mkdir(exist_ok=True)
+            
+            # Save the HTML version
+            html_filename = f"motivation_letter_{job_title}_{company_name}_{timestamp}.html"
+            html_file_path = motivation_letters_dir / html_filename
+            
+            logger.info(f"Saving HTML motivation letter to file: {html_file_path}")
+            with open(html_file_path, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            
+            # Save the JSON version
+            json_filename = f"motivation_letter_{job_title}_{company_name}_{timestamp}.json"
+            json_file_path = motivation_letters_dir / json_filename
+            
+            logger.info(f"Saving JSON motivation letter to file: {json_file_path}")
+            with open(json_file_path, 'w', encoding='utf-8') as f:
+                json.dump(motivation_letter_json, f, ensure_ascii=False, indent=2)
+            
+            return {
+                'motivation_letter_json': motivation_letter_json,
+                'motivation_letter_html': html_content,
+                'html_file_path': str(html_file_path),
+                'json_file_path': str(json_file_path)
+            }
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing JSON response: {str(e)}")
+            logger.error(f"Raw response: {motivation_letter_json_str}")
+            
+            # Fallback: treat the response as HTML directly
+            logger.warning("Falling back to treating response as HTML")
+            
+            # Save the motivation letter as HTML
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # Sanitize job title and company name to avoid path issues
+            job_title = job_details.get('Job Title', 'job')
+            company_name = job_details.get('Company Name', 'company')
+            
+            # Replace problematic characters and limit length
+            job_title = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in job_title)
+            company_name = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in company_name)
+            
+            # Limit length to avoid excessively long filenames
+            job_title = job_title.replace(' ', '_')[:30]
+            company_name = company_name.replace(' ', '_')[:30]
+            
+            # Create the motivation letters directory if it doesn't exist
+            motivation_letters_dir = Path('motivation_letters')
+            motivation_letters_dir.mkdir(exist_ok=True)
+            
+            # Save the motivation letter to a file
+            filename = f"motivation_letter_{job_title}_{company_name}_{timestamp}.html"
+            motivation_letter_file = motivation_letters_dir / filename
+            
+            logger.info(f"Saving motivation letter to file: {motivation_letter_file}")
+            with open(motivation_letter_file, 'w', encoding='utf-8') as f:
+                f.write(motivation_letter_json_str)
+            
+            return {
+                'motivation_letter': motivation_letter_json_str,
+                'file_path': str(motivation_letter_file)
+            }
     except Exception as e:
         logger.error(f"Error generating motivation letter: {str(e)}")
         return None
@@ -418,7 +585,11 @@ def main(cv_path, job_url):
         logger.error("Failed to generate motivation letter")
         return None
     
-    logger.info(f"Successfully generated motivation letter: {result['file_path']}")
+    # Check which format we have (JSON or HTML)
+    if 'json_file_path' in result:
+        logger.info(f"Successfully generated motivation letter: {result['json_file_path']}")
+    else:
+        logger.info(f"Successfully generated motivation letter: {result['file_path']}")
     return result
 
 if __name__ == "__main__":
@@ -428,6 +599,9 @@ if __name__ == "__main__":
     result = main(cv_path, job_url)
     
     if result:
-        print(f"Motivation letter generated successfully: {result['file_path']}")
+        if 'json_file_path' in result:
+            print(f"Motivation letter generated successfully: {result['json_file_path']}")
+        else:
+            print(f"Motivation letter generated successfully: {result['file_path']}")
     else:
         print("Failed to generate motivation letter")
