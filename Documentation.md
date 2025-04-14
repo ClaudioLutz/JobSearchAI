@@ -457,7 +457,14 @@ Once the dashboard is running, you can:
    - Set the minimum match score and maximum results
    - Click the "Run Job Matcher" button
    - View the results on the results page
-3. **Run the Job Scraper**:
+3. **Run the Combined Process**:
+   - Select a CV from the dropdown menu
+   - Set the maximum number of pages to scrape
+   - Set the minimum match score and other matching parameters
+   - Click the "Run Combined Process" button
+   - This will first run the job scraper to get fresh job listings, then immediately run the job matcher with those listings
+   - View the results on the results page when complete
+4. **Run the Job Scraper**:
    - Set the maximum number of pages to scrape (default: 50)
    - Click the "Run Job Scraper" button to get new job listings
    - This may take several minutes depending on the number of pages to scrape

@@ -447,6 +447,75 @@ def delete_report(report_file):
     
     return redirect(url_for('index'))
 
+@app.route('/run_combined_process', methods=['POST'])
+def run_combined_process():
+    """Run both job data acquisition and job matcher in one go"""
+    try:
+        # Get parameters from the form
+        cv_path = request.form.get('cv_path')
+        max_pages = int(request.form.get('max_pages', 50))
+        min_score = int(request.form.get('min_score', 3))
+        max_jobs = int(request.form.get('max_jobs', 50))
+        max_results = int(request.form.get('max_results', 10))
+        
+        if not cv_path:
+            flash('No CV selected')
+            return redirect(url_for('index'))
+        
+        # Construct the full path to the CV
+        full_cv_path = os.path.join('process_cv/cv-data', cv_path)
+        
+        # Step 1: Update the settings.json file with the max_pages parameter
+        settings_path = os.path.join(os.path.dirname(__file__), 'job-data-acquisition', 'settings.json')
+        
+        # Read the current settings
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+        
+        # Update the max_pages parameter
+        settings['scraper']['max_pages'] = max_pages
+        
+        # Write the updated settings back to the file
+        with open(settings_path, 'w', encoding='utf-8') as f:
+            json.dump(settings, f, indent=4, ensure_ascii=False)
+        
+        # Step 2: Run the job scraper
+        import importlib.util
+        app_path = os.path.join(os.path.dirname(__file__), 'job-data-acquisition', 'app.py')
+        spec = importlib.util.spec_from_file_location("app_module", app_path)
+        app_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(app_module)
+        
+        # Run the scraper
+        output_file = app_module.run_scraper()
+        
+        if output_file is None:
+            flash('Job data acquisition failed. Check the logs for details.')
+            return redirect(url_for('index'))
+            
+        flash(f'Job data acquisition completed. Data saved to: {output_file}')
+        
+        # Step 3: Run the job matcher with the newly acquired data
+        matches = match_jobs_with_cv(full_cv_path, min_score=min_score, max_jobs=max_jobs, max_results=max_results)
+        
+        if not matches:
+            flash('No job matches found')
+            return redirect(url_for('index'))
+        
+        # Step 4: Generate report
+        report_file = generate_report(matches)
+        
+        flash(f'Job matching completed. Results saved to: {report_file}')
+        
+        # Redirect to results page
+        return redirect(url_for('view_results', report_file=os.path.basename(report_file)))
+    except Exception as e:
+        flash(f'Error running combined process: {str(e)}')
+        logger.error(f'Error running combined process: {str(e)}')
+        import traceback
+        logger.error(traceback.format_exc())
+        return redirect(url_for('index'))
+
 @app.route('/delete_cv/<cv_file>')
 def delete_cv(cv_file):
     """Delete a CV file"""

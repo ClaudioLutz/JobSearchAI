@@ -77,6 +77,47 @@
                     </div>
                 </div>
                 
+                <!-- Combined Process Form -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h2 class="h5 mb-0">Run Combined Process</h2>
+                    </div>
+                    <div class="card-body">
+                        <p>Run both job data acquisition and job matching in one go.</p>
+                        <form action="{{ url_for('run_combined_process') }}" method="post">
+                            <div class="mb-3">
+                                <label for="combined_cv_path" class="form-label">Select CV</label>
+                                <select class="form-select" id="combined_cv_path" name="cv_path" required>
+                                    <option value="">Select a CV</option>
+                                    {% for cv_file in cv_files %}
+                                        <option value="{{ cv_file }}">{{ cv_file }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="combined_max_pages" class="form-label">Maximum Pages to Scrape</label>
+                                <input type="number" class="form-control" id="combined_max_pages" name="max_pages" min="1" max="500" value="50">
+                                <div class="form-text">Maximum number of pages to scrape from the job listing website.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="combined_min_score" class="form-label">Minimum Match Score (1-10)</label>
+                                <input type="number" class="form-control" id="combined_min_score" name="min_score" min="1" max="10" value="3">
+                            </div>
+                            <div class="mb-3">
+                                <label for="combined_max_jobs" class="form-label">Max Jobs to Process</label>
+                                <input type="number" class="form-control" id="combined_max_jobs" name="max_jobs" min="1" max="200" value="50">
+                                <div class="form-text">Maximum number of job listings to load and process from the data file.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="combined_max_results" class="form-label">Max Results to Return</label>
+                                <input type="number" class="form-control" id="combined_max_results" name="max_results" min="1" max="50" value="10">
+                                <div class="form-text">Maximum number of matched jobs to include in the final report.</div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Run Combined Process</button>
+                        </form>
+                    </div>
+                </div>
+                
                 <!-- Job Data Acquisition -->
                 <div class="card mb-4">
                     <div class="card-header">
