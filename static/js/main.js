@@ -63,7 +63,9 @@ function checkOperationStatus(operationId, onComplete) {
         progressBar.setAttribute('aria-valuenow', progress);
         progressBar.textContent = `${progress}%`;
         
-        if (message) {
+        if (message && statusMessage.innerHTML.indexOf('<br>') === -1) {
+            // Only update the text content if it doesn't contain HTML (which would indicate we've already
+            // formatted it with the completion message)
             statusMessage.textContent = message;
         }
     }
@@ -88,6 +90,35 @@ function checkOperationStatus(operationId, onComplete) {
                 // Check if the operation is complete
                 if (progress === 100 || status.status === 'completed' || status.status === 'failed') {
                     clearInterval(pollInterval);
+                    
+                    // Update modal title and message based on operation status
+                    const progressModalLabel = document.getElementById('progressModalLabel');
+                    const statusMessage = document.getElementById('operationStatusMessage');
+                    
+                    if (status.status === 'failed') {
+                        // Handle failed operations
+                        if (progressModalLabel) {
+                            progressModalLabel.textContent = 'Operation Failed';
+                        }
+                        if (statusMessage) {
+                            statusMessage.innerHTML = `${status.message}<br><br><strong>Operation failed.</strong>`;
+                        }
+                        // Change progress bar color to red for failed operations
+                        if (progressBar) {
+                            progressBar.classList.remove('bg-success');
+                            progressBar.classList.add('bg-danger');
+                        }
+                    } else if (status.status === 'completed') {
+                        // Handle completed operations
+                        if (progressModalLabel) {
+                            progressModalLabel.textContent = 'Operation Completed';
+                        }
+                        // Change progress bar color to green for completed operations
+                        if (progressBar) {
+                            progressBar.classList.remove('bg-danger');
+                            progressBar.classList.add('bg-success');
+                        }
+                    }
                     
                     // Call the onComplete callback if provided
                     if (onComplete && typeof onComplete === 'function') {
@@ -151,14 +182,42 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (operationId) {
                         // Start checking the operation status
                         checkOperationStatus(operationId, (status) => {
-                            // When the operation is complete, redirect to the appropriate page
+                            // When the operation is complete, add a "View Results" button instead of auto-redirecting
                             if (status.status === 'completed') {
-                                if (status.report_file) {
-                                    // Redirect to the results page
-                                    window.location.href = `/view_results/${status.report_file}`;
-                                } else {
-                                    // Reload the current page
-                                    window.location.reload();
+                                const statusMessage = document.getElementById('operationStatusMessage');
+                                const modalFooter = document.querySelector('#progressModal .modal-footer');
+                                
+                                // Update status message
+                                if (statusMessage) {
+                                    statusMessage.innerHTML = `${status.message}<br><br><strong>Operation completed successfully.</strong>`;
+                                }
+                                
+                                // Add a "View Results" button to the modal footer
+                                if (modalFooter) {
+                                    // Remove any existing view results button
+                                    const existingButton = modalFooter.querySelector('.btn-primary');
+                                    if (existingButton) {
+                                        existingButton.remove();
+                                    }
+                                    
+                                    // Create and add the new button
+                                    const viewResultsButton = document.createElement('button');
+                                    viewResultsButton.type = 'button';
+                                    viewResultsButton.className = 'btn btn-primary';
+                                    
+                                    if (status.report_file) {
+                                        viewResultsButton.textContent = 'View Results';
+                                        viewResultsButton.addEventListener('click', () => {
+                                            window.location.href = `/view_results/${status.report_file}`;
+                                        });
+                                    } else {
+                                        viewResultsButton.textContent = 'Reload Page';
+                                        viewResultsButton.addEventListener('click', () => {
+                                            window.location.reload();
+                                        });
+                                    }
+                                    
+                                    modalFooter.prepend(viewResultsButton);
                                 }
                             }
                         });
