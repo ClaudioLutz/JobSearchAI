@@ -15,6 +15,7 @@ sys.path.append('.')
 from process_cv.cv_processor import extract_cv_text, summarize_cv
 from job_matcher import match_jobs_with_cv, generate_report, load_latest_job_data
 from motivation_letter_generator import main as generate_motivation_letter
+from word_template_generator import json_to_docx, create_word_document_from_json_file
 
 # Set up logging
 logging.basicConfig(
@@ -273,7 +274,22 @@ def generate_motivation_letter_route():
             flash('Failed to generate motivation letter')
             return redirect(url_for('view_results', report_file=report_file))
         
-        logger.info(f"Successfully generated motivation letter: {result['file_path']}")
+        logger.info(f"Successfully generated motivation letter")
+        
+        # Check if we have JSON data (new format) or HTML (old format)
+        has_json = 'motivation_letter_json' in result and 'json_file_path' in result
+        
+        if has_json:
+            logger.info(f"Generated JSON motivation letter: {result['json_file_path']}")
+            
+            # Generate Word document from JSON
+            docx_path = json_to_docx(result['motivation_letter_json'])
+            logger.info(f"Generated Word document: {docx_path}")
+            
+            # Store the docx path in the result
+            result['docx_file_path'] = docx_path
+        else:
+            logger.info(f"Generated HTML motivation letter: {result['file_path']}")
         
         # Get the job details
         job_details = {}
@@ -323,9 +339,24 @@ def generate_motivation_letter_route():
         
         # Render the motivation letter template
         logger.info("Rendering motivation letter template")
+        
+        # Determine which content to pass to the template
+        if has_json:
+            # Use the HTML version generated from JSON
+            motivation_letter_content = result['motivation_letter_html']
+            html_file_path = result['html_file_path']
+            docx_file_path = result['docx_file_path']
+        else:
+            # Use the old format
+            motivation_letter_content = result['motivation_letter']
+            html_file_path = result['file_path']
+            docx_file_path = None
+        
         return render_template('motivation_letter.html', 
-                              motivation_letter=result['motivation_letter'],
-                              file_path=result['file_path'],
+                              motivation_letter=motivation_letter_content,
+                              file_path=html_file_path,
+                              docx_file_path=docx_file_path,
+                              has_docx=has_json,
                               job_details=job_details,
                               report_file=report_file)
     except Exception as e:
@@ -337,7 +368,7 @@ def generate_motivation_letter_route():
 
 @app.route('/download_motivation_letter')
 def download_motivation_letter():
-    """Download a generated motivation letter"""
+    """Download a generated motivation letter (HTML version)"""
     file_path = request.args.get('file_path')
     
     if not file_path:
@@ -350,6 +381,107 @@ def download_motivation_letter():
         flash(f'Error downloading motivation letter: {str(e)}')
         logger.error(f'Error downloading motivation letter: {str(e)}')
         return redirect(url_for('index'))
+
+@app.route('/download_motivation_letter_docx')
+def download_motivation_letter_docx():
+    """Download a generated motivation letter (Word document version)"""
+    file_path = request.args.get('file_path')
+    
+    if not file_path:
+        flash('No file path provided')
+        return redirect(url_for('index'))
+    
+    try:
+        return send_file(file_path, as_attachment=True)
+    except Exception as e:
+        flash(f'Error downloading Word document: {str(e)}')
+        logger.error(f'Error downloading Word document: {str(e)}')
+        return redirect(url_for('index'))
+
+@app.route('/delete_job_data/<job_data_file>')
+def delete_job_data(job_data_file):
+    """Delete a job data file"""
+    try:
+        # Construct the full path to the job data file
+        job_data_path = os.path.join('job-data-acquisition/job-data-acquisition/data', job_data_file)
+        
+        # Check if the file exists
+        if not os.path.exists(job_data_path):
+            flash(f'Job data file not found: {job_data_file}')
+            return redirect(url_for('index'))
+        
+        # Delete the file
+        os.remove(job_data_path)
+        flash(f'Job data file deleted: {job_data_file}')
+    except Exception as e:
+        flash(f'Error deleting job data file: {str(e)}')
+        logger.error(f'Error deleting job data file: {str(e)}')
+    
+    return redirect(url_for('index'))
+
+@app.route('/delete_report/<report_file>')
+def delete_report(report_file):
+    """Delete a job match report file"""
+    try:
+        # Construct the full path to the report file
+        report_path = os.path.join('job_matches', report_file)
+        
+        # Check if the file exists
+        if not os.path.exists(report_path):
+            flash(f'Report file not found: {report_file}')
+            return redirect(url_for('index'))
+        
+        # Delete the markdown file
+        os.remove(report_path)
+        
+        # Also delete the corresponding JSON file if it exists
+        json_file = report_file.replace('.md', '.json')
+        json_path = os.path.join('job_matches', json_file)
+        if os.path.exists(json_path):
+            os.remove(json_path)
+            
+        flash(f'Report file deleted: {report_file}')
+    except Exception as e:
+        flash(f'Error deleting report file: {str(e)}')
+        logger.error(f'Error deleting report file: {str(e)}')
+    
+    return redirect(url_for('index'))
+
+@app.route('/delete_cv/<cv_file>')
+def delete_cv(cv_file):
+    """Delete a CV file"""
+    try:
+        # Determine if the CV is in the input directory or directly in cv-data
+        cv_path_input = os.path.join('process_cv/cv-data/input', cv_file)
+        cv_path_direct = os.path.join('process_cv/cv-data', cv_file)
+        
+        cv_path = None
+        if os.path.exists(cv_path_input):
+            cv_path = cv_path_input
+        elif os.path.exists(cv_path_direct):
+            cv_path = cv_path_direct
+        
+        if not cv_path:
+            flash(f'CV file not found: {cv_file}')
+            return redirect(url_for('index'))
+        
+        # Delete the CV file
+        os.remove(cv_path)
+        
+        # Also delete the corresponding summary file if it exists
+        base_filename = os.path.basename(cv_file)
+        summary_filename = os.path.splitext(base_filename)[0] + '_summary.txt'
+        summary_path = os.path.join('process_cv/cv-data/processed', summary_filename)
+        
+        if os.path.exists(summary_path):
+            os.remove(summary_path)
+            
+        flash(f'CV file deleted: {cv_file}')
+    except Exception as e:
+        flash(f'Error deleting CV file: {str(e)}')
+        logger.error(f'Error deleting CV file: {str(e)}')
+    
+    return redirect(url_for('index'))
 
 @app.route('/view_cv_summary/<cv_file>')
 def view_cv_summary(cv_file):

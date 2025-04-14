@@ -34,7 +34,10 @@
             <div>
                 <a href="{{ url_for('view_results', report_file=report_file) }}" class="btn btn-outline-secondary me-2">Zurück zu den Ergebnissen</a>
                 <button onclick="window.print()" class="btn btn-primary me-2">Drucken</button>
-                <a href="{{ url_for('download_motivation_letter', file_path=file_path) }}" class="btn btn-success">Herunterladen</a>
+                <a href="{{ url_for('download_motivation_letter', file_path=file_path) }}" class="btn btn-success me-2">HTML herunterladen</a>
+                {% if has_docx %}
+                <a href="{{ url_for('download_motivation_letter_docx', file_path=docx_file_path) }}" class="btn btn-success">Word herunterladen</a>
+                {% endif %}
             </div>
         </div>
         

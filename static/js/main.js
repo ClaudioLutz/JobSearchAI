@@ -97,4 +97,37 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // Add confirmation for job data delete buttons
+    const deleteJobDataButtons = document.querySelectorAll('.delete-job-data-btn');
+    deleteJobDataButtons.forEach(button => {
+        button.addEventListener('click', function(event) {
+            const jobDataFile = this.getAttribute('data-job-data-file');
+            if (!confirm(`Are you sure you want to delete the job data file: ${jobDataFile}?`)) {
+                event.preventDefault();
+            }
+        });
+    });
+    
+    // Add confirmation for report delete buttons
+    const deleteReportButtons = document.querySelectorAll('.delete-report-btn');
+    deleteReportButtons.forEach(button => {
+        button.addEventListener('click', function(event) {
+            const reportFile = this.getAttribute('data-report-file');
+            if (!confirm(`Are you sure you want to delete the report file: ${reportFile}?`)) {
+                event.preventDefault();
+            }
+        });
+    });
+    
+    // Add confirmation for CV delete buttons
+    const deleteCvButtons = document.querySelectorAll('.delete-cv-btn');
+    deleteCvButtons.forEach(button => {
+        button.addEventListener('click', function(event) {
+            const cvFile = this.getAttribute('data-cv-file');
+            if (!confirm(`Are you sure you want to delete the CV file: ${cvFile}?`)) {
+                event.preventDefault();
+            }
+        });
+    });
 });

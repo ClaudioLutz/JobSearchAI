@@ -126,6 +126,37 @@ body {
     max-height: 400px;
 }
 
+/* Delete button styles */
+.delete-job-data-btn, .delete-report-btn, .delete-cv-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    margin-left: 10px;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: none;
+    background-color: #495057; /* Dark grey color */
+    color: white;
+}
+
+.delete-job-data-btn:hover, .delete-report-btn:hover, .delete-cv-btn:hover {
+    background-color: #343a40; /* Darker grey on hover */
+    transform: scale(1.1);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.delete-job-data-btn span, .delete-report-btn span, .delete-cv-btn span {
+    font-size: 1.1rem;
+    line-height: 1;
+    font-weight: 700;
+    position: relative;
+    top: -1px;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .d-flex.justify-content-between {

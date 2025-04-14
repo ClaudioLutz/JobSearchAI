@@ -109,7 +109,15 @@
                                 {% for cv_file in cv_files %}
                                     <li class="list-group-item d-flex justify-content-between align-items-center">
                                         {{ cv_file }}
-                                        <button class="btn btn-sm btn-outline-info view-cv-btn" data-cv-file="{{ cv_file }}">View Summary</button>
+                                        <div class="d-flex align-items-center">
+                                            <button class="btn btn-sm btn-outline-info view-cv-btn me-1" data-cv-file="{{ cv_file }}">View Summary</button>
+                                            <a href="{{ url_for('delete_cv', cv_file=cv_file) }}" 
+                                               class="btn btn-sm delete-cv-btn" 
+                                               data-cv-file="{{ cv_file }}"
+                                               title="Delete CV file">
+                                                <span aria-hidden="true">&times;</span>
+                                            </a>
+                                        </div>
                                     </li>
                                 {% endfor %}
                             </ul>
@@ -128,8 +136,14 @@
                         {% if job_data_files %}
                             <ul class="list-group">
                                 {% for job_data_file in job_data_files %}
-                                    <li class="list-group-item">
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
                                         {{ job_data_file }}
+                                        <a href="{{ url_for('delete_job_data', job_data_file=job_data_file) }}" 
+                                           class="btn btn-sm delete-job-data-btn" 
+                                           data-job-data-file="{{ job_data_file }}"
+                                           title="Delete job data file">
+                                            <span aria-hidden="true">&times;</span>
+                                        </a>
                                     </li>
                                 {% endfor %}
                             </ul>
@@ -150,9 +164,15 @@
                                 {% for report_file in report_files %}
                                     <li class="list-group-item d-flex justify-content-between align-items-center">
                                         {{ report_file }}
-                                        <div>
-                                            <a href="{{ url_for('view_results', report_file=report_file) }}" class="btn btn-sm btn-outline-primary">View</a>
-                                            <a href="{{ url_for('download_report', report_file=report_file) }}" class="btn btn-sm btn-outline-secondary">Download</a>
+                                        <div class="d-flex align-items-center">
+                                            <a href="{{ url_for('view_results', report_file=report_file) }}" class="btn btn-sm btn-outline-primary me-1">View</a>
+                                            <a href="{{ url_for('download_report', report_file=report_file) }}" class="btn btn-sm btn-outline-secondary me-1">Download</a>
+                                            <a href="{{ url_for('delete_report', report_file=report_file) }}" 
+                                               class="btn btn-sm delete-report-btn" 
+                                               data-report-file="{{ report_file }}"
+                                               title="Delete report file">
+                                                <span aria-hidden="true">&times;</span>
+                                            </a>
                                         </div>
                                     </li>
                                 {% endfor %}
