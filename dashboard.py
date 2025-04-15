@@ -351,22 +351,23 @@ def download_report(report_file):
 def generate_motivation_letter_route():
     """Generate a motivation letter for a job"""
     try:
-        # Get the CV path and job URL from the form
-        cv_path = request.form.get('cv_path')
+        # Get the CV filename and job URL from the form
+        cv_filename = request.form.get('cv_filename')
         job_url = request.form.get('job_url')
         report_file = request.form.get('report_file')
         
-        logger.info(f"Generating motivation letter for CV: {cv_path} and job URL: {job_url}")
+        logger.info(f"Generating motivation letter for CV: {cv_filename} and job URL: {job_url}")
         
-        if not cv_path or not job_url:
-            logger.error(f"Missing CV path or job URL: cv_path={cv_path}, job_url={job_url}")
-            flash('Missing CV path or job URL')
+        if not cv_filename or not job_url:
+            logger.error(f"Missing CV filename or job URL: cv_filename={cv_filename}, job_url={job_url}")
+            flash('Missing CV filename or job URL')
             return redirect(url_for('index'))
         
-        # Check if the CV file exists
-        if not os.path.exists(cv_path):
-            logger.error(f"CV file not found: {cv_path}")
-            flash(f'CV file not found: {cv_path}')
+        # Check if the CV summary file exists
+        summary_path = os.path.join('process_cv/cv-data/processed', f"{cv_filename}_summary.txt")
+        if not os.path.exists(summary_path):
+            logger.error(f"CV summary file not found: {summary_path}")
+            flash(f'CV summary file not found: {summary_path}')
             return redirect(url_for('view_results', report_file=report_file))
         
         # Start tracking the operation
@@ -379,8 +380,8 @@ def generate_motivation_letter_route():
                 update_operation_progress(operation_id, 10, 'processing', 'Extracting job details...')
                 
                 # Generate the motivation letter
-                logger.info(f"Calling generate_motivation_letter with cv_path={cv_path}, job_url={job_url}")
-                result = generate_motivation_letter(cv_path, job_url)
+                logger.info(f"Calling generate_motivation_letter with cv_filename={cv_filename}, job_url={job_url}")
+                result = generate_motivation_letter(cv_filename, job_url)
                 
                 if not result:
                     logger.error("Failed to generate motivation letter, result is None")

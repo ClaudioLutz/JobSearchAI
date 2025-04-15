@@ -18,12 +18,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger("motivation_letter_generator")
 
-def load_cv_summary(cv_path):
+def load_cv_summary(cv_filename):
     """Load the CV summary from the processed CV file"""
     try:
-        # Get the summary file path
-        base_filename = os.path.basename(cv_path)
-        summary_filename = os.path.splitext(base_filename)[0] + '_summary.txt'
+        # Construct the summary file path directly from the CV filename
+        summary_filename = f"{cv_filename}_summary.txt"
         summary_path = os.path.join('process_cv/cv-data/processed', summary_filename)
         
         # Check if the summary file exists
@@ -559,12 +558,12 @@ def generate_motivation_letter(cv_summary, job_details):
         logger.error(f"Error generating motivation letter: {str(e)}")
         return None
 
-def main(cv_path, job_url):
+def main(cv_filename, job_url):
     """Main function to generate a motivation letter"""
-    logger.info(f"Starting motivation letter generation for CV: {cv_path} and job URL: {job_url}")
+    logger.info(f"Starting motivation letter generation for CV: {cv_filename} and job URL: {job_url}")
     
     # Load the CV summary
-    cv_summary = load_cv_summary(cv_path)
+    cv_summary = load_cv_summary(cv_filename)
     if not cv_summary:
         logger.error("Failed to load CV summary")
         return None
@@ -594,9 +593,9 @@ def main(cv_path, job_url):
 
 if __name__ == "__main__":
     # Example usage
-    cv_path = "process_cv/cv-data/Lebenslauf_Claudio Lutz.pdf"
+    cv_filename = "Lebenslauf"
     job_url = "https://www.ostjob.ch/jobs/detail/12345"
-    result = main(cv_path, job_url)
+    result = main(cv_filename, job_url)
     
     if result:
         if 'json_file_path' in result:
