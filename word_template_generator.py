@@ -126,20 +126,14 @@ def json_to_docx(motivation_letter_json, output_path=None):
             motivation_letters_dir = Path('motivation_letters')
             motivation_letters_dir.mkdir(exist_ok=True)
             
-            # Generate a filename based on the job title and company name
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
+            # Generate a filename based on the job title
             # Extract job title from subject line
             job_title = subject.replace('Bewerbung als ', '').replace('Bewerbung für ', '')
             job_title = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in job_title)
             job_title = job_title.replace(' ', '_')[:30]
             
-            # Sanitize company name
-            company_name_safe = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in company_name)
-            company_name_safe = company_name_safe.replace(' ', '_')[:30]
-            
-            # Create the filename
-            filename = f"motivation_letter_{job_title}_{company_name_safe}_{timestamp}.docx"
+            # Create the filename - use job title as the primary identifier
+            filename = f"motivation_letter_{job_title}.docx"
             output_path = str(motivation_letters_dir / filename)
         
         # Save the document

@@ -174,7 +174,7 @@ def evaluate_job_match(cv_summary, job_listing):
 
     try:
         response = client.chat.completions.create(
-            model='gpt-4o',
+            model='gpt-4.1',
             messages=[
                 {"role": "system", "content": "You are an AI assistant that evaluates job matches for candidates based on their CV and job listings."},
                 {"role": "user", "content": prompt}

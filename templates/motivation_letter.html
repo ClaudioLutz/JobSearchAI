@@ -37,6 +37,10 @@
                 <a href="{{ url_for('download_motivation_letter', file_path=file_path) }}" class="btn btn-success me-2">HTML herunterladen</a>
                 {% if has_docx %}
                 <a href="{{ url_for('download_motivation_letter_docx', file_path=docx_file_path) }}" class="btn btn-success">Word herunterladen</a>
+                {% elif file_path and file_path.endswith('.json') %}
+                <a href="{{ url_for('download_docx_from_json', json_file_path=file_path) }}" class="btn btn-success">Word herunterladen</a>
+                {% elif file_path and file_path.endswith('.html') %}
+                <a href="{{ url_for('download_docx_from_json', json_file_path=file_path|replace('.html', '.json')) }}" class="btn btn-success">Word herunterladen</a>
                 {% endif %}
             </div>
         </div>

@@ -20,6 +20,56 @@ from job_matcher import match_jobs_with_cv, generate_report, load_latest_job_dat
 from motivation_letter_generator import main as generate_motivation_letter
 from word_template_generator import json_to_docx, create_word_document_from_json_file
 
+# Helper function to get job details for a URL
+def get_job_details_for_url(job_url):
+    """Get job details for a URL from the latest job data file"""
+    job_details = {}
+    try:
+        # Extract the job ID from the URL
+        job_id = job_url.split('/')[-1]
+        logger.info(f"Extracted job ID: {job_id}")
+        
+        # Find the job data file
+        job_data_dir = Path('job-data-acquisition/job-data-acquisition/data')
+        logger.info(f"Job data directory: {job_data_dir}")
+        
+        if job_data_dir.exists():
+            # Get the latest job data file
+            job_data_files = list(job_data_dir.glob('job_data_*.json'))
+            logger.info(f"Found {len(job_data_files)} job data files")
+            
+            if job_data_files:
+                latest_job_data_file = max(job_data_files, key=os.path.getctime)
+                logger.info(f"Latest job data file: {latest_job_data_file}")
+                
+                # Load the job data
+                with open(latest_job_data_file, 'r', encoding='utf-8') as f:
+                    job_data = json.load(f)
+                
+                logger.info(f"Loaded job data with {len(job_data[0]['content'])} jobs")
+                
+                # Find the job with the matching ID
+                for i, job in enumerate(job_data[0]['content']):
+                    # Extract the job ID from the Application URL
+                    job_application_url = job.get('Application URL', '')
+                    logger.info(f"Job {i+1} Application URL: {job_application_url}")
+                    
+                    if job_id in job_application_url:
+                        logger.info(f"Found matching job: {job.get('Job Title', 'N/A')} at {job.get('Company Name', 'N/A')}")
+                        job_details = job
+                        break
+                
+                # If no exact match found, use the first job as a fallback
+                if not job_details and job_data[0]['content']:
+                    logger.info("No exact match found, using first job as fallback")
+                    job_details = job_data[0]['content'][0]
+    except Exception as e:
+        logger.error(f'Error getting job details: {str(e)}')
+        import traceback
+        logger.error(traceback.format_exc())
+    
+    return job_details
+
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
@@ -328,6 +378,23 @@ def view_results(report_file):
                     # Extract path from 127.0.0.1:5000/path
                     path = url.split('/', 1)[1]
                     match['application_url'] = f"https://www.ostjob.ch/{path}"
+            
+            # Check if a motivation letter already exists for this job
+            if 'job_title' in match:
+                job_title = match['job_title']
+                # Sanitize job title to match the filename format
+                sanitized_job_title = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in job_title)
+                sanitized_job_title = sanitized_job_title.replace(' ', '_')[:30]
+                
+                # Check for existing HTML and JSON files
+                html_path = os.path.join('motivation_letters', f"motivation_letter_{sanitized_job_title}.html")
+                json_path = os.path.join('motivation_letters', f"motivation_letter_{sanitized_job_title}.json")
+                docx_path = os.path.join('motivation_letters', f"motivation_letter_{sanitized_job_title}.docx")
+                
+                # Add flags to the match data
+                match['has_motivation_letter'] = os.path.exists(html_path) and os.path.exists(json_path)
+                match['motivation_letter_html_path'] = html_path if match['has_motivation_letter'] else None
+                match['motivation_letter_docx_path'] = docx_path if os.path.exists(docx_path) else None
         
         return render_template('results.html', matches=matches, report_file=report_file)
     except Exception as e:
@@ -369,6 +436,47 @@ def generate_motivation_letter_route():
             logger.error(f"CV summary file not found: {summary_path}")
             flash(f'CV summary file not found: {summary_path}')
             return redirect(url_for('view_results', report_file=report_file))
+        
+        # Get job details to check if a motivation letter already exists
+        job_details = get_job_details_for_url(job_url)
+        if job_details and 'Job Title' in job_details:
+            job_title = job_details['Job Title']
+            
+            # Sanitize job title to match the filename format
+            sanitized_job_title = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in job_title)
+            sanitized_job_title = sanitized_job_title.replace(' ', '_')[:30]
+            
+            # Check for existing HTML and DOCX files
+            html_path = os.path.join('motivation_letters', f"motivation_letter_{sanitized_job_title}.html")
+            json_path = os.path.join('motivation_letters', f"motivation_letter_{sanitized_job_title}.json")
+            docx_path = os.path.join('motivation_letters', f"motivation_letter_{sanitized_job_title}.docx")
+            
+            if os.path.exists(html_path) and os.path.exists(json_path):
+                logger.info(f"Motivation letter already exists for job title: {job_title}")
+                
+                # Create an operation ID for the existing letter
+                operation_id = start_operation('motivation_letter_retrieval')
+                
+                # Complete the operation immediately
+                complete_operation(operation_id, 'completed', 'Existing motivation letter retrieved')
+                
+                # Read the HTML content
+                with open(html_path, 'r', encoding='utf-8') as f:
+                    html_content = f.read()
+                
+                # Store the result in the operation status
+                operation_status[operation_id]['result'] = {
+                    'has_json': True,
+                    'motivation_letter_content': html_content,
+                    'html_file_path': html_path,
+                    'docx_file_path': docx_path if os.path.exists(docx_path) else None,
+                    'job_details': job_details,
+                    'report_file': report_file
+                }
+                
+                # Redirect to view the existing letter
+                flash(f'Existing motivation letter found for job title: {job_title}')
+                return redirect(url_for('view_motivation_letter', operation_id=operation_id))
         
         # Start tracking the operation
         operation_id = start_operation('motivation_letter_generation')
@@ -523,6 +631,100 @@ def download_motivation_letter_docx():
     except Exception as e:
         flash(f'Error downloading Word document: {str(e)}')
         logger.error(f'Error downloading Word document: {str(e)}')
+        return redirect(url_for('index'))
+
+@app.route('/download_docx_from_json')
+def download_docx_from_json():
+    """Download a Word document version of a motivation letter from its JSON file"""
+    json_file_path = request.args.get('json_file_path')
+    
+    if not json_file_path:
+        flash('No JSON file path provided')
+        return redirect(url_for('index'))
+    
+    try:
+        # Check if a corresponding .docx file already exists
+        docx_file_path = json_file_path.replace('.json', '.docx')
+        
+        if not os.path.exists(docx_file_path):
+            # If the .docx file doesn't exist, generate it from the JSON
+            logger.info(f"Generating Word document from JSON file: {json_file_path}")
+            docx_file_path = create_word_document_from_json_file(json_file_path)
+            
+            if not docx_file_path:
+                flash('Failed to generate Word document')
+                return redirect(url_for('index'))
+        
+        # Return the .docx file for download
+        return send_file(docx_file_path, as_attachment=True)
+    except Exception as e:
+        flash(f'Error downloading Word document: {str(e)}')
+        logger.error(f'Error downloading Word document: {str(e)}')
+        import traceback
+        logger.error(traceback.format_exc())
+        return redirect(url_for('index'))
+
+@app.route('/view_motivation_letter/<operation_id>')
+def view_motivation_letter(operation_id):
+    """View a generated motivation letter"""
+    try:
+        # Special case for existing motivation letters
+        if operation_id == 'existing':
+            # Get parameters from the request
+            file_path = request.args.get('file_path')
+            report_file = request.args.get('report_file')
+            
+            if not file_path or not os.path.exists(file_path):
+                flash('Motivation letter file not found')
+                return redirect(url_for('index'))
+            
+            # Read the HTML content
+            with open(file_path, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            
+            # Check for corresponding docx file
+            docx_path = file_path.replace('.html', '.docx')
+            has_docx = os.path.exists(docx_path)
+            
+            # Get job details from the filename
+            job_title = os.path.basename(file_path).replace('motivation_letter_', '').replace('.html', '')
+            
+            # Create a simple job details dictionary
+            job_details = {
+                'Job Title': job_title.replace('_', ' '),
+                'Application URL': '#'
+            }
+            
+            # Render the motivation letter template
+            return render_template('motivation_letter.html',
+                                  motivation_letter=html_content,
+                                  file_path=file_path,
+                                  has_docx=has_docx,
+                                  docx_file_path=docx_path if has_docx else None,
+                                  job_details=job_details,
+                                  report_file=report_file)
+        
+        # Regular case for newly generated motivation letters
+        if operation_id not in operation_status or 'result' not in operation_status[operation_id]:
+            flash('Motivation letter not found')
+            return redirect(url_for('index'))
+        
+        # Get the result from the operation status
+        result = operation_status[operation_id]['result']
+        
+        # Render the motivation letter template with the result data
+        return render_template('motivation_letter.html',
+                              motivation_letter=result['motivation_letter_content'],
+                              file_path=result['html_file_path'],
+                              has_docx='docx_file_path' in result and result['docx_file_path'] is not None,
+                              docx_file_path=result.get('docx_file_path'),
+                              job_details=result['job_details'],
+                              report_file=result['report_file'])
+    except Exception as e:
+        flash(f'Error viewing motivation letter: {str(e)}')
+        logger.error(f'Error viewing motivation letter: {str(e)}')
+        import traceback
+        logger.error(traceback.format_exc())
         return redirect(url_for('index'))
 
 @app.route('/delete_job_data/<job_data_file>')

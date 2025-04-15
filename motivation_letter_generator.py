@@ -453,7 +453,7 @@ def generate_motivation_letter(cv_summary, job_details):
         
         # Generate the motivation letter using GPT-4o
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4.1",
             messages=[
                 {"role": "system", "content": "Du bist ein professioneller Bewerbungsberater, der Motivationsschreiben für Stellenbewerbungen erstellt. Gib deine Antwort als valides JSON-Objekt zurück."},
                 {"role": "user", "content": prompt}
@@ -475,8 +475,6 @@ def generate_motivation_letter(cv_summary, job_details):
             html_content = json_to_html(motivation_letter_json)
             
             # Save the motivation letter (both JSON and HTML)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
             # Sanitize job title and company name to avoid path issues
             job_title = job_details.get('Job Title', 'job')
             company_name = job_details.get('Company Name', 'company')
@@ -493,16 +491,16 @@ def generate_motivation_letter(cv_summary, job_details):
             motivation_letters_dir = Path('motivation_letters')
             motivation_letters_dir.mkdir(exist_ok=True)
             
-            # Save the HTML version
-            html_filename = f"motivation_letter_{job_title}_{company_name}_{timestamp}.html"
+            # Save the HTML version - use job title as the primary identifier
+            html_filename = f"motivation_letter_{job_title}.html"
             html_file_path = motivation_letters_dir / html_filename
             
             logger.info(f"Saving HTML motivation letter to file: {html_file_path}")
             with open(html_file_path, 'w', encoding='utf-8') as f:
                 f.write(html_content)
             
-            # Save the JSON version
-            json_filename = f"motivation_letter_{job_title}_{company_name}_{timestamp}.json"
+            # Save the JSON version - use job title as the primary identifier
+            json_filename = f"motivation_letter_{job_title}.json"
             json_file_path = motivation_letters_dir / json_filename
             
             logger.info(f"Saving JSON motivation letter to file: {json_file_path}")
@@ -523,9 +521,6 @@ def generate_motivation_letter(cv_summary, job_details):
             # Fallback: treat the response as HTML directly
             logger.warning("Falling back to treating response as HTML")
             
-            # Save the motivation letter as HTML
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
             # Sanitize job title and company name to avoid path issues
             job_title = job_details.get('Job Title', 'job')
             company_name = job_details.get('Company Name', 'company')
@@ -542,8 +537,8 @@ def generate_motivation_letter(cv_summary, job_details):
             motivation_letters_dir = Path('motivation_letters')
             motivation_letters_dir.mkdir(exist_ok=True)
             
-            # Save the motivation letter to a file
-            filename = f"motivation_letter_{job_title}_{company_name}_{timestamp}.html"
+            # Save the motivation letter to a file - use job title as the primary identifier
+            filename = f"motivation_letter_{job_title}.html"
             motivation_letter_file = motivation_letters_dir / filename
             
             logger.info(f"Saving motivation letter to file: {motivation_letter_file}")

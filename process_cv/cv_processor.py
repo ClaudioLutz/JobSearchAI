@@ -45,7 +45,7 @@ def summarize_cv(cv_text):
     """
 
     response = client.chat.completions.create(
-        model='gpt-4o',
+        model='gpt-4.1',
         messages=[
             {"role": "system", "content": "Sie sind ein Assistent, der strukturierte Informationen aus Lebenslauftexten extrahiert."},
             {"role": "user", "content": prompt}

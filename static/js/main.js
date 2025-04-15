@@ -182,44 +182,49 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (operationId) {
                         // Start checking the operation status
                         checkOperationStatus(operationId, (status) => {
-                            // When the operation is complete, add a "View Results" button instead of auto-redirecting
-                            if (status.status === 'completed') {
-                                const statusMessage = document.getElementById('operationStatusMessage');
-                                const modalFooter = document.querySelector('#progressModal .modal-footer');
-                                
-                                // Update status message
-                                if (statusMessage) {
-                                    statusMessage.innerHTML = `${status.message}<br><br><strong>Operation completed successfully.</strong>`;
-                                }
-                                
-                                // Add a "View Results" button to the modal footer
-                                if (modalFooter) {
-                                    // Remove any existing view results button
-                                    const existingButton = modalFooter.querySelector('.btn-primary');
-                                    if (existingButton) {
-                                        existingButton.remove();
+                                // When the operation is complete, add a "View Results" button instead of auto-redirecting
+                                if (status.status === 'completed') {
+                                    const statusMessage = document.getElementById('operationStatusMessage');
+                                    const modalFooter = document.querySelector('#progressModal .modal-footer');
+                                    
+                                    // Update status message
+                                    if (statusMessage) {
+                                        statusMessage.innerHTML = `${status.message}<br><br><strong>Operation completed successfully.</strong>`;
                                     }
                                     
-                                    // Create and add the new button
-                                    const viewResultsButton = document.createElement('button');
-                                    viewResultsButton.type = 'button';
-                                    viewResultsButton.className = 'btn btn-primary';
-                                    
-                                    if (status.report_file) {
-                                        viewResultsButton.textContent = 'View Results';
-                                        viewResultsButton.addEventListener('click', () => {
-                                            window.location.href = `/view_results/${status.report_file}`;
-                                        });
-                                    } else {
-                                        viewResultsButton.textContent = 'Reload Page';
-                                        viewResultsButton.addEventListener('click', () => {
-                                            window.location.reload();
-                                        });
+                                    // Add a "View Results" button to the modal footer
+                                    if (modalFooter) {
+                                        // Remove any existing view results button
+                                        const existingButton = modalFooter.querySelector('.btn-primary');
+                                        if (existingButton) {
+                                            existingButton.remove();
+                                        }
+                                        
+                                        // Create and add the new button
+                                        const viewResultsButton = document.createElement('button');
+                                        viewResultsButton.type = 'button';
+                                        viewResultsButton.className = 'btn btn-primary';
+                                        
+                                        if (status.type === 'motivation_letter_generation') {
+                                            viewResultsButton.textContent = 'View Motivation Letter';
+                                            viewResultsButton.addEventListener('click', () => {
+                                                window.location.href = `/view_motivation_letter/${operationId}`;
+                                            });
+                                        } else if (status.report_file) {
+                                            viewResultsButton.textContent = 'View Results';
+                                            viewResultsButton.addEventListener('click', () => {
+                                                window.location.href = `/view_results/${status.report_file}`;
+                                            });
+                                        } else {
+                                            viewResultsButton.textContent = 'Reload Page';
+                                            viewResultsButton.addEventListener('click', () => {
+                                                window.location.reload();
+                                            });
+                                        }
+                                        
+                                        modalFooter.prepend(viewResultsButton);
                                     }
-                                    
-                                    modalFooter.prepend(viewResultsButton);
                                 }
-                            }
                         });
                     } else {
                         // If no operation ID was found, just reload the page
