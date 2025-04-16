@@ -61,7 +61,15 @@ def load_latest_job_data(max_jobs=50):
             job_data = json.load(f)
 
         # Check if the data has a nested structure with one or more "content" arrays
-        if isinstance(job_data, dict) and "content" in job_data:
+        # First, check if the data is an array of arrays
+        if isinstance(job_data, list) and len(job_data) > 0 and isinstance(job_data[0], list):
+            # Flatten the array of arrays
+            flattened_jobs = []
+            for job_array in job_data:
+                flattened_jobs.extend(job_array)
+            job_listings = flattened_jobs
+            logger.info(f"Found nested array structure with {len(job_listings)} total job listings")
+        elif isinstance(job_data, dict) and "content" in job_data:
             # The content field contains an array of job listings
             job_listings = job_data["content"]
             logger.info(f"Found nested structure with {len(job_listings)} job listings in 'content' array")
