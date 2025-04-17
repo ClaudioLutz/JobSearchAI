@@ -142,6 +142,7 @@ def load_latest_job_data(max_jobs=50):
 def evaluate_job_match(cv_summary, job_listing):
     """
     Use ChatGPT to evaluate how well a job matches the candidate's profile
+    and if the candidate would like the job based on their career trajectory
     """
     # Create the prompt without using f-string for the JSON structure part
     profile_part = f"""
@@ -162,8 +163,11 @@ def evaluate_job_match(cv_summary, job_listing):
     # 2. Erfahrungspassung (1-10): Ist das Erfahrungsniveau des Kandidaten angemessen?
     # 3. Standortkompatibilität (Yes/No): Entspricht der Arbeitsort den Präferenzen des Kandidaten?
     # 4. Ausbildungsübereinstimmung (1-10): Wie gut passt die Ausbildung des Kandidaten zu den Anforderungen?
-    # 5. Gesamtübereinstimmung (1-10): Wie geeignet ist der Kandidat insgesamt, unter Berücksichtigung aller Faktoren?
-    # 6. Begründung: Erklären Sie kurz Ihre Bewertung.
+    # 5. Karriereverlauf-Übereinstimmung (1-10): Wie gut passt die Stelle zur bisherigen Karriereentwicklung des Kandidaten?
+    # 6. Präferenzen-Übereinstimmung (1-10): Wie gut entspricht die Stelle den beruflichen Präferenzen des Kandidaten?
+    # 7. Potenzielle Zufriedenheit (1-10): Wie wahrscheinlich ist es, dass der Kandidat in dieser Position zufrieden wäre?
+    # 8. Gesamtübereinstimmung (1-10): Wie geeignet ist der Kandidat insgesamt, unter Berücksichtigung aller Faktoren?
+    # 9. Begründung: Erklären Sie kurz Ihre Bewertung.
     """
 
     json_part = """
@@ -173,6 +177,9 @@ def evaluate_job_match(cv_summary, job_listing):
         "experience_match": 7,
         "location_compatibility": "Yes",
         "education_fit": 9,
+        "career_trajectory_alignment": 7,
+        "preference_match": 8,
+        "potential_satisfaction": 8,
         "overall_match": 8,
         "reasoning": "Ihre Begründung hier"
     }
@@ -201,6 +208,9 @@ def evaluate_job_match(cv_summary, job_listing):
             "experience_match": 0,
             "location_compatibility": "No",
             "education_fit": 0,
+            "career_trajectory_alignment": 0,
+            "preference_match": 0,
+            "potential_satisfaction": 0,
             "overall_match": 0,
             "reasoning": f"Error evaluating match: {str(e)}"
         }
@@ -314,6 +324,9 @@ def generate_report(matches, output_file=None, output_dir="job_matches"):
         report += f"**Experience Match:** {match['experience_match']}/10\n"
         report += f"**Education Fit:** {match['education_fit']}/10\n"
         report += f"**Location Compatibility:** {match['location_compatibility']}\n"
+        report += f"**Career Trajectory Alignment:** {match.get('career_trajectory_alignment', 'N/A')}/10\n"
+        report += f"**Preference Match:** {match.get('preference_match', 'N/A')}/10\n"
+        report += f"**Potential Satisfaction:** {match.get('potential_satisfaction', 'N/A')}/10\n"
         report += f"**Reasoning:** {match['reasoning']}\n"
         # Extract path and create proper ostjob.ch URL
         application_url = match['application_url']

@@ -48,6 +48,9 @@
                                     <th>Skills Match</th>
                                     <th>Experience Match</th>
                                     <th>Education Fit</th>
+                                    <th>Career Alignment</th>
+                                    <th>Preference Match</th>
+                                    <th>Potential Satisfaction</th>
                                     <th>Location Compatibility</th>
                                     <th>Actions</th>
                                 </tr>
@@ -63,6 +66,9 @@
                                         <td>{{ match.skills_match }}/10</td>
                                         <td>{{ match.experience_match }}/10</td>
                                         <td>{{ match.education_fit }}/10</td>
+                                        <td>{{ match.career_trajectory_alignment|default('N/A') }}/10</td>
+                                        <td>{{ match.preference_match|default('N/A') }}/10</td>
+                                        <td>{{ match.potential_satisfaction|default('N/A') }}/10</td>
                                         <td>{{ match.location_compatibility }}</td>
                                         <td>
                                             <button class="btn btn-sm btn-outline-info view-reasoning-btn" data-bs-toggle="modal" data-bs-target="#reasoningModal" data-reasoning="{{ match.reasoning }}" data-job-title="{{ match.job_title }}">View Reasoning</button>
@@ -111,6 +117,9 @@
                             <p><strong>Skills Match:</strong> {{ match.skills_match }}/10</p>
                             <p><strong>Experience Match:</strong> {{ match.experience_match }}/10</p>
                             <p><strong>Education Fit:</strong> {{ match.education_fit }}/10</p>
+                            <p><strong>Career Trajectory Alignment:</strong> {{ match.career_trajectory_alignment|default('N/A') }}/10</p>
+                            <p><strong>Preference Match:</strong> {{ match.preference_match|default('N/A') }}/10</p>
+                            <p><strong>Potential Satisfaction:</strong> {{ match.potential_satisfaction|default('N/A') }}/10</p>
                             <p><strong>Location Compatibility:</strong> {{ match.location_compatibility }}</p>
                             
                             <div class="mt-3">

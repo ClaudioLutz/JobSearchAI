@@ -496,15 +496,25 @@ The job matching algorithm uses OpenAI's GPT-4o model to perform semantic matchi
 2. **Experience Match**: Whether the candidate's experience level is appropriate
 3. **Location Compatibility**: Whether the job location aligns with candidate preferences
 4. **Education Fit**: How well the candidate's education matches requirements
-5. **Overall Match Score**: A comprehensive score considering all factors
+5. **Career Trajectory Alignment**: How well the job aligns with the candidate's career path and evolution
+6. **Preference Match**: How well the job matches the candidate's stated or inferred preferences
+7. **Potential Satisfaction**: Prediction of how satisfied the candidate would be in this position
+8. **Overall Match Score**: A comprehensive score considering all factors
 
-The system uses a prompt-based approach to instruct the AI model to evaluate these factors on a scale of 1-10 (except for location compatibility, which is Yes/No).
+The system uses a prompt-based approach to instruct the AI model to evaluate these factors on a scale of 1-10 (except for location compatibility, which is Yes/No). The enhanced matching algorithm not only considers if a candidate is qualified for a job but also if they would likely enjoy and thrive in the position based on their career trajectory and preferences.
 
 ### CV Processing
 
 The CV processing uses a two-step approach:
 1. **Text Extraction**: Extracts raw text from PDF or DOCX files
 2. **Summarization**: Uses OpenAI's GPT-4o model to generate a structured summary of the CV
+
+The CV processor has been enhanced to extract additional information about:
+- **Career Trajectory**: How the candidate's career has evolved over time
+- **Job Preferences**: What types of roles, industries, company sizes, or work environments the candidate prefers
+- **Career Goals**: Long-term career objectives that can be inferred from the CV
+- **Satisfaction Indicators**: Positions where the candidate may have been particularly successful or satisfied
+- **Work Values**: Cultural and workplace values that appear important to the candidate
 
 The summarization prompt is in German, indicating that the system is designed to work with German-language CVs.
 

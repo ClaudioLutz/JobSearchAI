@@ -42,6 +42,13 @@ def summarize_cv(cv_text):
      {cv_text}
     
    Die Informationen sollen einem Personalvermittler helfen den richtige offene Stelle für diese Person zu finden.
+   
+   Bitte achten Sie besonders auf folgende Aspekte:
+   1. Karriereverlauf und -entwicklung: Wie hat sich die Karriere der Person entwickelt? Welche Richtung hat die Karriere genommen?
+   2. Berufliche Präferenzen: Welche Art von Tätigkeiten, Branchen, Unternehmensgrößen oder Arbeitsumgebungen bevorzugt die Person basierend auf ihrem Lebenslauf?
+   3. Karriereziele: Welche langfristigen Karriereziele lassen sich aus dem Lebenslauf ableiten?
+   4. Zufriedenheitsindikatoren: Gibt es Hinweise darauf, in welchen früheren Positionen die Person besonders erfolgreich oder zufrieden war?
+   5. Arbeitswerte und kulturelle Präferenzen: Welche Werte und kulturellen Aspekte scheinen für die Person wichtig zu sein?
     """
 
     response = client.chat.completions.create(

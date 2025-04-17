@@ -15,7 +15,15 @@ The system consists of four main components:
 
 ### Data Preparation Phase
 
-1. **CV Processing**: The system extracts structured information from the candidate's CV, including skills, experience, education, and preferences.
+1. **CV Processing**: The system extracts structured information from the candidate's CV, including:
+   - Skills and technical competencies
+   - Work experience and history
+   - Education and qualifications
+   - Location preferences
+   - Career trajectory and evolution
+   - Job preferences (industry, company size, work environment)
+   - Career goals and aspirations
+   - Work values and cultural preferences
 2. **Job Data Collection**: The system gathers current job listings from ostjob.ch.
 
 ### Matching Engine
@@ -28,6 +36,9 @@ The matching engine uses a semantic approach rather than simple keyword matching
    - Whether the candidate's experience level is appropriate
    - If the location preferences align
    - How well the candidate's education matches the requirements
+   - How well the job aligns with the candidate's career trajectory
+   - How well the job matches the candidate's preferences
+   - How likely the candidate would be satisfied in this position
    - Overall suitability score on a scale of 1-10
 
 ### Results Processing
@@ -113,13 +124,21 @@ The system generates two output files:
    - Skills match score
    - Experience match score
    - Education fit score
+   - Career trajectory alignment score
+   - Preference match score
+   - Potential satisfaction score
    - Location compatibility
    - Reasoning for the match
    - Application URL
 
 ## Future Improvements
 
-- Web interface for uploading CVs and viewing matches
-- Support for multiple CV formats
+- Support for multiple CV formats beyond PDF and DOCX
 - More detailed skill matching using domain-specific knowledge
-- Integration with job application systems
+- Integration with job application systems for direct applications
+- Enhanced preference analysis using historical job satisfaction data
+- Personalized career path recommendations based on career trajectory
+- Feedback mechanism to improve preference and satisfaction predictions
+- Visualization of career trajectory and potential future paths
+- Customizable weighting of different matching factors (skills vs. satisfaction)
+- Integration with company culture databases for better cultural fit assessment
