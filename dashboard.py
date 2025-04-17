@@ -16,7 +16,6 @@ sys.path.append('.')
 
 # Import from existing modules
 from process_cv.cv_processor import extract_cv_text, summarize_cv
-from process_cv.cv_to_html_converter import convert_pdf_to_html
 from job_matcher import match_jobs_with_cv, generate_report, load_latest_job_data
 from motivation_letter_generator import main as generate_motivation_letter
 from word_template_generator import json_to_docx, create_word_document_from_json_file
@@ -993,118 +992,6 @@ def view_cv_summary(cv_file):
         return jsonify({'summary': summary})
     except Exception as e:
         return jsonify({'error': str(e)})
-
-@app.route('/convert_cv_to_html', methods=['POST'])
-def convert_cv_to_html():
-    """Convert a CV PDF to HTML format"""
-    if 'cv_file' not in request.files:
-        flash('No file part')
-        return redirect(url_for('index'))
-    
-    file = request.files['cv_file']
-    
-    if file.filename == '':
-        flash('No selected file')
-        return redirect(url_for('index'))
-    
-    if file and file.filename.lower().endswith('.pdf'):
-        filename = secure_filename(file.filename)
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(file_path)
-        flash(f'CV uploaded successfully: {filename}')
-        
-        # Start tracking the operation
-        operation_id = start_operation('cv_to_html_conversion')
-        
-        # Define a function to run the CV to HTML converter in a background thread
-        def convert_cv_to_html_task():
-            try:
-                # Update status
-                update_operation_progress(operation_id, 10, 'processing', 'Extracting PDF structure...')
-                
-                # Create output directory for HTML files
-                html_dir = os.path.join('process_cv/cv-data/html')
-                os.makedirs(html_dir, exist_ok=True)
-                
-                # Update status
-                update_operation_progress(operation_id, 30, 'processing', 'Converting CV to HTML...')
-                
-                # Convert the CV to HTML
-                result = convert_pdf_to_html(file_path, html_dir)
-                
-                if not result['success']:
-                    complete_operation(operation_id, 'failed', f'Error converting CV to HTML: {result["error"]}')
-                    return
-                
-                # Update status
-                update_operation_progress(operation_id, 90, 'processing', 'Finalizing HTML conversion...')
-                
-                # Store the result in the operation status
-                operation_status[operation_id]['result'] = {
-                    'html_path': result['html_path'],
-                    'cv_html_content': result['html_content']
-                }
-                
-                # Complete the operation
-                complete_operation(operation_id, 'completed', f'CV successfully converted to HTML: {result["html_path"]}')
-            except Exception as e:
-                logger.error(f'Error in CV to HTML conversion task: {str(e)}')
-                import traceback
-                logger.error(traceback.format_exc())
-                complete_operation(operation_id, 'failed', f'Error converting CV to HTML: {str(e)}')
-        
-        # Start the background thread
-        thread = threading.Thread(target=convert_cv_to_html_task)
-        thread.daemon = True
-        thread.start()
-        
-        # Return immediately with the operation ID
-        flash(f'CV to HTML conversion started. Please wait while the CV is being processed. (operation_id={operation_id})')
-        
-        # Return the operation ID in the response
-        return redirect(url_for('index', operation_id=operation_id))
-    else:
-        flash('Invalid file type. Only PDF files are allowed for HTML conversion.')
-    
-    return redirect(url_for('index'))
-
-@app.route('/view_cv_html/<operation_id>')
-def view_cv_html(operation_id):
-    """View a converted CV HTML"""
-    try:
-        if operation_id not in operation_status or 'result' not in operation_status[operation_id]:
-            flash('CV HTML not found')
-            return redirect(url_for('index'))
-        
-        # Get the result from the operation status
-        result = operation_status[operation_id]['result']
-        
-        # Render the CV HTML view template
-        return render_template('cv_html_view.html',
-                              cv_html_content=result['cv_html_content'],
-                              html_path=result['html_path'])
-    except Exception as e:
-        flash(f'Error viewing CV HTML: {str(e)}')
-        logger.error(f'Error viewing CV HTML: {str(e)}')
-        import traceback
-        logger.error(traceback.format_exc())
-        return redirect(url_for('index'))
-
-@app.route('/download_cv_html')
-def download_cv_html():
-    """Download a converted CV HTML file"""
-    file_path = request.args.get('file_path')
-    
-    if not file_path:
-        flash('No file path provided')
-        return redirect(url_for('index'))
-    
-    try:
-        return send_file(file_path, as_attachment=True)
-    except Exception as e:
-        flash(f'Error downloading CV HTML: {str(e)}')
-        logger.error(f'Error downloading CV HTML: {str(e)}')
-        return redirect(url_for('index'))
 
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5000)

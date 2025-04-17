@@ -118,23 +118,6 @@
                     </div>
                 </div>
                 
-                <!-- CV to HTML Converter -->
-                <div class="card mb-4">
-                    <div class="card-header bg-info text-white">
-                        <h2 class="h5 mb-0">Convert CV to HTML</h2>
-                    </div>
-                    <div class="card-body">
-                        <p>Convert a CV PDF to HTML format that preserves the original layout and styling.</p>
-                        <form action="{{ url_for('convert_cv_to_html') }}" method="post" enctype="multipart/form-data">
-                            <div class="mb-3">
-                                <label for="cv_file_html" class="form-label">Select CV File (PDF only)</label>
-                                <input type="file" class="form-control" id="cv_file_html" name="cv_file" accept=".pdf" required>
-                            </div>
-                            <button type="submit" class="btn btn-info text-white">Convert to HTML</button>
-                        </form>
-                    </div>
-                </div>
-                
                 <!-- Job Data Acquisition -->
                 <div class="card mb-4">
                     <div class="card-header">

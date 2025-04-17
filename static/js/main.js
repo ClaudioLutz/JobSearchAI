@@ -138,55 +138,6 @@ function checkOperationStatus(operationId, onComplete) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Check if there's an operation ID in the URL (for CV to HTML conversion)
-    const urlParams = new URLSearchParams(window.location.search);
-    const operationId = urlParams.get('operation_id');
-    
-    if (operationId) {
-        console.log("Found operation ID in URL:", operationId);
-        // Start checking the operation status
-        checkOperationStatus(operationId, (status) => {
-            // When the operation is complete, add a "View Results" button
-            if (status.status === 'completed') {
-                const statusMessage = document.getElementById('operationStatusMessage');
-                const modalFooter = document.querySelector('#progressModal .modal-footer');
-                
-                // Update status message
-                if (statusMessage) {
-                    statusMessage.innerHTML = `${status.message}<br><br><strong>Operation completed successfully.</strong>`;
-                }
-                
-                // Add a "View Results" button to the modal footer
-                if (modalFooter) {
-                    // Remove any existing view results button
-                    const existingButton = modalFooter.querySelector('.btn-primary');
-                    if (existingButton) {
-                        existingButton.remove();
-                    }
-                    
-                    // Create and add the new button
-                    const viewResultsButton = document.createElement('button');
-                    viewResultsButton.type = 'button';
-                    viewResultsButton.className = 'btn btn-primary';
-                    
-                    if (status.type === 'cv_to_html_conversion') {
-                        viewResultsButton.textContent = 'View HTML CV';
-                        viewResultsButton.addEventListener('click', () => {
-                            window.location.href = `/view_cv_html/${operationId}`;
-                        });
-                    } else {
-                        viewResultsButton.textContent = 'Reload Page';
-                        viewResultsButton.addEventListener('click', () => {
-                            window.location.reload();
-                        });
-                    }
-                    
-                    modalFooter.prepend(viewResultsButton);
-                }
-            }
-        });
-    }
-    
     // Apply loading state to all form submissions
     const forms = document.querySelectorAll('form');
     forms.forEach(form => {
@@ -198,22 +149,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const isJobScraper = form.action.includes('/run_job_scraper');
             const isCombinedProcess = form.action.includes('/run_combined_process');
             const isMotivationLetter = form.action.includes('/generate_motivation_letter');
-            const isCvToHtml = form.action.includes('/convert_cv_to_html');
             
-            if (isJobMatcher || isJobScraper || isCombinedProcess || isMotivationLetter || isCvToHtml) {
+            if (isJobMatcher || isJobScraper || isCombinedProcess || isMotivationLetter) {
                 // For long operations, we'll handle the form submission manually
                 event.preventDefault();
                 
                 if (submitButton) {
                     setButtonLoading(submitButton, true);
                 }
-                
-                console.log("Handling long-running operation:", 
-                    isJobMatcher ? "Job Matcher" : 
-                    isJobScraper ? "Job Scraper" : 
-                    isCombinedProcess ? "Combined Process" : 
-                    isMotivationLetter ? "Motivation Letter" : 
-                    isCvToHtml ? "CV to HTML" : "Unknown");
                 
                 // Submit the form using fetch
                 fetch(form.action, {
@@ -266,11 +209,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                             viewResultsButton.textContent = 'View Motivation Letter';
                                             viewResultsButton.addEventListener('click', () => {
                                                 window.location.href = `/view_motivation_letter/${operationId}`;
-                                            });
-                                        } else if (status.type === 'cv_to_html_conversion') {
-                                            viewResultsButton.textContent = 'View HTML CV';
-                                            viewResultsButton.addEventListener('click', () => {
-                                                window.location.href = `/view_cv_html/${operationId}`;
                                             });
                                         } else if (status.report_file) {
                                             viewResultsButton.textContent = 'View Results';
