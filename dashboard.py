@@ -46,10 +46,30 @@ def get_job_details_for_url(job_url):
                 with open(latest_job_data_file, 'r', encoding='utf-8') as f:
                     job_data = json.load(f)
                 
-                logger.info(f"Loaded job data with {len(job_data[0]['content'])} jobs")
+                # Process the job data based on its structure
+                job_listings = []
+                
+                # Check if the data has a nested structure
+                if isinstance(job_data, list):
+                    if len(job_data) > 0:
+                        if isinstance(job_data[0], list):
+                            # It's an array of arrays - flatten it
+                            for job_array in job_data:
+                                job_listings.extend(job_array)
+                            logger.info(f"Found array of arrays structure with {len(job_listings)} total job listings")
+                        elif isinstance(job_data[0], dict) and 'content' in job_data[0]:
+                            # It's the old structure with a 'content' property
+                            job_listings = job_data[0]['content']
+                            logger.info(f"Found old structure with {len(job_listings)} job listings in 'content' array")
+                        else:
+                            # Assume it's a flat array of job listings
+                            job_listings = job_data
+                            logger.info(f"Using flat job data structure with {len(job_listings)} job listings")
+                
+                logger.info(f"Processed job data with {len(job_listings)} total job listings")
                 
                 # Find the job with the matching ID
-                for i, job in enumerate(job_data[0]['content']):
+                for i, job in enumerate(job_listings):
                     # Extract the job ID from the Application URL
                     job_application_url = job.get('Application URL', '')
                     logger.info(f"Job {i+1} Application URL: {job_application_url}")
@@ -60,9 +80,9 @@ def get_job_details_for_url(job_url):
                         break
                 
                 # If no exact match found, use the first job as a fallback
-                if not job_details and job_data[0]['content']:
+                if not job_details and job_listings:
                     logger.info("No exact match found, using first job as fallback")
-                    job_details = job_data[0]['content'][0]
+                    job_details = job_listings[0]
     except Exception as e:
         logger.error(f'Error getting job details: {str(e)}')
         import traceback
@@ -546,10 +566,30 @@ def generate_motivation_letter_route():
                             with open(latest_job_data_file, 'r', encoding='utf-8') as f:
                                 job_data = json.load(f)
                             
-                            logger.info(f"Loaded job data with {len(job_data[0]['content'])} jobs")
+                            # Process the job data based on its structure
+                            job_listings = []
+                            
+                            # Check if the data has a nested structure
+                            if isinstance(job_data, list):
+                                if len(job_data) > 0:
+                                    if isinstance(job_data[0], list):
+                                        # It's an array of arrays - flatten it
+                                        for job_array in job_data:
+                                            job_listings.extend(job_array)
+                                        logger.info(f"Found array of arrays structure with {len(job_listings)} total job listings")
+                                    elif isinstance(job_data[0], dict) and 'content' in job_data[0]:
+                                        # It's the old structure with a 'content' property
+                                        job_listings = job_data[0]['content']
+                                        logger.info(f"Found old structure with {len(job_listings)} job listings in 'content' array")
+                                    else:
+                                        # Assume it's a flat array of job listings
+                                        job_listings = job_data
+                                        logger.info(f"Using flat job data structure with {len(job_listings)} job listings")
+                            
+                            logger.info(f"Processed job data with {len(job_listings)} total job listings")
                             
                             # Find the job with the matching ID
-                            for i, job in enumerate(job_data[0]['content']):
+                            for i, job in enumerate(job_listings):
                                 # Extract the job ID from the Application URL
                                 job_application_url = job.get('Application URL', '')
                                 logger.info(f"Job {i+1} Application URL: {job_application_url}")
@@ -560,9 +600,9 @@ def generate_motivation_letter_route():
                                     break
                             
                             # If no exact match found, use the first job as a fallback
-                            if not job_details and job_data[0]['content']:
+                            if not job_details and job_listings:
                                 logger.info("No exact match found, using first job as fallback")
-                                job_details = job_data[0]['content'][0]
+                                job_details = job_listings[0]
                 except Exception as e:
                     logger.error(f'Error getting job details: {str(e)}')
                     import traceback
