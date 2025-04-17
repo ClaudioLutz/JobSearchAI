@@ -157,6 +157,105 @@ body {
     top: -1px;
 }
 
+/* A4 Page Styling for CV HTML */
+.a4-page {
+    width: 210mm;
+    height: 297mm;
+    margin: 0 auto;
+    background-color: white;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    padding: 20mm;
+    box-sizing: border-box;
+    position: relative;
+}
+
+.cv-section {
+    margin-bottom: 15px;
+}
+
+.cv-header {
+    margin-bottom: 20px;
+}
+
+.cv-name {
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.cv-contact {
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+
+.cv-section-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 5px;
+}
+
+.cv-entry {
+    margin-bottom: 15px;
+}
+
+.cv-entry-title {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.cv-entry-subtitle {
+    font-style: italic;
+    margin-bottom: 5px;
+}
+
+.cv-entry-date {
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 5px;
+}
+
+.cv-entry-description {
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.cv-skills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.cv-skill {
+    background-color: #f8f9fa;
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-size: 14px;
+}
+
+/* Print styles for CV */
+@media print {
+    body {
+        margin: 0;
+        padding: 0;
+        background-color: white;
+    }
+    
+    .a4-page {
+        width: 210mm;
+        height: 297mm;
+        margin: 0;
+        padding: 20mm;
+        box-shadow: none;
+        page-break-after: always;
+    }
+    
+    .no-print {
+        display: none !important;
+    }
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .d-flex.justify-content-between {
@@ -166,5 +265,11 @@ body {
     
     .d-flex.justify-content-between div {
         margin-top: 1rem;
+    }
+    
+    .a4-page {
+        width: 100%;
+        height: auto;
+        padding: 15px;
     }
 }

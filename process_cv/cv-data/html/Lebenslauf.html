@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Claudio Lutz - CV</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Calibri&display=swap');
+  /* Reset and base */
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    font-family: 'Calibri', sans-serif;
+    background: #fff;
+    color: #000;
+    line-height: 1.4;
+    font-size: 12px;
+  }
+  a {
+    color: #447806;
+    text-decoration: none;
+  }
+  a:hover, a:focus {
+    text-decoration: underline;
+  }
+  /* Container for the entire CV */
+  .cv-container {
+    max-width: 800px;
+    margin: 1rem auto 3rem;
+    padding: 1rem 2rem 2rem 2rem;
+    background: #fff;
+    box-shadow: 0 0 8px rgba(0,0,0,0.1);
+    border-radius: 4px;
+  }
+  /* Header with name and profession */
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 3px solid #2b4d3a;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  header h1 {
+    font-weight: 700;
+    font-size: 22px;
+    color: #447806;
+    margin: 0;
+    line-height: 1.1;
+  }
+  header h1 span {
+    color: #224d25;
+  }
+  header p.profession {
+    font-weight: 300;
+    font-size: 14px;
+    color: #447806;
+    margin: 0.3rem 0 0 0;
+    flex-basis: 100%;
+  }
+  /* Contact info block */
+  .contact-info {
+    margin-bottom: 2rem;
+    font-weight: 300;
+    font-size: 12px;
+    color: #000;
+  }
+  .contact-info address {
+    font-style: normal;
+    line-height: 1.3;
+  }
+  .contact-info dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.15rem 0.5rem;
+    max-width: 400px;
+  }
+  .contact-info dt {
+    font-weight: 600;
+  }
+  .contact-info dd {
+    margin: 0;
+    color: #000;
+  }
+  .contact-info a {
+    color: #447806;
+    word-break: break-all;
+  }
+  /* Sections */
+  section {
+    margin-bottom: 2rem;
+    padding: 1rem 1.5rem;
+    border-radius: 4px;
+    background-color: #224d25;
+    color: #fff;
+  }
+  section h2 {
+    font-weight: 300;
+    font-size: 14px;
+    margin: 0 0 0.8rem 0;
+    color: #fff;
+  }
+  section p, section ul {
+    font-weight: 300;
+    font-size: 12px;
+    color: #000;
+    background: #fff;
+    padding: 0.8rem 1rem;
+    border-radius: 4px;
+    margin: 0 0 0.8rem 0;
+    line-height: 1.4;
+  }
+  section ul {
+    padding-left: 1.2rem;
+  }
+  section ul li {
+    margin-bottom: 0.4rem;
+  }
+  /* White text headings with dark background */
+  .section-dark {
+    background-color: #224d25;
+    color: #fff;
+  }
+  .section-dark h2 {
+    color: #fff;
+  }
+  .section-dark p, .section-dark ul {
+    background: #fff;
+    color: #000;
+  }
+  /* Berufliche Tätigkeiten and Aus-und Weiterbildungen special layout */
+  .work-experience article,
+  .education article {
+    margin-bottom: 1.5rem;
+  }
+  .work-experience time,
+  .education time {
+    font-weight: 300;
+    font-size: 11px;
+    color: #000;
+    display: block;
+    margin-bottom: 0.15rem;
+  }
+  .work-experience h3,
+  .education h3 {
+    font-weight: 600;
+    font-size: 12px;
+    margin: 0 0 0.2rem 0;
+    color: #000;
+  }
+  .work-experience p.position,
+  .education p.position {
+    font-style: italic;
+    font-weight: 300;
+    font-size: 11px;
+    margin: 0 0 0.4rem 0;
+    color: #000;
+  }
+  .work-experience ul,
+  .education ul {
+    font-weight: 300;
+    font-size: 11px;
+    margin: 0 0 0.5rem 1.2rem;
+    padding: 0;
+    color: #000;
+  }
+  .work-experience ul li,
+  .education ul li {
+    margin-bottom: 0.3rem;
+  }
+  /* Erfolge sub-section */
+  .achievements {
+    margin-top: 0.4rem;
+    margin-bottom: 1rem;
+  }
+  .achievements strong {
+    font-weight: 600;
+    font-size: 11px;
+    display: block;
+    margin-bottom: 0.3rem;
+    color: #000;
+  }
+  /* Responsive adjustments */
+  @media (max-width: 600px) {
+    .cv-container {
+      padding: 1rem;
+      margin: 0.5rem;
+    }
+    header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    header p.profession {
+      margin-top: 0.2rem;
+    }
+    .contact-info dl {
+      grid-template-columns: 1fr;
+    }
+  }
+  /* Print styles for A4 */
+  @media print {
+    body {
+      margin: 0;
+      font-size: 11pt;
+      color: #000;
+      background: #fff;
+    }
+    .cv-container {
+      box-shadow: none;
+      margin: 0;
+      padding: 0;
+      max-width: 100%;
+    }
+    header {
+      border-bottom: 2pt solid #000;
+      padding-bottom: 0.3rem;
+      margin-bottom: 1rem;
+      page-break-after: avoid;
+    }
+    section {
+      page-break-inside: avoid;
+      padding: 0;
+      margin-bottom: 1.2rem;
+      background: none;
+      color: #000;
+    }
+    section h2 {
+      color: #000;
+      font-weight: 600;
+      font-size: 13pt;
+      margin-bottom: 0.3rem;
+    }
+    section p, section ul {
+      background: none;
+      color: #000;
+      font-size: 11pt;
+      padding: 0;
+      margin: 0 0 0.8rem 0;
+    }
+    .contact-info dl {
+      grid-template-columns: max-content 1fr;
+      gap: 0.2rem 0.5rem;
+    }
+    .work-experience time,
+    .education time {
+      font-size: 10pt;
+    }
+    .work-experience h3,
+    .education h3 {
+      font-size: 11pt;
+    }
+    .work-experience p.position,
+    .education p.position {
+      font-size: 10pt;
+    }
+    .work-experience ul,
+    .education ul {
+      font-size: 10pt;
+      margin-left: 1.2rem;
+    }
+    .achievements strong {
+      font-size: 10pt;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="cv-container" role="main" lang="de">
+  <header>
+    <h1>Claudio <span>Lutz</span></h1>
+    <p class="profession">Kaufmännischer Angestellter</p>
+  </header>
+  <section class="contact-info" aria-label="Kontaktinformationen">
+    <address>
+      Promenadenstrasse 72<br />
+      9400 Rorschach
+    </address>
+    <dl>
+      <dt>Mobile:</dt>
+      <dd>076 435 61 88</dd>
+      <dt>E-Mail:</dt>
+      <dd><a href="mailto:claudio.lutz.cv@gmail.com">claudio.lutz.cv@gmail.com</a></dd>
+      <dt>Webseite:</dt>
+      <dd><a href="https://claudiolutz.github.io" target="_blank" rel="noopener noreferrer">https://claudiolutz.github.io</a></dd>
+      <dt>Zivilstand:</dt>
+      <dd>Verheiratet</dd>
+      <dt>Geburtsdatum:</dt>
+      <dd>21.09.1986</dd>
+      <dt>Nationalität:</dt>
+      <dd>Schweizer</dd>
+      <dt>Bürgerort:</dt>
+      <dd>Basel Stadt</dd>
+    </dl>
+  </section>
+
+  <section class="section-dark" aria-labelledby="motivation-title">
+    <h2 id="motivation-title">Motivation</h2>
+    <p>Mit Erfahrung, fachlicher Kompetenz und grosser Motivation will ich eine neue berufliche Herausforderung in Angriff nehmen und mich weiterentwickeln. Ein grosses technisches Wissen und eine starke Affinität zur Logik ermöglicht es mir, selbst komplizierte Systeme zu analysieren und entsprechende Lösungen zu erkennen.</p>
+  </section>
+
+  <section class="section-dark" aria-labelledby="kurzprofil-title">
+    <h2 id="kurzprofil-title">Kurzprofil</h2>
+    <p>Ich bin neugierig, will anpacken und im Leben etwas bewegen. Dazu suche ich ein kollegiales Umfeld, in dem ich mit einem Team gemeinsam grosse Ziele angehen kann. Ich möchte, in allem, was ich tue, eine hohe Qualität erreichen und dabei nie stehen bleiben. Eine positive Grundeinstellung und Einfühlungsvermögen ermöglichen es mir in jeder Situtaion eine konstant hohe Leistung zuerbringen.</p>
+  </section>
+
+  <section class="section-dark" aria-labelledby="fachkompetenzen-title">
+    <h2 id="fachkompetenzen-title">Fachkompetenzen</h2>
+    <ul>
+      <li>Eidg. Dipl. Kaufmann E-Profil</li>
+      <li>Eidg. Dipl ICT PC und Netzwerktechnik Assistant</li>
+      <li>Diplom ICT Professional PC und Network SIZ</li>
+      <li>Data Scientist Zertifikat</li>
+      <li>Data Analyst Zertifikat</li>
+      <li>Webdesign Diplom</li>
+      <li>Cambridge Advanced C1 in Englisch</li>
+    </ul>
+  </section>
+
+  <section class="section-dark work-experience" aria-labelledby="berufliche-taetigkeiten-title">
+    <h2 id="berufliche-taetigkeiten-title">Berufliche Tätigkeiten</h2>
+
+    <article>
+      <time datetime="2023-08">08.2023 – heute</time>
+      <h3>Creditreform AG</h3>
+      <p class="position">Data-Analyst und Produkt Manager (100%)</p>
+      <ul>
+        <li>Machine Learning basierte Analysen und Prognosen</li>
+        <li>Entwicklung in Python und SQL</li>
+        <li>Erstellung von Power BI Dashboards</li>
+      </ul>
+      <div class="achievements">
+        <strong>Erfolge</strong>
+        <ul>
+          <li>Entwicklung Chatbot für creditreform.ch</li>
+          <li>Ultimate Beneficial Owner Produktentwicklung</li>
+          <li>Erkennung Mantelhandel für DomizilCHECK</li>
+        </ul>
+      </div>
+    </article>
+
+    <article>
+      <time datetime="2020-08">08.2020 – 08.2023</time>
+      <h3>Creditreform AG</h3>
+      <p class="position">Support und Datenverarbeitung (100%)</p>
+      <ul>
+        <li>Technischer Support und Datenverantwortung</li>
+        <li>Entwicklung und Implementierung von Daten-Pipelines</li>
+        <li>Datenanreicherung, Analyse und QS-Berichte</li>
+      </ul>
+      <div class="achievements">
+        <strong>Erfolge</strong>
+        <ul>
+          <li>Programmierung Konkursreiter Bericht für Kantonspolizei</li>
+        </ul>
+      </div>
+    </article>
+
+    <article>
+      <time datetime="2019-06">06.2019 - 08.2020</time>
+      <h3>WinWin Markt Stiftung Tosam Herisau</h3>
+      <p class="position">Finanzen und Personalwesen (100%)</p>
+      <ul>
+        <li>Buchhaltung und Kassenführung</li>
+        <li>Personaladministration und Kundenberatung</li>
+      </ul>
+      <div class="achievements">
+        <strong>Erfolge</strong>
+        <p>Entwicklung von Excel-Tools zur Trinkgeldverteilung und Umsatzanalyse</p>
+      </div>
+    </article>
+
+    <article>
+      <time datetime="2017-01">01.2017 - 06.2019</time>
+      <h3>Auslandsaufenthalt Japan &amp; diverse Weiterbildungen</h3>
+    </article>
+
+    <article>
+      <time datetime="2012-10">10.2012 - 12.2016</time>
+      <h3>Heimer Informatik AG St. Gallen</h3>
+      <p class="position">Kaufmännischer Angestellter &amp; Allrounder (100%)</p>
+      <ul>
+        <li>Erstellung von Offerten (Hard- &amp; Software)</li>
+        <li>Disposition technischer Ressourcen und Software-Support</li>
+      </ul>
+      <div class="achievements">
+        <strong>Erfolge</strong>
+        <p>Mitarbeit bei erfolgreicher Offerte zur IT-Erneuerung Gemeinde Ilanz</p>
+      </div>
+    </article>
+
+    <article>
+      <time datetime="2012-07">07.2012 – 09.2012</time>
+      <h3>Stellensuchend</h3>
+    </article>
+
+    <article>
+      <time datetime="2009-06">06.2009 – 06.2012</time>
+      <h3>Ausbildung zum Kaufmann E-Profil mit Praktikum bei der Helvetia Versicherungsagentur Raiffeisen</h3>
+    </article>
+
+    <article>
+      <time datetime="2011-02">02.2011 - 02.2012</time>
+      <h3>Helvetia Versicherungsagentur Raiffeisen St. Gallen</h3>
+      <p class="position">Praktikum Versicherungssachbearbeiter (100%)</p>
+      <ul>
+        <li>Offerten-Erstellung und Beratung im Bereich Sachversicherungen</li>
+      </ul>
+      <div class="achievements">
+        <strong>Erfolge</strong>
+        <p>Beteiligung am Umsatz-Erfolg der Kooperation zwischen Helvetia und Raiffeisen</p>
+      </div>
+    </article>
+
+    <article>
+      <time datetime="2008-07">07.2008 - 07.2009</time>
+      <h3>Alters und Pflegeheim Wiborada</h3>
+      <p class="position">Praktikum als Pfleger von demenzerkrankten Menschen (100%)</p>
+    </article>
+
+    <article>
+      <time datetime="2008-04">04.2008 - 06.2008</time>
+      <h3>Kantonsspital St. Gallen, Neurologie</h3>
+      <p class="position">Praktikum als Pfleger für Ausbildung als Sanitätssoldat (100%)</p>
+    </article>
+  </section>
+
+  <section class="section-dark education" aria-labelledby="ausbildung-title">
+    <h2 id="ausbildung-title">Aus-und Weiterbildungen</h2>
+
+    <article>
+      <time datetime="2023-06">Seit 06.2023</time>
+      <h3>IBAW</h3>
+      <p>Studiengang Data Science NDK HF (01.2024 – 12.2024)</p>
+      <p>Harvard (ab 09.2024)</p>
+      <p>Data Science (7 Zertifikate)</p>
+    </article>
+
+    <article>
+      <time datetime="2020-02">02.2020 – 06.2023</time>
+      <h3>IBM Zertifikate</h3>
+      <p>38 Zertifikate</p>
+      <p>Data Engineering Professional (06.2023, 13 Zertifikate)</p>
+      <p>Data Science Professional (12.2022, 10 Zertifikate)</p>
+    </article>
+
+    <article>
+      <time datetime="2022-10">10.2022</time>
+      <h3>Python Data Science</h3>
+      <p>6 Zertifikate</p>
+      <p>Data Analyst Professional 9 Zertifikate (12.2022)</p>
+    </article>
+
+    <article>
+      <h3>CodeCademy.com</h3>
+      <p>17 Zertifikate 690 Badges</p>
+      <p><time datetime="2022-02">02.2022</time> Hypothesis Testing with Python</p>
+      <p><time datetime="2021-10">10.2021</time> Data Scientist: Analytics Specialist Career Path</p>
+      <p><time datetime="2021-09">09.2021</time> Data Scientist: Machine Learning Specialist</p>
+      <p><time datetime="2021
