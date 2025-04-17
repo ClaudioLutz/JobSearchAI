@@ -553,6 +553,10 @@ The system includes robust error handling:
 - Format detection to handle both new and legacy output formats
 - Logging of errors and warnings at all stages
 - Graceful handling of missing files or API issues
+- Flexible job data structure handling to support different formats:
+  - Array of arrays (flattens it)
+  - Array with objects containing a 'content' property
+  - Flat array of job listings
 
 ### User Feedback and Progress Tracking
 
@@ -744,6 +748,11 @@ If you encounter issues with the dashboard:
    - This error occurs when the system cannot write to a file or directory
    - Check that the output directories have the correct permissions
    - Ensure no other applications have the target files open
+
+5. **TypeError: list indices must be integers or slices, not str**:
+   - This error can occur when trying to access job data with an incorrect structure assumption
+   - The system has been updated to handle different job data structures (array of arrays, objects with 'content' property, flat arrays)
+   - If you encounter this error, ensure you're using the latest version of the dashboard.py file
 
 ## Security Considerations
 
