@@ -241,41 +241,74 @@ The system consists of six main components:
 
 ### 5. Word Template Generator
 
-**Purpose**: Convert motivation letter JSON data to professionally formatted Word documents.
+**Purpose**: Convert motivation letter JSON data to professionally formatted Word documents using templates.
 
 **Key Files**:
 - `word_template_generator.py`: Main script for generating Word documents
+- `motivation_letters/template/motivation_letter_template.docx`: Word template with Jinja2-style variables
 
 **Technologies**:
-- python-docx for Word document creation and formatting
+- docxtpl for template-based Word document generation
+- python-docx as the underlying library for Word document manipulation
 - JSON for structured data input
+- Jinja2-style template syntax for variable replacement
 - Datetime for timestamp generation
 
 **Process**:
 1. Takes a structured JSON representation of a motivation letter
-2. Creates a new Word document with proper margins and formatting
-3. Adds all letter components with appropriate styling (bold, spacing, etc.)
+2. Loads a pre-designed Word template with Jinja2-style variables (e.g., `{{ variable_name }}`)
+3. Replaces the variables with actual content from the JSON data
 4. Saves the document to a file with a timestamp in the filename
 
 **Features**:
-- Professional document formatting with proper margins
+- Template-based document generation for consistent formatting
+- Support for Jinja2-style variables in Word templates
+- Support for loops and conditionals in templates
+- Professional document formatting with proper styling preserved from the template
 - Structured layout matching standard motivation letter format
 - Automatic filename generation based on job title and company
 - Integration with the motivation letter generator
 - Detailed logging for troubleshooting
 
 **Functions**:
-- `json_to_docx(motivation_letter_json, output_path=None)`: Converts JSON to a Word document
-- `create_word_document_from_json_file(json_file_path)`: Creates a Word document from a JSON file
+- `json_to_docx(motivation_letter_json, template_path='motivation_letters/template/motivation_letter_template.docx', output_path=None)`: Converts JSON to a Word document using a template
+- `create_word_document_from_json_file(json_file_path, template_path='motivation_letters/template/motivation_letter_template.docx')`: Creates a Word document from a JSON file using a template
+
+**Template Variables**:
+The Word template includes the following variables:
+```
+{{ candidate_name }}
+{{ candidate_address }}
+{{ candidate_city }}
+{{ candidate_email }}
+{{ candidate_phone }}
+
+{{ company_name }}
+{{ company_department }}
+{{ company_street_number }}
+{{ company_plz_city }}
+
+{{ date }}
+{{ subject }}
+{{ greeting }}
+{{ introduction }}
+
+{% for paragraph in body_paragraphs %}
+{{ paragraph }}
+{% endfor %}
+
+{{ closing }}
+{{ signature }}
+{{ full_name }}
+```
 
 **Output Format**:
 - Word document (.docx) with a professionally formatted motivation letter
 - The document includes:
-  - Proper margins (2.5 cm on all sides)
   - Candidate's contact information
   - Company address
   - Date
-  - Subject line (bold)
+  - Subject line
   - Formal greeting
   - Introduction paragraph
   - Main body paragraphs
@@ -355,6 +388,7 @@ openai>=1.0.0
 python-dotenv>=1.0.0
 PyMuPDF>=1.22.0
 python-docx>=0.8.11
+docxtpl>=0.19.0
 pathlib>=1.0.1
 flask>=2.0.0
 werkzeug>=2.0.0
@@ -712,8 +746,9 @@ If you encounter issues with the dashboard:
    - If the generated letter lacks specific job details, check if the job website structure has changed
 
 6. **Word Document Generation Issues**:
-   - Verify that python-docx is installed correctly
+   - Verify that python-docx and docxtpl are installed correctly
    - Check that the JSON file exists and is properly formatted
+   - Ensure the Word template file exists and contains the correct Jinja2-style variables
    - Look for error messages in the `word_template_generator.log` file
    - Ensure the output directory has write permissions
 
@@ -753,6 +788,17 @@ If you encounter issues with the dashboard:
    - This error can occur when trying to access job data with an incorrect structure assumption
    - The system has been updated to handle different job data structures (array of arrays, objects with 'content' property, flat arrays)
    - If you encounter this error, ensure you're using the latest version of the dashboard.py file
+
+6. **ModuleNotFoundError: No module named 'docxtpl'**:
+   - This error occurs when the docxtpl library is not installed
+   - Run `pip install docxtpl` to install the dependency
+   - This library is required for the template-based Word document generation
+
+7. **TemplateError: Cannot render...**:
+   - This error occurs when there's a mismatch between the variables in the template and the data provided
+   - Check that the Word template contains the correct Jinja2-style variables (e.g., `{{ variable_name }}`)
+   - Ensure that all variables used in the template are present in the JSON data
+   - For loop variables, ensure they are properly formatted with `{% for item in items %}` and `{% endfor %}` tags
 
 ## Security Considerations
 

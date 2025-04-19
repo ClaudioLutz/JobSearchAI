@@ -292,7 +292,8 @@ def json_to_html(motivation_letter_json):
         
         company_name = motivation_letter_json.get('company_name', '')
         company_department = motivation_letter_json.get('company_department', '')
-        company_address = motivation_letter_json.get('company_address', '')
+        company_street_number = motivation_letter_json.get('company_street_number', '')
+        company_plz_city = motivation_letter_json.get('company_plz_city', '')
         
         date = motivation_letter_json.get('date', '')
         subject = motivation_letter_json.get('subject', '')
@@ -322,7 +323,8 @@ def json_to_html(motivation_letter_json):
 
     <p>{company_name}<br>
     {company_department}<br>
-    {company_address}</p>
+    {company_street_number}<br>
+    {company_plz_city}</p>
 
     <p>{date}</p>
 
@@ -429,7 +431,8 @@ def generate_motivation_letter(cv_summary, job_details):
           "candidate_phone": "Telefonnummer",
           "company_name": "Name des Unternehmens",
           "company_department": "Abteilung (falls bekannt, sonst 'Personalabteilung')",
-          "company_address": "Adresse des Unternehmens (falls bekannt)",
+          "company_street_number": "Strasse und Hausnummerdes Unternehmens (falls bekannt)",
+          "company_plz_city": "Postleitzahl und Stadt (falls bekannt)",
           "date": "Ort, den [aktuelles Datum]",
           "subject": "Bewerbung als [Stellentitel]",
           "greeting": "Anrede (z.B. 'Sehr geehrte Damen und Herren')",
@@ -440,7 +443,7 @@ def generate_motivation_letter(cv_summary, job_details):
             "Dritter Hauptabsatz (falls nötig)"
           ],
           "closing": "Schlussabsatz",
-          "signature": "Grußformel (z.B. 'Mit freundlichen Grüßen')",
+          "signature": "Grussformel (z.B. 'Mit freundlichen Grüssen')",
           "full_name": "Vollständiger Name des Bewerbers"
         }}
         ```
