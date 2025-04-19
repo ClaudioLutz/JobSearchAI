@@ -1,34 +1,72 @@
 /* Custom styles for JobsearchAI Dashboard */
 
+:root {
+    --bg-dark: #1a1a1a;
+    --bg-secondary-dark: #2d2d2d;
+    --text-dark: #e8e8e8;
+    --border-dark: #404040;
+    --primary-dark: #0d6efd;
+}
+
 body {
-    background-color: #f8f9fa;
+    background-color: var(--bg-dark);
+    color: var(--text-dark);
+    transition: background-color 0.3s, color 0.3s;
+}
+
+.navbar {
+    background-color: var(--bg-secondary-dark);
+    box-shadow: 0 2px 4px rgba(0,0,0,.4);
+    border-bottom: 1px solid var(--border-dark);
 }
 
 .card {
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-    border-radius: 0.5rem;
-    border: none;
+    background-color: var(--bg-secondary-dark);
+    border: 1px solid var(--border-dark);
+    color: var(--text-dark);
 }
 
-.card-header {
-    background-color: #fff;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
-    padding: 1rem;
+.btn-primary {
+    background-color: var(--primary-dark);
+    border-color: var(--primary-dark);
 }
 
-.card-body {
-    padding: 1.25rem;
+.table {
+    color: var(--text-dark);
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(255,255,255,.05);
+}
+
+.form-control {
+    background-color: var(--bg-secondary-dark);
+    border-color: var(--border-dark);
+    color: var(--text-dark);
+}
+
+.form-control:focus {
+    background-color: var(--bg-secondary-dark);
+    border-color: var(--primary-dark);
+    color: var(--text-dark);
+}
+
+.list-group-item {
+    background-color: var(--bg-secondary-dark);
+    border-color: var(--border-dark);
+    color: var(--text-dark);
 }
 
 .card-footer {
-    background-color: #fff;
-    border-top: 1px solid rgba(0, 0, 0, 0.125);
+    background-color: var(--bg-secondary-dark);
+    border-top: 1px solid var(--border-dark);
     padding: 1rem;
+    color: var(--text-dark);
 }
 
 .table th {
     font-weight: 600;
-    color: #495057;
+    color: var(--text-dark);
 }
 
 .badge {
@@ -38,16 +76,16 @@ body {
 
 /* Custom colors for match scores */
 .badge.bg-success {
-    background-color: #28a745 !important;
+    background-color: #2a8c4a !important;
 }
 
 .badge.bg-warning {
-    background-color: #ffc107 !important;
-    color: #212529;
+    background-color: #c99700 !important;
+    color: var(--text-dark);
 }
 
 .badge.bg-danger {
-    background-color: #dc3545 !important;
+    background-color: #a32834 !important;
 }
 
 /* Button styles */
@@ -90,13 +128,15 @@ body {
 }
 
 .modal-header {
-    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
-    background-color: #f8f9fa;
+    border-bottom: 1px solid var(--border-dark);
+    background-color: var(--bg-secondary-dark);
+    color: var(--text-dark);
 }
 
 .modal-footer {
-    border-top: 1px solid rgba(0, 0, 0, 0.125);
-    background-color: #f8f9fa;
+    border-top: 1px solid var(--border-dark);
+    background-color: var(--bg-secondary-dark);
+    color: var(--text-dark);
 }
 
 /* CV summary content */
