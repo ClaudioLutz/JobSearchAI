@@ -45,6 +45,14 @@ body {
     color: var(--text-dark);
 }
 
+.form-label {
+    color: rgba(232, 232, 232, 0.9);
+}
+
+.form-text {
+    color: #a0a0a0;
+}
+
 .form-control:focus {
     background-color: var(--bg-secondary-dark);
     border-color: var(--primary-dark);
@@ -144,6 +152,9 @@ body {
     white-space: pre-wrap;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     line-height: 1.6;
+    background-color: var(--bg-secondary-dark);
+    padding: 1rem;
+    border-radius: 0.5rem;
 }
 
 /* Reasoning content */
