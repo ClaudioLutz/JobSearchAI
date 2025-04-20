@@ -4,30 +4,27 @@
 
 **Key Files**:
 - `word_template_generator.py`: Main script for generating Word documents
-- `motivation_letters/template/motivation_letter_template.docx`: Word template with Jinja2-style variables
+- `motivation_letters/template/motivation_letter_template.docx`: Default path to the Word template with Jinja2-style variables.
 
 **Technologies**:
-- docxtpl for template-based Word document generation
-- python-docx as the underlying library for Word document manipulation
-- JSON for structured data input
-- Jinja2-style template syntax for variable replacement
-- Datetime for timestamp generation
+- `docxtpl` library for template-based Word document generation (uses Jinja2 syntax).
+- `python-docx` (as a dependency of `docxtpl`) for underlying Word document manipulation.
+- JSON for structured data input.
 
 **Process**:
-1. Takes a structured JSON representation of a motivation letter
-2. Loads a pre-designed Word template with Jinja2-style variables (e.g., `{{ variable_name }}`)
-3. Replaces the variables with actual content from the JSON data
-4. Saves the document to a file with a timestamp in the filename
+1. Takes a structured JSON representation of a motivation letter (either as a dictionary or loaded from a file).
+2. Loads a pre-designed Word template (`.docx`) containing Jinja2-style variables (e.g., `{{ variable_name }}`).
+3. Creates a context dictionary mapping template variables to values from the input JSON.
+4. Renders the template using `docxtpl`, replacing variables with the context data.
+5. Saves the generated Word document. The default filename is based on the company name (`motivation_letters/motivation_letter_{company_name}.docx`) when called via `json_to_docx` without an explicit `output_path`. When called via `create_word_document_from_json_file`, the output filename mirrors the input JSON filename with a `.docx` extension.
 
 **Features**:
-- Template-based document generation for consistent formatting
-- Support for Jinja2-style variables in Word templates
-- Support for loops and conditionals in templates
-- Professional document formatting with proper styling preserved from the template
-- Structured layout matching standard motivation letter format
-- Automatic filename generation based on job title and company
-- Integration with the motivation letter generator
-- Detailed logging for troubleshooting
+- Template-based document generation for consistent formatting using `docxtpl`.
+- Supports Jinja2-style variables, loops (`{% for ... %}`), and conditionals (`{% if ... %}`) within the Word template.
+- Preserves formatting and styling from the Word template.
+- Generates Word documents matching standard motivation letter structure based on input JSON.
+- Automatic filename generation (defaulting to company name or based on input JSON filename).
+- Designed to be easily integrated into workflows (e.g., called after motivation letter generation).
 
 **Functions**:
 - `json_to_docx(motivation_letter_json, template_path='motivation_letters/template/motivation_letter_template.docx', output_path=None)`: Converts JSON to a Word document using a template
