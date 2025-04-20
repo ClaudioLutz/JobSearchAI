@@ -116,7 +116,7 @@ graph TD
 
     JM --> CVPROC
 
-    MLG --> JDA  // Dynamically imports for scraping config/functionality
+    MLG --> JDA
 
     %% External Library/Service Dependencies
     CVPROC --> PYMUPDF
