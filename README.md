@@ -2,7 +2,7 @@
 
 ## Overview
 
-JobsearchAI is a system that matches job listings with candidate CVs using AI-powered semantic matching. The system uses natural language processing and AI to understand both job listings and candidate profiles, providing intelligent job recommendations based on skills, experience, education, and location preferences.
+JobsearchAI is a system that matches job listings with candidate CVs using AI-powered semantic matching. The system uses natural language processing and AI to understand both job listings and candidate profiles, providing intelligent job recommendations based on skills, experience, education, and location preferences. It also automatically generates personalized motivation letters (Bewerbungsschreiben) for selected job matches.
 
 ## Inhaltsverzeichnis
 
