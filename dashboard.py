@@ -276,9 +276,13 @@ def run_job_matcher():
                     return
                 
                 # Update status
-                update_operation_progress(operation_id, 80, 'processing', 'Generating report...')
+                update_operation_progress(operation_id, 80, 'processing', 'Adding CV path to matches and generating report...')
                 
-                # Generate report
+                # Add cv_path to each match dictionary before saving
+                for match in matches:
+                    match['cv_path'] = full_cv_path # Store the full path used for matching
+
+                # Generate report (which now includes cv_path in the saved JSON)
                 report_file = generate_report(matches)
                 
                 # Complete the operation
@@ -385,7 +389,20 @@ def view_results(report_file):
         # Load the job matches from the JSON file
         with open(json_path, 'r', encoding='utf-8') as f:
             matches = json.load(f)
-        
+
+        # Extract CV base name from the 'cv_path' stored within the matches data
+        cv_filename = None
+        if matches and isinstance(matches, list) and len(matches) > 0 and 'cv_path' in matches[0]:
+            try:
+                # Extract the filename stem (name without extension) from the stored path
+                cv_full_path = matches[0]['cv_path']
+                cv_filename = Path(cv_full_path).stem
+                logger.info(f"Extracted CV filename '{cv_filename}' from matches[0]['cv_path']: {cv_full_path}")
+            except Exception as path_e:
+                logger.error(f"Error extracting filename from cv_path '{matches[0].get('cv_path')}': {path_e}")
+        else:
+            logger.warning(f"Could not find 'cv_path' in the first match of {json_path} to determine CV filename.")
+
         # Fix application URLs - extract path and create proper ostjob.ch URL
         for match in matches:
             if match.get('application_url') and match['application_url'] != 'N/A':
@@ -416,7 +433,7 @@ def view_results(report_file):
                 match['motivation_letter_html_path'] = html_path if match['has_motivation_letter'] else None
                 match['motivation_letter_docx_path'] = docx_path if os.path.exists(docx_path) else None
         
-        return render_template('results.html', matches=matches, report_file=report_file)
+        return render_template('results.html', matches=matches, report_file=report_file, cv_filename=cv_filename)
     except Exception as e:
         flash(f'Error loading results: {str(e)}')
         logger.error(f'Error loading results: {str(e)}')
@@ -1127,6 +1144,75 @@ def delete_files():
         import traceback
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'message': f'An unexpected error occurred: {str(e)}'}), 500
+
+@app.route('/generate_multiple_letters', methods=['POST'])
+def generate_multiple_letters():
+    """Generate motivation letters for multiple selected jobs"""
+    data = request.get_json()
+    if not data:
+        logger.error("Invalid request format for /generate_multiple_letters")
+        return jsonify({'error': 'Invalid request format'}), 400
+
+    job_urls = data.get('job_urls')
+    cv_base_name = data.get('cv_filename') # Get CV filename directly from request
+
+    if not job_urls or not isinstance(job_urls, list) or not cv_base_name:
+        logger.error(f"Missing job_urls or cv_filename in request: {data}")
+        return jsonify({'error': 'Missing job_urls or cv_filename'}), 400
+
+    logger.info(f"Received request to generate letters for CV: {cv_base_name}")
+
+    # Check if the corresponding CV summary exists (as generate_motivation_letter needs it)
+    summary_path = Path('process_cv/cv-data/processed') / f"{cv_base_name}_summary.txt"
+    if not summary_path.exists():
+        logger.error(f"Required CV summary file not found: {summary_path}")
+        return jsonify({'error': f'Required CV summary file not found for {cv_base_name}'}), 400
+
+    success_count = 0
+    errors = [] # Store failed job_urls
+
+    for job_url in job_urls:
+        # Skip invalid or placeholder URLs
+        if not job_url or job_url == 'N/A' or not job_url.startswith('http'):
+            logger.warning(f"Skipping invalid job URL: {job_url}")
+            errors.append(job_url) # Count invalid URL as an error
+            continue
+
+        try:
+            logger.info(f"Generating letter for CV '{cv_base_name}' and URL '{job_url}'")
+            # Call the main function from motivation_letter_generator
+            # It handles saving files and returns a result dict (or None on failure)
+            result = generate_motivation_letter(cv_base_name, job_url)
+
+            if result:
+                logger.info(f"Successfully generated letter for URL: {job_url}")
+                success_count += 1
+                # Generate DOCX if JSON was produced
+                if 'motivation_letter_json' in result and 'json_file_path' in result:
+                     try:
+                         docx_path = json_to_docx(result['motivation_letter_json'], output_path=result['json_file_path'].replace('.json', '.docx'))
+                         if docx_path:
+                             logger.info(f"Generated Word document: {docx_path} for URL: {job_url}")
+                         else:
+                             logger.warning(f"Failed to generate Word document (json_to_docx returned None) for URL: {job_url}")
+                     except Exception as docx_e:
+                         logger.error(f"Exception generating Word document for URL {job_url}: {str(docx_e)}")
+                         # Don't add to errors list here, as the main letter generation succeeded
+            else:
+                # generate_motivation_letter returned None, indicating failure
+                logger.error(f"Failed to generate letter (generate_motivation_letter returned None) for URL: {job_url}")
+                errors.append(job_url)
+        except Exception as e:
+            logger.error(f"Exception generating letter for URL {job_url}: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            errors.append(job_url)
+
+    logger.info(f"Multiple letter generation complete. Success: {success_count}, Failures: {len(errors)}")
+    return jsonify({
+        'success_count': success_count,
+        'errors': errors # List of URLs that failed
+    })
 
 
 if __name__ == '__main__':

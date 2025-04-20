@@ -1,3 +1,5 @@
+console.log("main.js loaded"); // Add this line at the top
+
 /**
  * JobsearchAI Dashboard JavaScript
  */
@@ -137,7 +139,10 @@ function checkOperationStatus(operationId, onComplete) {
     return pollInterval;
 }
 
+// Main DOMContentLoaded listener
 document.addEventListener('DOMContentLoaded', function() {
+    console.log("Main DOMContentLoaded fired.");
+
     // Apply loading state to all form submissions
     const forms = document.querySelectorAll('form');
     forms.forEach(form => {
@@ -247,49 +252,54 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Handle CV summary view buttons
-    const viewCvButtons = document.querySelectorAll('.view-cv-btn');
-    const cvSummaryModal = new bootstrap.Modal(document.getElementById('cvSummaryModal'));
-    const cvSummaryContent = document.getElementById('cv-summary-content');
-    const cvSummaryModalLabel = document.getElementById('cvSummaryModalLabel');
-    
-    viewCvButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const cvFile = this.getAttribute('data-cv-file');
-            
-            // Update modal title
-            if (cvSummaryModalLabel) {
-                cvSummaryModalLabel.textContent = `CV Summary: ${cvFile}`;
-            }
-            
-            // Show loading message
-            if (cvSummaryContent) {
-                cvSummaryContent.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><p class="mt-2">Loading CV summary...</p></div>';
-            }
-            
-            // Show the modal
-            cvSummaryModal.show();
-            
-            // Fetch CV summary
-            fetch(`/view_cv_summary/${encodeURIComponent(cvFile)}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        cvSummaryContent.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
-                    } else {
-                        // Format the summary with line breaks
-                        const formattedSummary = data.summary.replace(/\n/g, '<br>');
-                        cvSummaryContent.innerHTML = formattedSummary;
-                    }
-                })
-                .catch(error => {
-                    console.error('Error fetching CV summary:', error);
-                    cvSummaryContent.innerHTML = `<div class="alert alert-danger">Error loading CV summary: ${error.message}</div>`;
+    // Handle CV summary view buttons (only if the modal exists on the page)
+    const cvSummaryModalElement = document.getElementById('cvSummaryModal');
+    if (cvSummaryModalElement) {
+        const viewCvButtons = document.querySelectorAll('.view-cv-btn');
+        const cvSummaryModal = new bootstrap.Modal(cvSummaryModalElement);
+        const cvSummaryContent = document.getElementById('cv-summary-content');
+        const cvSummaryModalLabel = document.getElementById('cvSummaryModalLabel');
+
+        viewCvButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const cvFile = this.getAttribute('data-cv-file');
+
+                // Update modal title
+                if (cvSummaryModalLabel) {
+                    cvSummaryModalLabel.textContent = `CV Summary: ${cvFile}`;
+                }
+
+                // Show loading message
+                if (cvSummaryContent) {
+                    cvSummaryContent.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><p class="mt-2">Loading CV summary...</p></div>';
+                }
+
+                // Show the modal
+                cvSummaryModal.show();
+
+                // Fetch CV summary
+                fetch(`/view_cv_summary/${encodeURIComponent(cvFile)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            cvSummaryContent.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                        } else {
+                            // Format the summary with line breaks
+                            const formattedSummary = data.summary.replace(/\n/g, '<br>');
+                            cvSummaryContent.innerHTML = formattedSummary;
+                        }
+                    })
+                    .catch(error => {
+                            console.error('Error fetching CV summary:', error);
+                            if (cvSummaryContent) {
+                                 cvSummaryContent.innerHTML = `<div class="alert alert-danger">Error loading CV summary: ${error.message}</div>`;
+                            }
+                });
+            });
         });
-    });
+    } // End if (cvSummaryModalElement)
 
     // --- Bulk Delete Functionality ---
-
     const fileSections = [
         { listId: 'cv-list', checkboxClass: 'cv-checkbox', buttonSelector: '.bulk-delete-btn[data-file-type="cv"]', fileType: 'cv' },
         { listId: 'job-data-list', checkboxClass: 'job-data-checkbox', buttonSelector: '.bulk-delete-btn[data-file-type="job_data"]', fileType: 'job_data' },
@@ -362,23 +372,119 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
      // --- End Bulk Delete Functionality ---
-});
-    
+
+    // --- Generate Letters for Selected Jobs ---
+    console.log("Checking for multi-letter button elements."); // Debug log A
+    const generateSelectedBtn = document.getElementById('generate-selected-letters-btn');
+    const selectedStatusSpan = document.getElementById('selected-status');
+
+    if (generateSelectedBtn && selectedStatusSpan) {
+        console.log("Attempting to attach listener to #generate-selected-letters-btn"); // Debug log 1
+        generateSelectedBtn.addEventListener('click', function() {
+            console.log("#generate-selected-letters-btn clicked!"); // Debug log 2
+            const selectedCheckboxes = document.querySelectorAll('.job-select-checkbox:checked');
+            console.log(`Found ${selectedCheckboxes.length} selected checkboxes.`); // Debug log 3
+            const cvFilename = this.getAttribute('data-cv-filename'); // Get CV filename directly
+
+            if (!cvFilename) {
+                alert('Error: Could not determine the CV filename.');
+                console.error("CV filename not found in button's data attribute.");
+                return;
+            }
+
+            if (selectedCheckboxes.length === 0) {
+                alert('Please select at least one job to generate letters for.');
+                return;
+            }
+
+            const jobUrls = Array.from(selectedCheckboxes).map(cb => cb.value);
+            const jobTitles = Array.from(selectedCheckboxes).map(cb => cb.getAttribute('data-job-title')); // For status messages
+            console.log("Selected Job URLs:", jobUrls); // Debug log 4
+            console.log("CV Filename:", cvFilename); // Debug log 5
+
+            setButtonLoading(this, true);
+            selectedStatusSpan.textContent = `Generating ${jobUrls.length} letter(s)...`;
+            selectedStatusSpan.className = 'ms-2 text-info'; // Reset class
+
+            console.log("Initiating fetch to /generate_multiple_letters"); // Debug log 6
+            fetch('/generate_multiple_letters', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    job_urls: jobUrls,
+                    cv_filename: cvFilename // Send CV filename directly
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    // Try to get error message from response body if possible
+                    return response.json().then(errData => {
+                        throw new Error(errData.error || `Server error: ${response.statusText}`);
+                    }).catch(() => {
+                        // Fallback if response body is not JSON or empty
+                        throw new Error(`Server error: ${response.statusText}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log("Backend response:", data); // Log response for debugging
+                let message = `Generated ${data.success_count}/${jobUrls.length} letters.`;
+                if (data.errors && data.errors.length > 0) {
+                    // Find job titles for failed URLs
+                    const failedTitles = data.errors.map(errorUrl => {
+                        const index = jobUrls.indexOf(errorUrl);
+                        return index !== -1 ? jobTitles[index] : errorUrl; // Show title or URL if title not found
+                    });
+                    message += ` Failed for: ${failedTitles.join(', ')}.`;
+                    selectedStatusSpan.className = 'ms-2 text-warning';
+                } else {
+                    selectedStatusSpan.className = 'ms-2 text-success';
+                }
+                selectedStatusSpan.textContent = message;
+                // Optional: Reload or update UI after success? For now, just show status.
+                // Consider refreshing the page or updating the specific rows after a delay.
+                // setTimeout(() => window.location.reload(), 3000); // Example: Reload after 3 seconds
+            })
+            .catch(error => {
+                console.error('Error generating multiple letters:', error);
+                selectedStatusSpan.textContent = `Error: ${error.message}`;
+                selectedStatusSpan.className = 'ms-2 text-danger';
+            })
+            .finally(() => {
+                setButtonLoading(this, false);
+            });
+        });
+        console.log("Listener attached to #generate-selected-letters-btn"); // Debug log 7
+    } else {
+        // Only log error if we expect the button to be present (e.g., on results page)
+        // We can check the URL or presence of another element unique to the results page
+        if (document.querySelector('.job-matches-table')) { // Assuming results table has this class
+             console.error("#generate-selected-letters-btn or #selected-status not found on results page!"); // Debug log B
+        }
+    }
+    // --- End Generate Letters for Selected Jobs ---
+
     // Auto-dismiss alerts after 5 seconds
     const alerts = document.querySelectorAll('.alert');
     alerts.forEach(alert => {
         setTimeout(() => {
-            const bsAlert = new bootstrap.Alert(alert);
-            bsAlert.close();
+            // Check if the alert still exists before trying to close it
+            if (alert.parentNode) {
+                 const bsAlert = bootstrap.Alert.getOrCreateInstance(alert);
+                 bsAlert.close();
+            }
         }, 5000);
     });
-    
+
     // Initialize tooltips
     const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(function (tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
-    
+
     // Add confirmation for job scraper button
     const jobScraperForm = document.querySelector('form[action="/run_job_scraper"]');
     if (jobScraperForm) {
@@ -388,7 +494,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-    
+
     // Add form validation for job matcher
     const jobMatcherForm = document.querySelector('form[action="/run_job_matcher"]');
     if (jobMatcherForm) {
@@ -396,19 +502,19 @@ document.addEventListener('DOMContentLoaded', function() {
             const cvPath = document.getElementById('cv_path').value;
             const minScore = document.getElementById('min_score').value;
             const maxResults = document.getElementById('max_results').value;
-            
+
             if (!cvPath) {
                 event.preventDefault();
                 alert('Please select a CV');
                 return;
             }
-            
+
             if (minScore < 1 || minScore > 10) {
                 event.preventDefault();
                 alert('Minimum score must be between 1 and 10');
                 return;
             }
-            
+
             if (maxResults < 1 || maxResults > 50) {
                 event.preventDefault();
                 alert('Maximum results must be between 1 and 50');
@@ -416,7 +522,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-    
+
     // Add confirmation for job data delete buttons
     const deleteJobDataButtons = document.querySelectorAll('.delete-job-data-btn');
     deleteJobDataButtons.forEach(button => {
@@ -427,7 +533,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
-    
+
     // Add confirmation for report delete buttons
     const deleteReportButtons = document.querySelectorAll('.delete-report-btn');
     deleteReportButtons.forEach(button => {
@@ -438,7 +544,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
-    
+
     // Add confirmation for CV delete buttons
     const deleteCvButtons = document.querySelectorAll('.delete-cv-btn');
     deleteCvButtons.forEach(button => {
@@ -449,4 +555,5 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
-});
+
+}); // End of main DOMContentLoaded listener
