@@ -106,7 +106,6 @@ graph TD
         FLASK[Flask]
     end
 
-    %% Component Dependencies (Imports/Calls)
     DASH --> FLASK
     DASH --> CVPROC
     DASH --> JDA
@@ -118,17 +117,15 @@ graph TD
 
     MLG --> JDA
 
-    %% External Library/Service Dependencies
     CVPROC --> PYMUPDF
     CVPROC --> OPENAI
     JDA --> SCRAPEGRAPH
-    JDA --> OPENAI // Or other LLM via config
+    JDA --> OPENAI
     JM --> OPENAI
-    MLG --> SCRAPEGRAPH // Optional, via JDA import
+    MLG --> SCRAPEGRAPH
     MLG --> OPENAI
     WTG --> DOCXTPL
 
-    %% Style Nodes
     classDef component fill:#f9f,stroke:#333,stroke-width:2px;
     classDef external fill:#9cf,stroke:#333,stroke-width:1px;
 
