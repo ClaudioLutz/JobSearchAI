@@ -173,31 +173,56 @@ def get_operation_status(operation_id):
 @app.route('/')
 def index():
     """Render the main dashboard page"""
-    # Get list of available CVs
+    # Get list of available CVs with timestamps
     cv_dir = Path('process_cv/cv-data')
-    cv_files = list(cv_dir.glob('**/*.pdf')) + list(cv_dir.glob('**/*.docx'))
-    cv_files = [str(f.relative_to(cv_dir)) for f in cv_files]
-    
-    # Get list of available job data files
+    cv_files_data = []
+    cv_paths = list(cv_dir.glob('**/*.pdf')) + list(cv_dir.glob('**/*.docx'))
+    for f_path in cv_paths:
+        try:
+            mtime = os.path.getmtime(f_path)
+            timestamp = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
+            # Store relative path for display and use in URLs
+            relative_path = str(f_path.relative_to(cv_dir))
+            cv_files_data.append({'name': relative_path, 'timestamp': timestamp, 'full_path': str(f_path)})
+        except Exception as e:
+            logger.error(f"Error getting timestamp for CV file {f_path}: {e}")
+            cv_files_data.append({'name': str(f_path.relative_to(cv_dir)), 'timestamp': 'N/A', 'full_path': str(f_path)})
+    cv_files_data.sort(key=lambda x: x.get('timestamp', '0'), reverse=True) # Sort by timestamp descending
+
+    # Get list of available job data files with timestamps
     job_data_dir = Path('job-data-acquisition/job-data-acquisition/data')
+    job_data_files_data = []
     if job_data_dir.exists():
-        job_data_files = list(job_data_dir.glob('job_data_*.json'))
-        job_data_files = [f.name for f in job_data_files]
-    else:
-        job_data_files = []
-    
-    # Get list of available job match reports
+        job_data_paths = list(job_data_dir.glob('job_data_*.json'))
+        for f_path in job_data_paths:
+            try:
+                mtime = os.path.getmtime(f_path)
+                timestamp = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
+                job_data_files_data.append({'name': f_path.name, 'timestamp': timestamp})
+            except Exception as e:
+                logger.error(f"Error getting timestamp for job data file {f_path.name}: {e}")
+                job_data_files_data.append({'name': f_path.name, 'timestamp': 'N/A'})
+    job_data_files_data.sort(key=lambda x: x.get('timestamp', '0'), reverse=True) # Sort by timestamp descending
+
+    # Get list of available job match reports with timestamps
     report_dir = Path('job_matches')
+    report_files_data = []
     if report_dir.exists():
-        report_files = list(report_dir.glob('job_matches_*.md'))
-        report_files = [f.name for f in report_files]
-    else:
-        report_files = []
-    
-    return render_template('index.html', 
-                          cv_files=cv_files, 
-                          job_data_files=job_data_files,
-                          report_files=report_files)
+        report_paths = list(report_dir.glob('job_matches_*.md'))
+        for f_path in report_paths:
+            try:
+                mtime = os.path.getmtime(f_path)
+                timestamp = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
+                report_files_data.append({'name': f_path.name, 'timestamp': timestamp})
+            except Exception as e:
+                logger.error(f"Error getting timestamp for report file {f_path.name}: {e}")
+                report_files_data.append({'name': f_path.name, 'timestamp': 'N/A'})
+    report_files_data.sort(key=lambda x: x.get('timestamp', '0'), reverse=True) # Sort by timestamp descending
+
+    return render_template('index.html',
+                          cv_files=cv_files_data,
+                          job_data_files=job_data_files_data,
+                          report_files=report_files_data)
 
 @app.route('/upload_cv', methods=['POST'])
 def upload_cv():
@@ -933,79 +958,75 @@ def run_combined_process():
         logger.error(traceback.format_exc())
         return redirect(url_for('index'))
 
-@app.route('/delete_cv/<cv_file>')
-def delete_cv(cv_file):
-    """Delete a CV file"""
+@app.route('/delete_cv/<path:cv_file_rel_path>')
+def delete_cv(cv_file_rel_path):
+    """Delete a CV file using its relative path"""
     try:
-        # Determine if the CV is in the input directory or directly in cv-data
-        cv_path_input = os.path.join('process_cv/cv-data/input', cv_file)
-        cv_path_direct = os.path.join('process_cv/cv-data', cv_file)
-        
-        cv_path = None
-        if os.path.exists(cv_path_input):
-            cv_path = cv_path_input
-        elif os.path.exists(cv_path_direct):
-            cv_path = cv_path_direct
-        
-        if not cv_path:
-            flash(f'CV file not found: {cv_file}')
+        # Reconstruct the full path from the relative path
+        # URL decode the path in case it contains spaces or special chars
+        decoded_rel_path = urllib.parse.unquote(cv_file_rel_path)
+        cv_full_path = Path('process_cv/cv-data') / decoded_rel_path
+
+        if not cv_full_path.is_file():
+            flash(f'CV file not found: {decoded_rel_path}')
+            logger.warning(f"Attempted to delete non-existent CV file: {cv_full_path}")
             return redirect(url_for('index'))
-        
+
         # Delete the CV file
-        os.remove(cv_path)
-        
+        os.remove(cv_full_path)
+        logger.info(f"Deleted CV file: {cv_full_path}")
+
         # Also delete the corresponding summary file if it exists
-        base_filename = os.path.basename(cv_file)
-        summary_filename = os.path.splitext(base_filename)[0] + '_summary.txt'
-        summary_path = os.path.join('process_cv/cv-data/processed', summary_filename)
-        
-        if os.path.exists(summary_path):
+        summary_filename = f"{cv_full_path.stem}_summary.txt"
+        summary_path = Path('process_cv/cv-data/processed') / summary_filename
+
+        if summary_path.is_file():
             os.remove(summary_path)
-            
-        flash(f'CV file deleted: {cv_file}')
+            logger.info(f"Deleted corresponding summary file: {summary_path}")
+
+        flash(f'CV file deleted: {decoded_rel_path}')
     except Exception as e:
         flash(f'Error deleting CV file: {str(e)}')
         logger.error(f'Error deleting CV file: {str(e)}')
     
     return redirect(url_for('index'))
 
-@app.route('/view_cv_summary/<cv_file>')
-def view_cv_summary(cv_file):
-    """View a CV summary"""
-    # Get the summary file path - ensure we're using just the basename
-    base_filename = os.path.basename(cv_file)
-    summary_filename = os.path.splitext(base_filename)[0] + '_summary.txt'
-    summary_path = os.path.join('process_cv/cv-data/processed', summary_filename)
-    
+@app.route('/view_cv_summary/<path:cv_file_rel_path>')
+def view_cv_summary(cv_file_rel_path):
+    """View a CV summary using its relative path"""
     try:
+        # URL decode the path
+        decoded_rel_path = urllib.parse.unquote(cv_file_rel_path)
+        cv_full_path = Path('process_cv/cv-data') / decoded_rel_path
+
+        # Construct summary path using the stem of the full path
+        summary_filename = f"{cv_full_path.stem}_summary.txt"
+        summary_path = Path('process_cv/cv-data/processed') / summary_filename
+
         # Check if the summary file exists
-        if not os.path.exists(summary_path):
+        if not summary_path.is_file():
+            logger.info(f"Summary file not found ({summary_path}), attempting to generate from CV: {cv_full_path}")
+            # Ensure the original CV file exists before trying to process
+            if not cv_full_path.is_file():
+                 logger.error(f"Original CV file not found: {cv_full_path}")
+                 return jsonify({'error': f'CV file not found: {decoded_rel_path}'}), 404
+
             # Process the CV to generate a summary
-            # Determine if the CV is in the input directory or directly in cv-data
-            cv_path_input = os.path.join('process_cv/cv-data/input', cv_file)
-            cv_path_direct = os.path.join('process_cv/cv-data', cv_file)
-            
-            if os.path.exists(cv_path_input):
-                cv_path = cv_path_input
-            elif os.path.exists(cv_path_direct):
-                cv_path = cv_path_direct
-            else:
-                return jsonify({'error': f'CV file not found: {cv_file}'})
-                
-            cv_text = extract_cv_text(cv_path)
+            cv_text = extract_cv_text(str(cv_full_path)) # Pass string path
             cv_summary = summarize_cv(cv_text)
-            
+
             # Save the processed CV summary
-            processed_dir = 'process_cv/cv-data/processed'
-            os.makedirs(processed_dir, exist_ok=True)
-            
+            processed_dir = Path('process_cv/cv-data/processed')
+            processed_dir.mkdir(parents=True, exist_ok=True)
+
             with open(summary_path, 'w', encoding='utf-8') as f:
                 f.write(cv_summary)
-        
+            logger.info(f"Generated and saved summary file: {summary_path}")
+
         # Load the CV summary
         with open(summary_path, 'r', encoding='utf-8') as f:
             summary = f.read()
-        
+
         return jsonify({'summary': summary})
     except Exception as e:
         return jsonify({'error': str(e)})
