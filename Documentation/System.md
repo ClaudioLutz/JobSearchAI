@@ -90,12 +90,12 @@ This diagram illustrates the primary code dependencies between the system's comp
 ```mermaid
 graph TD
     subgraph JobsearchAI System
-        DASH[Dashboard (dashboard.py)]
-        CVPROC[CV Processor (cv_processor.py)]
-        JDA[Job Data Acquisition (app.py)]
-        JM[Job Matcher (job_matcher.py)]
-        MLG[Motivation Letter Generator (motivation_letter_generator.py)]
-        WTG[Word Template Generator (word_template_generator.py)]
+        DASH[Dashboard - dashboard.py]
+        CVPROC[CV Processor - cv_processor.py]
+        JDA[Job Data Acquisition - app.py]
+        JM[Job Matcher - job_matcher.py]
+        MLG[Motivation Letter Generator - motivation_letter_generator.py]
+        WTG[Word Template Generator - word_template_generator.py]
     end
 
     subgraph External Services/Libraries
