@@ -96,8 +96,8 @@
                                         <label for="cv_path" class="form-label">Select CV</label>
                                         <select class="form-select" id="cv_path" name="cv_path" required>
                                             <option value="">Select a CV</option>
-                                            {% for cv_file in cv_files %}
-                                                <option value="{{ cv_file }}">{{ cv_file }}</option>
+                                            {% for cv_file_data in cv_files %}
+                                                <option value="{{ cv_file_data.name }}">{{ cv_file_data.name }}</option>
                                             {% endfor %}
                                         </select>
                                     </div>
@@ -133,8 +133,8 @@
                                         <label for="combined_cv_path" class="form-label">Select CV</label>
                                         <select class="form-select" id="combined_cv_path" name="cv_path" required>
                                             <option value="">Select a CV</option>
-                                            {% for cv_file in cv_files %}
-                                                <option value="{{ cv_file }}">{{ cv_file }}</option>
+                                            {% for cv_file_data in cv_files %}
+                                                <option value="{{ cv_file_data.name }}">{{ cv_file_data.name }}</option>
                                             {% endfor %}
                                         </select>
                                     </div>
