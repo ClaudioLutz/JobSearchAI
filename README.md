@@ -348,6 +348,7 @@ The Word template includes the following variables:
    - View generated letters in a professional format
    - Print or download motivation letters in HTML format
    - Download motivation letters in Word format
+   - **NEW:** Select multiple job matches on the results page and generate letters for all selected jobs with a single click.
 5. **User Feedback and Progress Tracking**:
    - Visual button feedback when actions are initiated (loading spinners)
    - Real-time progress tracking for long-running operations
@@ -515,6 +516,10 @@ Once the dashboard is running, you can:
    - Use the "Print" button to print the letter
    - Use the "Download HTML" button to save it as an HTML file
    - Use the "Download Word" button to save it as a Word document
+6. **Generate Multiple Motivation Letters**:
+   - From the job match results page, select the checkboxes next to the desired jobs.
+   - Click the "Generate Letters for Selected" button located above the results table.
+   - The system will generate letters for each selected job. A status message will indicate the progress and outcome.
 
 ## Implementation Details
 
