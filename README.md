@@ -4,6 +4,49 @@
 
 JobsearchAI is a system that matches job listings with candidate CVs using AI-powered semantic matching. The system uses natural language processing and AI to understand both job listings and candidate profiles, providing intelligent job recommendations based on skills, experience, education, and location preferences.
 
+## Inhaltsverzeichnis
+
+- [System Architecture](#system-architecture)
+  - [Component Interaction](#component-interaction)
+- [Detailed Component Description](#detailed-component-description)
+  - [1. Job Data Acquisition](#1-job-data-acquisition)
+  - [2. CV Processor](#2-cv-processor)
+  - [3. Job Matcher](#3-job-matcher)
+  - [4. Motivation Letter Generator](#4-motivation-letter-generator)
+  - [5. Word Template Generator](#5-word-template-generator)
+  - [6. Dashboard](#6-dashboard)
+- [System Requirements](#system-requirements)
+  - [Dependencies](#dependencies)
+  - [Environment Variables](#environment-variables)
+- [Usage Guide](#usage-guide)
+  - [Running the Job Matcher](#running-the-job-matcher)
+  - [Customizing the Matching](#customizing-the-matching)
+  - [Running the Job Data Acquisition](#running-the-job-data-acquisition)
+  - [Configuring the Job Scraper](#configuring-the-job-scraper)
+  - [Processing a CV Manually](#processing-a-cv-manually)
+  - [Generating a Motivation Letter Manually](#generating-a-motivation-letter-manually)
+  - [Creating a Word Document from a Motivation Letter JSON](#creating-a-word-document-from-a-motivation-letter-json)
+  - [Running the Dashboard](#running-the-dashboard)
+- [Implementation Details](#implementation-details)
+  - [Job Matching Algorithm](#job-matching-algorithm)
+  - [CV Processing](#cv-processing)
+  - [Motivation Letter Generation](#motivation-letter-generation)
+  - [Error Handling](#error-handling)
+  - [User Feedback and Progress Tracking](#user-feedback-and-progress-tracking)
+- [File Structure](#file-structure)
+- [Logging](#logging)
+- [Future Improvements](#future-improvements)
+- [Troubleshooting](#troubleshooting)
+  - [Common Issues](#common-issues)
+  - [Dashboard Troubleshooting](#dashboard-troubleshooting)
+  - [Debugging](#debugging)
+  - [Common Error Messages and Solutions](#common-error-messages-and-solutions)
+- [Security Considerations](#security-considerations)
+  - [API Keys and Credentials](#api-keys-and-credentials)
+  - [Data Protection](#data-protection)
+  - [Dashboard Security](#dashboard-security)
+  - [Network Security](#network-security)
+
 ## System Architecture
 
 The system consists of six main components:
