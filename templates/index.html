@@ -146,14 +146,17 @@
                     </div>
                     <div class="card-body">
                         {% if cv_files %}
-                            <ul class="list-group">
+                            <ul class="list-group" id="cv-list">
                                 {% for cv_file in cv_files %}
                                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        {{ cv_file }}
+                                        <div class="d-flex align-items-center flex-grow-1">
+                                            <input type="checkbox" class="form-check-input me-2 cv-checkbox" value="{{ cv_file }}" data-file-type="cv">
+                                            <span class="cv-filename">{{ cv_file }}</span>
+                                        </div>
                                         <div class="d-flex align-items-center">
                                             <button class="btn btn-sm btn-outline-info view-cv-btn me-1" data-cv-file="{{ cv_file }}">View Summary</button>
-                                            <a href="{{ url_for('delete_cv', cv_file=cv_file) }}" 
-                                               class="btn btn-sm delete-cv-btn" 
+                                            <a href="{{ url_for('delete_cv', cv_file=cv_file) }}"
+                                               class="btn btn-sm delete-cv-btn single-delete-btn"
                                                data-cv-file="{{ cv_file }}"
                                                title="Delete CV file">
                                                 <span aria-hidden="true">&times;</span>
@@ -162,6 +165,7 @@
                                     </li>
                                 {% endfor %}
                             </ul>
+                            <button class="btn btn-danger mt-2 bulk-delete-btn" data-file-type="cv" style="display: none;">Delete Selected CVs</button>
                         {% else %}
                             <p>No CVs available. Upload a CV to get started.</p>
                         {% endif %}
@@ -175,12 +179,15 @@
                     </div>
                     <div class="card-body">
                         {% if job_data_files %}
-                            <ul class="list-group">
+                            <ul class="list-group" id="job-data-list">
                                 {% for job_data_file in job_data_files %}
                                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        {{ job_data_file }}
-                                        <a href="{{ url_for('delete_job_data', job_data_file=job_data_file) }}" 
-                                           class="btn btn-sm delete-job-data-btn" 
+                                        <div class="d-flex align-items-center flex-grow-1">
+                                            <input type="checkbox" class="form-check-input me-2 job-data-checkbox" value="{{ job_data_file }}" data-file-type="job_data">
+                                            <span>{{ job_data_file }}</span>
+                                        </div>
+                                        <a href="{{ url_for('delete_job_data', job_data_file=job_data_file) }}"
+                                           class="btn btn-sm delete-job-data-btn single-delete-btn"
                                            data-job-data-file="{{ job_data_file }}"
                                            title="Delete job data file">
                                             <span aria-hidden="true">&times;</span>
@@ -188,6 +195,7 @@
                                     </li>
                                 {% endfor %}
                             </ul>
+                            <button class="btn btn-danger mt-2 bulk-delete-btn" data-file-type="job_data" style="display: none;">Delete Selected Job Data</button>
                         {% else %}
                             <p>No job data available. Run the job scraper to get job data.</p>
                         {% endif %}
@@ -200,16 +208,20 @@
                         <h2 class="h5 mb-0">Job Match Reports</h2>
                     </div>
                     <div class="card-body">
+                        <button class="btn btn-danger mb-2 bulk-delete-btn" data-file-type="report" style="display: none;">Delete Selected Reports</button> <!-- Moved button here -->
                         {% if report_files %}
-                            <ul class="list-group">
+                            <ul class="list-group" id="report-list">
                                 {% for report_file in report_files %}
                                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        {{ report_file }}
+                                        <div class="d-flex align-items-center flex-grow-1">
+                                            <input type="checkbox" class="form-check-input me-2 report-checkbox" value="{{ report_file }}" data-file-type="report">
+                                            <span>{{ report_file }}</span>
+                                        </div>
                                         <div class="d-flex align-items-center">
                                             <a href="{{ url_for('view_results', report_file=report_file) }}" class="btn btn-sm btn-outline-primary me-1">View</a>
                                             <a href="{{ url_for('download_report', report_file=report_file) }}" class="btn btn-sm btn-outline-secondary me-1">Download</a>
-                                            <a href="{{ url_for('delete_report', report_file=report_file) }}" 
-                                               class="btn btn-sm delete-report-btn" 
+                                            <a href="{{ url_for('delete_report', report_file=report_file) }}"
+                                               class="btn btn-sm delete-report-btn single-delete-btn"
                                                data-report-file="{{ report_file }}"
                                                title="Delete report file">
                                                 <span aria-hidden="true">&times;</span>

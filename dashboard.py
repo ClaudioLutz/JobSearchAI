@@ -993,5 +993,141 @@ def view_cv_summary(cv_file):
     except Exception as e:
         return jsonify({'error': str(e)})
 
+@app.route('/delete_files', methods=['POST'])
+def delete_files():
+    """Handle bulk deletion of files"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'message': 'Invalid request format'}), 400
+
+    file_type = data.get('file_type')
+    filenames = data.get('filenames')
+
+    if not file_type or not filenames or not isinstance(filenames, list):
+        return jsonify({'success': False, 'message': 'Missing file_type or filenames'}), 400
+
+    deleted_count = 0
+    failed_count = 0
+    failed_files = []
+    base_dir = ''
+
+    try:
+        if file_type == 'job_data':
+            base_dir = Path('job-data-acquisition/job-data-acquisition/data')
+            for filename in filenames:
+                file_path = base_dir / secure_filename(filename)
+                try:
+                    if file_path.is_file():
+                        os.remove(file_path)
+                        deleted_count += 1
+                        logger.info(f"Deleted job data file: {file_path}")
+                    else:
+                        raise FileNotFoundError(f"File not found: {file_path}")
+                except Exception as e:
+                    logger.error(f"Error deleting job data file {filename}: {str(e)}")
+                    failed_count += 1
+                    failed_files.append(filename)
+
+        elif file_type == 'report':
+            base_dir = Path('job_matches')
+            for filename in filenames:
+                # Delete MD file
+                md_path = base_dir / secure_filename(filename)
+                json_path = base_dir / secure_filename(filename.replace('.md', '.json'))
+                deleted_md = False
+                deleted_json = False
+                try:
+                    if md_path.is_file():
+                        os.remove(md_path)
+                        deleted_md = True
+                        logger.info(f"Deleted report file: {md_path}")
+                    # Delete corresponding JSON file
+                    if json_path.is_file():
+                        os.remove(json_path)
+                        deleted_json = True
+                        logger.info(f"Deleted corresponding JSON report file: {json_path}")
+
+                    if deleted_md or deleted_json: # Count as one deletion if either file was removed
+                         deleted_count += 1
+                    elif not md_path.is_file() and not json_path.is_file():
+                         # If neither file existed, maybe log it but don't count as failure?
+                         logger.warning(f"Report files already deleted or never existed: {filename}")
+                         # Optionally count as success if goal is just absence: deleted_count += 1
+                    else:
+                         # This case shouldn't happen if is_file checks passed, but as safety
+                         raise FileNotFoundError(f"Report files not found: {filename}")
+
+                except Exception as e:
+                    logger.error(f"Error deleting report file {filename}: {str(e)}")
+                    failed_count += 1
+                    failed_files.append(filename)
+
+        elif file_type == 'cv':
+            processed_dir = Path('process_cv/cv-data/processed')
+            input_dir = Path('process_cv/cv-data/input')
+            direct_dir = Path('process_cv/cv-data')
+
+            for filename in filenames:
+                # Filename might contain subdirs like 'input/cv.pdf' or just 'cv.pdf'
+                secure_name = secure_filename(filename) # Basic sanitization
+                relative_path = Path(filename) # Keep original structure for path finding
+
+                cv_path_input = input_dir / relative_path
+                cv_path_direct = direct_dir / relative_path
+
+                cv_path_to_delete = None
+                if cv_path_input.is_file():
+                    cv_path_to_delete = cv_path_input
+                elif cv_path_direct.is_file():
+                     # Check it's not the input or processed dir itself
+                    if relative_path.name != 'input' and relative_path.name != 'processed':
+                        cv_path_to_delete = cv_path_direct
+
+                deleted_cv = False
+                deleted_summary = False
+                try:
+                    if cv_path_to_delete:
+                        os.remove(cv_path_to_delete)
+                        deleted_cv = True
+                        logger.info(f"Deleted CV file: {cv_path_to_delete}")
+
+                        # Delete corresponding summary file
+                        base_filename = cv_path_to_delete.stem # Name without extension
+                        summary_filename = f"{base_filename}_summary.txt"
+                        summary_path = processed_dir / summary_filename
+                        if summary_path.is_file():
+                            os.remove(summary_path)
+                            deleted_summary = True
+                            logger.info(f"Deleted corresponding summary file: {summary_path}")
+
+                        deleted_count += 1
+                    else:
+                         logger.warning(f"CV file not found for deletion: {filename}")
+                         # Decide if not found is a failure or just skipped
+                         # failed_count += 1
+                         # failed_files.append(filename)
+
+                except Exception as e:
+                    logger.error(f"Error deleting CV file {filename}: {str(e)}")
+                    failed_count += 1
+                    failed_files.append(filename)
+        else:
+            return jsonify({'success': False, 'message': f'Invalid file_type: {file_type}'}), 400
+
+        return jsonify({
+            'success': failed_count == 0,
+            'message': f'Deleted {deleted_count} files. Failed to delete {failed_count} files.',
+            'deleted_count': deleted_count,
+            'failed_count': failed_count,
+            'failed_files': failed_files
+        })
+
+    except Exception as e:
+        logger.error(f"Error during bulk delete for type {file_type}: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'message': f'An unexpected error occurred: {str(e)}'}), 500
+
+
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5000)

@@ -285,9 +285,84 @@ document.addEventListener('DOMContentLoaded', function() {
                 .catch(error => {
                     console.error('Error fetching CV summary:', error);
                     cvSummaryContent.innerHTML = `<div class="alert alert-danger">Error loading CV summary: ${error.message}</div>`;
-                });
         });
     });
+
+    // --- Bulk Delete Functionality ---
+
+    const fileSections = [
+        { listId: 'cv-list', checkboxClass: 'cv-checkbox', buttonSelector: '.bulk-delete-btn[data-file-type="cv"]', fileType: 'cv' },
+        { listId: 'job-data-list', checkboxClass: 'job-data-checkbox', buttonSelector: '.bulk-delete-btn[data-file-type="job_data"]', fileType: 'job_data' },
+        { listId: 'report-list', checkboxClass: 'report-checkbox', buttonSelector: '.bulk-delete-btn[data-file-type="report"]', fileType: 'report' }
+    ];
+
+    fileSections.forEach(section => {
+        const listElement = document.getElementById(section.listId);
+        const bulkDeleteButton = document.querySelector(section.buttonSelector);
+
+        if (listElement && bulkDeleteButton) {
+            // Event listener for checkboxes within this section
+            listElement.addEventListener('change', (event) => {
+                if (event.target.classList.contains(section.checkboxClass)) {
+                    const checkedCheckboxes = listElement.querySelectorAll(`.${section.checkboxClass}:checked`);
+                    bulkDeleteButton.style.display = checkedCheckboxes.length > 0 ? 'inline-block' : 'none';
+                }
+            });
+
+            // Event listener for the bulk delete button
+            bulkDeleteButton.addEventListener('click', () => {
+                const checkedCheckboxes = listElement.querySelectorAll(`.${section.checkboxClass}:checked`);
+                const selectedFilenames = Array.from(checkedCheckboxes).map(cb => cb.value);
+
+                if (selectedFilenames.length === 0) {
+                    alert('Please select at least one file to delete.');
+                    return;
+                }
+
+                const fileTypeLabel = section.fileType.replace('_', ' '); // e.g., 'job data'
+                if (confirm(`Are you sure you want to delete the ${selectedFilenames.length} selected ${fileTypeLabel} file(s)? This action cannot be undone.`)) {
+                    // Send request to backend
+                    fetch('/delete_files', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            file_type: section.fileType,
+                            filenames: selectedFilenames
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert(data.message || `Successfully deleted ${data.deleted_count} file(s).`);
+                            // Remove deleted items from the list
+                            checkedCheckboxes.forEach(checkbox => {
+                                checkbox.closest('li').remove();
+                            });
+                            // Hide button again
+                            bulkDeleteButton.style.display = 'none';
+                            // If list becomes empty, show the 'No files' message (optional enhancement)
+                            if (listElement.querySelectorAll('li').length === 0) {
+                                const noFilesMessage = listElement.closest('.card-body').querySelector('p');
+                                if (noFilesMessage) noFilesMessage.style.display = 'block';
+                                listElement.style.display = 'none'; // Hide the empty ul
+                                bulkDeleteButton.remove(); // Remove the button entirely if list is empty
+                            }
+                        } else {
+                            alert(`Error deleting files: ${data.message || 'Unknown error'}`);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error during bulk delete:', error);
+                        alert(`An error occurred while trying to delete files: ${error.message}`);
+                    });
+                }
+            });
+        }
+    });
+     // --- End Bulk Delete Functionality ---
+});
     
     // Auto-dismiss alerts after 5 seconds
     const alerts = document.querySelectorAll('.alert');
