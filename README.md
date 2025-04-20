@@ -114,22 +114,19 @@ The system consists of six main components:
 
 **Technologies**:
 - PyMuPDF (fitz) for PDF text extraction
-- python-docx for DOCX text extraction
 - OpenAI GPT models for CV summarization
 
 **Process**:
-1. Extracts text from PDF or DOCX CV files
+1. Extracts text from PDF CV files
 2. Uses OpenAI's GPT-4o model to summarize the CV text
 3. Returns a structured summary of the candidate's skills, experience, education, and preferences
 
 **Supported File Formats**:
 - PDF (.pdf)
-- Microsoft Word (.docx)
 
 **Functions**:
 - `extract_text_from_pdf(pdf_path)`: Extracts text from PDF files
-- `extract_text_from_docx(docx_path)`: Extracts text from DOCX files
-- `extract_cv_text(file_path)`: General function that handles both file types
+- `extract_cv_text(file_path)`: General function that handles PDF files
 - `summarize_cv(cv_text)`: Uses OpenAI to generate a structured summary of the CV
 
 ### 3. Job Matcher
@@ -335,7 +332,7 @@ The Word template includes the following variables:
 
 **Features**:
 1. **CV Management**:
-   - Upload new CVs (PDF or DOCX)
+   - Upload new CVs (PDF)
    - View available CVs
    - View CV summaries
 2. **Job Data Acquisition**:
@@ -387,7 +384,6 @@ The Word template includes the following variables:
 openai>=1.0.0
 python-dotenv>=1.0.0
 PyMuPDF>=1.22.0
-python-docx>=0.8.11
 docxtpl>=0.19.0
 pathlib>=1.0.1
 flask>=2.0.0
@@ -489,7 +485,7 @@ This will:
 Once the dashboard is running, you can:
 1. **Upload and Process CVs**:
    - Click the "Upload CV" button on the dashboard
-   - Select a PDF or DOCX file
+   - Select a PDF file
    - The CV will be processed and a summary will be generated
 2. **Run the Job Matcher**:
    - Select a CV from the dropdown menu
@@ -540,7 +536,7 @@ The system uses a prompt-based approach to instruct the AI model to evaluate the
 ### CV Processing
 
 The CV processing uses a two-step approach:
-1. **Text Extraction**: Extracts raw text from PDF or DOCX files
+1. **Text Extraction**: Extracts raw text from PDF files
 2. **Summarization**: Uses OpenAI's GPT-4o model to generate a structured summary of the CV
 
 The CV processor has been enhanced to extract additional information about:
@@ -706,12 +702,11 @@ Potential future improvements include:
 
 1. **Missing Job Data**: If no job data files are found, the system will fall back to sample job data for testing.
 2. **API Key Issues**: Ensure the OpenAI API key is correctly set in `process_cv/.env`.
-3. **File Format Issues**: Only PDF and DOCX formats are supported for CVs.
+3. **File Format Issues**: Only PDF format is supported for CVs.
 4. **Scraper Configuration**: Check `job-data-acquisition/settings.json` for correct scraper configuration.
 5. **Dashboard Connection Issues**: If you cannot connect to the dashboard, ensure that port 5000 is not in use by another application.
 6. **CV Upload Problems**: If CV uploads fail, check that the `process_cv/cv-data/input` directory exists and has write permissions.
 7. **Flask Installation**: If you get "ModuleNotFoundError: No module named 'flask'", run `pip install -r requirements.txt` to install all dependencies.
-8. **python-docx Installation**: If you get "ModuleNotFoundError: No module named 'docx'", run `pip install python-docx` to install the dependency.
 
 ### Dashboard Troubleshooting
 
@@ -723,7 +718,7 @@ If you encounter issues with the dashboard:
    - Look for error messages in the terminal or `dashboard.log`
 
 2. **CV Upload Failures**:
-   - Ensure the file is in PDF or DOCX format
+   - Ensure the file is in PDF format
    - Check that the upload directory exists and has proper permissions
    - Verify that the file size is not too large (browser limitations)
 
@@ -775,11 +770,7 @@ If you encounter issues with the dashboard:
    - The system includes a fallback to treat the response as HTML directly
    - Check the `motivation_letter_generator.log` file for the raw response to diagnose the issue
 
-3. **ModuleNotFoundError: No module named 'docx'**:
-   - This error occurs when the python-docx library is not installed
-   - Run `pip install python-docx` to install the dependency
-
-4. **PermissionError: [Errno 13] Permission denied**:
+3. **PermissionError: [Errno 13] Permission denied**:
    - This error occurs when the system cannot write to a file or directory
    - Check that the output directories have the correct permissions
    - Ensure no other applications have the target files open

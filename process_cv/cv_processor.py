@@ -2,7 +2,6 @@
 
 from pathlib import Path
 import fitz
-import docx
 import openai
 import os
 from dotenv import load_dotenv
@@ -15,19 +14,12 @@ def extract_text_from_pdf(pdf_path):
             text += page.get_text()
     return text
 
-# DOCX extraction function
-def extract_text_from_docx(docx_path):
-    doc = docx.Document(docx_path)
-    return '\n'.join([para.text for para in doc.paragraphs])
-
 # General extraction function
 def extract_cv_text(file_path):
     if file_path.lower().endswith('.pdf'):
         return extract_text_from_pdf(file_path)
-    elif file_path.lower().endswith('.docx'):
-        return extract_text_from_docx(file_path)
     else:
-        raise ValueError("Unsupported file type. Only PDF and DOCX allowed.")
+        raise ValueError("Unsupported file type. Only PDF allowed.")
 
 env_path = Path("c:/Codes/JobsearchAI/process_cv/.env")
 load_dotenv(dotenv_path=env_path)

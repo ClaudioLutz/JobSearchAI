@@ -111,7 +111,7 @@ operation_status = {}
 
 # Configure upload folder
 UPLOAD_FOLDER = 'process_cv/cv-data/input'
-ALLOWED_EXTENSIONS = {'pdf', 'docx'}
+ALLOWED_EXTENSIONS = {'pdf'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # Ensure upload directory exists
@@ -239,7 +239,7 @@ def upload_cv():
             flash(f'Error processing CV: {str(e)}')
             logger.error(f'Error processing CV: {str(e)}')
     else:
-        flash('Invalid file type. Only PDF and DOCX files are allowed.')
+        flash('Invalid file type. Only PDF files are allowed.')
     
     return redirect(url_for('index'))
 
