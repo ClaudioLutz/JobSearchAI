@@ -1145,6 +1145,61 @@ def delete_files():
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'message': f'An unexpected error occurred: {str(e)}'}), 500
 
+@app.route('/view_job_data/<filename>')
+def view_job_data(filename):
+    """Display the contents of a specific job data JSON file."""
+    try:
+        # Secure the filename and construct the path
+        secure_name = secure_filename(filename)
+        file_path = Path('job-data-acquisition/job-data-acquisition/data') / secure_name
+
+        if not file_path.is_file():
+            flash(f'Job data file not found: {secure_name}')
+            logger.error(f"Job data file not found: {file_path}")
+            return redirect(url_for('index'))
+
+        # Load the job data
+        with open(file_path, 'r', encoding='utf-8') as f:
+            job_data = json.load(f)
+
+        # Process the job data based on its structure to get a flat list
+        job_listings = []
+        if isinstance(job_data, list):
+            if len(job_data) > 0:
+                if isinstance(job_data[0], list):
+                    # Flatten array of arrays
+                    for job_array in job_data:
+                        job_listings.extend(job_array)
+                    logger.info(f"Loaded array of arrays structure with {len(job_listings)} jobs from {secure_name}")
+                elif isinstance(job_data[0], dict) and 'content' in job_data[0]:
+                    # Old structure with 'content' property
+                    job_listings = job_data[0]['content']
+                    logger.info(f"Loaded old structure with {len(job_listings)} jobs from {secure_name}")
+                else:
+                    # Assume flat array of job listings
+                    job_listings = job_data
+                    logger.info(f"Loaded flat job data structure with {len(job_listings)} jobs from {secure_name}")
+        else:
+             logger.warning(f"Unexpected job data structure in {secure_name}: {type(job_data)}")
+
+        # Render the new template
+        return render_template('job_data_view.html', jobs=job_listings, filename=secure_name)
+
+    except FileNotFoundError:
+        flash(f'Job data file not found: {filename}')
+        logger.error(f"FileNotFoundError for job data file: {filename}")
+        return redirect(url_for('index'))
+    except json.JSONDecodeError:
+        flash(f'Error decoding JSON from file: {filename}')
+        logger.error(f"JSONDecodeError for job data file: {filename}")
+        return redirect(url_for('index'))
+    except Exception as e:
+        flash(f'An error occurred while viewing job data: {str(e)}')
+        logger.error(f'Error in view_job_data for {filename}: {str(e)}')
+        import traceback
+        logger.error(traceback.format_exc())
+        return redirect(url_for('index'))
+
 @app.route('/generate_multiple_letters', methods=['POST'])
 def generate_multiple_letters():
     """Generate motivation letters for multiple selected jobs"""

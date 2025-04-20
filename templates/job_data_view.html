@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Data: {{ filename }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <style>
+        .modal-body pre {
+            white-space: pre-wrap; /* Allow wrapping */
+            word-wrap: break-word; /* Break long words */
+            max-height: 60vh; /* Limit modal height */
+            overflow-y: auto; /* Add scroll if needed */
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1>Job Data: <span class="fs-4">{{ filename }}</span></h1> {# Removed text-muted class #}
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Dashboard</a>
+        </div>
+
+        {% if jobs %}
+            <div class="table-responsive">
+                <table class="table table-dark table-hover"> <!-- Added table-dark, removed table-striped -->
+                    <thead>
+                        <tr>
+                            <th>Posting Date</th>
+                            <th>Job Title</th>
+                            <th>Company Name</th>
+                            <th>Location</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for job in jobs %}
+                        {% set job_index = loop.index0 %} {# Get index for unique modal IDs #}
+                        <tr>
+                            <td>{{ job.get('Posting Date', 'N/A') }}</td>
+                            <td>{{ job.get('Job Title', 'N/A') }}</td>
+                            <td>{{ job.get('Company Name', 'N/A') }}</td>
+                            <td>{{ job.get('Location', 'N/A') }}</td>
+                            <td>
+                                <div class="dropdown">
+                                    <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" id="dropdownMenuButton{{ job_index }}" data-bs-toggle="dropdown" aria-expanded="false">
+                                        Details
+                                    </button>
+                                    <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton{{ job_index }}">
+                                        <li>
+                                            <button class="dropdown-item view-skills-btn" type="button"
+                                                    data-bs-toggle="modal" data-bs-target="#detailsModal"
+                                                    data-title="Required Skills: {{ job.get('Job Title', 'N/A') }}"
+                                                    data-content="{{ job.get('Required Skills', 'N/A') }}">
+                                                View Required Skills
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button class="dropdown-item view-description-btn" type="button"
+                                                    data-bs-toggle="modal" data-bs-target="#detailsModal"
+                                                    data-title="Job Description: {{ job.get('Job Title', 'N/A') }}"
+                                                    data-content="{{ job.get('Job Description', 'N/A') }}">
+                                                View Job Description
+                                            </button>
+                                        </li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            {% set app_url = job.get('Application URL', '#') %}
+                                            {% if app_url and app_url != '#' and app_url != 'N/A' %}
+                                                {% if app_url.startswith('/') %}
+                                                    {% set full_url = 'https://www.ostjob.ch' + app_url %}
+                                                {% else %}
+                                                    {% set full_url = app_url %}
+                                                {% endif %}
+                                                <a class="dropdown-item" href="{{ full_url }}" target="_blank">View Job Ad <span class="external-link-icon">↗</span></a>
+                                            {% else %}
+                                                <span class="dropdown-item disabled">No Application URL</span>
+                                            {% endif %}
+                                        </li>
+                                    </ul>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-warning" role="alert">
+                No job listings found in this file or the file could not be processed correctly.
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Details Modal -->
+    <div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="detailsModalLabel">Details</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <pre id="detailsModalContent"></pre>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // JavaScript to populate and show the modal
+        var detailsModal = document.getElementById('detailsModal');
+        detailsModal.addEventListener('show.bs.modal', function (event) {
+            // Button that triggered the modal
+            var button = event.relatedTarget;
+            // Extract info from data-* attributes
+            var title = button.getAttribute('data-title');
+            var content = button.getAttribute('data-content');
+
+            // Update the modal's content.
+            var modalTitle = detailsModal.querySelector('.modal-title');
+            var modalBodyPre = detailsModal.querySelector('#detailsModalContent');
+
+            modalTitle.textContent = title;
+            modalBodyPre.textContent = content; // Using textContent preserves formatting like newlines
+        });
+    </script>
+</body>
+</html>
