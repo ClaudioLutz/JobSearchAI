@@ -126,8 +126,8 @@ graph TD
     MLG --> OPENAI
     WTG --> DOCXTPL
 
-    classDef component fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef external fill:#9cf,stroke:#333,stroke-width:1px;
+    classDef component fill:#f9f,stroke:#333,stroke-width:2px,color:#000;
+    classDef external fill:#9cf,stroke:#333,stroke-width:1px,color:#000;
 
     class DASH,CVPROC,JDA,JM,MLG,WTG component;
     class OPENAI,SCRAPEGRAPH,DOCXTPL,PYMUPDF,FLASK external;
