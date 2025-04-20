@@ -299,6 +299,94 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     } // End if (cvSummaryModalElement)
 
+    // --- Handle Generate Letter Link Clicks (New for Dropdown) ---
+    document.body.addEventListener('click', function(event) {
+        if (event.target.classList.contains('generate-letter-link')) {
+            event.preventDefault(); // Prevent default link behavior
+
+            const link = event.target;
+            const jobUrl = link.dataset.jobUrl;
+            const cvFilename = link.dataset.cvFilename;
+            const reportFile = link.dataset.reportFile;
+            const jobTitle = link.dataset.jobTitle; // Optional, for potential status messages
+
+            if (!jobUrl || !cvFilename || !reportFile) {
+                console.error('Missing data attributes on generate-letter-link:', link.dataset);
+                alert('Error: Could not get necessary data to generate letter.');
+                return;
+            }
+
+            // Temporarily disable link to prevent multiple clicks (optional)
+            link.classList.add('disabled');
+            link.style.pointerEvents = 'none'; // Make it visually disabled
+
+            // Create FormData
+            const formData = new FormData();
+            formData.append('cv_filename', cvFilename);
+            formData.append('job_url', jobUrl);
+            formData.append('report_file', reportFile);
+            formData.append('job_title', jobTitle); // Send job title too
+
+            // Submit using fetch (similar to existing form logic)
+            fetch('/generate_motivation_letter', { // Use the correct endpoint
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text()) // Get response as text to parse HTML
+            .then(html => {
+                // Parse the HTML to extract the operation ID from the flash message
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const flashMessages = doc.querySelectorAll('.alert');
+
+                // Look for an operation ID in the flash messages
+                let operationId = null;
+                flashMessages.forEach(message => {
+                    const match = message.textContent.match(/operation_id=([a-f0-9-]+)/i);
+                    if (match && match[1]) {
+                        operationId = match[1];
+                    }
+                });
+
+                if (operationId) {
+                    // Start checking the operation status using the existing function
+                    checkOperationStatus(operationId, (status) => {
+                        // Re-enable link when operation completes (success or fail)
+                        link.classList.remove('disabled');
+                        link.style.pointerEvents = 'auto';
+
+                        // Existing completion logic from checkOperationStatus will handle modal updates
+                        if (status.status === 'completed') {
+                             // Optionally add specific success handling here if needed
+                             console.log(`Letter generation completed for ${jobTitle}`);
+                             // Maybe update the dropdown item? e.g., change text to "View Letter"
+                             // This would require more complex DOM manipulation. For now, rely on modal.
+                        } else if (status.status === 'failed') {
+                             // Optionally add specific failure handling here
+                             console.error(`Letter generation failed for ${jobTitle}`);
+                             alert(`Failed to generate letter for ${jobTitle}. Check logs for details.`);
+                        }
+                    });
+                } else {
+                    // If no operation ID was found, handle error
+                    console.error('Could not find operation_id in response for generate_motivation_letter');
+                    alert('Error starting letter generation process. Please check the console or server logs.');
+                    // Re-enable link on error
+                    link.classList.remove('disabled');
+                    link.style.pointerEvents = 'auto';
+                }
+            })
+            .catch(error => {
+                console.error('Error submitting generate letter request:', error);
+                alert(`Error generating letter: ${error.message}`);
+                // Re-enable link on error
+                link.classList.remove('disabled');
+                link.style.pointerEvents = 'auto';
+            });
+        }
+    });
+    // --- End Handle Generate Letter Link Clicks ---
+
     // --- Bulk Delete Functionality ---
     const fileSections = [
         { listId: 'cv-list', checkboxClass: 'cv-checkbox', buttonSelector: '.bulk-delete-btn[data-file-type="cv"]', fileType: 'cv' },
