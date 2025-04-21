@@ -839,7 +839,7 @@ def generate_motivation_letter(cv_summary, job_details):
         logger.error(f"Error generating motivation letter: {str(e)}")
         return None
 
-def main(cv_filename, job_url):
+def main(cv_filename, job_url, existing_job_details=None):
     """Main function to generate a motivation letter"""
     logger.info(f"Starting motivation letter generation for CV: {cv_filename} and job URL: {job_url}")
     
@@ -851,11 +851,15 @@ def main(cv_filename, job_url):
     
     logger.info("Successfully loaded CV summary")
     
-    # Get the job details
-    job_details = get_job_details(job_url)
-    if not job_details:
-        logger.error("Failed to get job details")
-        return None
+    # Get the job details - use existing details if provided
+    if existing_job_details:
+        job_details = existing_job_details
+        logger.info(f"Using provided job details instead of extracting again. Job Title: {job_details.get('Job Title', 'N/A')}")
+    else:
+        job_details = get_job_details(job_url)
+        if not job_details:
+            logger.error("Failed to get job details")
+            return None
     
     logger.info("Successfully got job details")
     

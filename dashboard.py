@@ -784,7 +784,8 @@ def generate_motivation_letter_route():
                 
                 # Generate the motivation letter
                 logger.info(f"Calling generate_motivation_letter with cv_filename={cv_filename}, job_url={job_url}")
-                result = generate_motivation_letter(cv_filename, job_url)
+                # Pass the existing job details to the motivation letter generator
+                result = generate_motivation_letter(cv_filename, job_url, existing_job_details=job_details)
                 
                 if not result:
                     logger.error("Failed to generate motivation letter, result is None")
@@ -1526,9 +1527,12 @@ def generate_multiple_letters():
 
         try:
             logger.info(f"Generating letter for CV '{cv_base_name}' and URL '{job_url}'")
+            # Get job details from pre-scraped data
+            job_details = get_job_details_for_url(job_url)
+            
             # Call the main function from motivation_letter_generator
-            # It handles saving files and returns a result dict (or None on failure)
-            result = generate_motivation_letter(cv_base_name, job_url)
+            # Pass the existing job details to ensure consistent job titles
+            result = generate_motivation_letter(cv_base_name, job_url, existing_job_details=job_details)
 
             if result:
                 logger.info(f"Successfully generated letter for URL: {job_url}")
