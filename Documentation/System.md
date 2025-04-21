@@ -26,10 +26,15 @@ The system operates through a series of interconnected components, primarily man
     *   The top matches (up to `max_results`), including the evaluation details and the path to the CV used, are saved to timestamped JSON and Markdown files in the `job_matches/` directory.
 
 4.  **Motivation Letter Generation**:
-    *   User selects one or more matched jobs from the results page on the dashboard.
-    *   The `Motivation Letter Generator` (`motivation_letter_generator.py`) retrieves the relevant CV summary and job details.
-    *   It attempts to get up-to-date job details using ScrapeGraph AI directly from the job URL, falling back to the pre-scraped data if necessary.
-    *   It uses OpenAI (`gpt-4.1`) with a detailed prompt (including CV summary and job details) to generate a personalized motivation letter, requesting a specific JSON structure.
+    *   User selects one or more matched jobs from the results page on the dashboard, potentially selecting a specific CV via a dropdown.
+    *   The `Motivation Letter Generator` (`motivation_letter_generator.py`) retrieves the relevant CV summary.
+    *   It attempts to get up-to-date job details using a **multi-step process**:
+        *   Tries extracting content from a specific iframe on the job page.
+        *   If no iframe, searches the page's HTML for direct PDF links and processes the first one found.
+        *   If no PDF link, checks if the job URL itself points directly to a PDF.
+        *   If a PDF is found (via link or direct URL), it extracts text using PyMuPDF, falling back to OCR (`easyocr`, if installed) for image-based PDFs. Extracted text is structured using OpenAI.
+        *   If direct methods fail, it falls back to searching the latest pre-scraped data file.
+    *   It uses OpenAI (`gpt-4.1`) with a detailed prompt (including CV summary and the obtained job details) to generate a personalized motivation letter, requesting a specific JSON structure.
     *   The generated letter is saved as both JSON and HTML files in the `motivation_letters/` directory.
     *   The raw scraped job details used for generation are also saved to a separate JSON file (`_scraped_data.json`) in the same directory.
 
@@ -59,8 +64,9 @@ The system operates through a series of interconnected components, primarily man
 ## Key Technologies
 
 *   **Backend**: Python, Flask
-*   **AI/LLM**: OpenAI GPT models (specifically `gpt-4.1` used in several components), ScrapeGraph AI
-*   **Web Scraping**: ScrapeGraph AI, PyMuPDF (for PDF text extraction)
+*   **AI/LLM**: OpenAI GPT models (specifically `gpt-4.1` used in several components), potentially ScrapeGraph AI (used implicitly or explicitly in scraping steps).
+*   **Web Scraping/Parsing**: `requests`, `BeautifulSoup4`, potentially ScrapeGraph AI.
+*   **PDF Processing**: PyMuPDF (`fitz`), `easyocr` (optional, for OCR), `Pillow`, `numpy` (OCR dependencies).
 *   **Document Generation**: `docxtpl`, `python-docx`
 *   **Frontend**: HTML, CSS, JavaScript, Bootstrap 5 (assumed)
 *   **Data Format**: JSON
@@ -72,7 +78,7 @@ The system operates through a series of interconnected components, primarily man
 *   **API Keys**: An OpenAI API key is required for the CV Processor, Job Matcher, and Motivation Letter Generator. It's typically loaded from `process_cv/.env`.
 *   **Job Scraper Settings**: The `job-data-acquisition/settings.json` file configures target URLs, LLM details for scraping, logging, output directories, and scraping parameters like `max_pages`.
 *   **Word Template**: The `motivation_letters/template/motivation_letter_template.docx` file serves as the base for generated Word documents.
-*   **Dependencies**: Python dependencies are listed in `requirements.txt` (and potentially `job-data-acquisition/dependencies.txt`). Key libraries include `Flask`, `openai`, `python-dotenv`, `scrapegraphai`, `pymupdf`, `docxtpl`.
+*   **Dependencies**: Python dependencies are listed in `requirements.txt`. Key libraries include `Flask`, `openai`, `python-dotenv`, `requests`, `beautifulsoup4`, `pymupdf`, `docxtpl`, and potentially `scrapegraphai`, `easyocr`, `Pillow`, `numpy`.
 
 ## Running the System
 
@@ -101,10 +107,13 @@ graph TD
 
     subgraph External Services/Libraries
         OPENAI[OpenAI API]
-        SCRAPEGRAPH[ScrapeGraph AI]
+        SCRAPEGRAPH[ScrapeGraph AI (Optional/Implicit)]
         DOCXTPL[docxtpl]
         PYMUPDF[PyMuPDF]
         FLASK[Flask]
+        REQUESTS[requests]
+        BS4[BeautifulSoup4]
+        EASYOCR[easyocr (Optional)]
     end
 
     DASH --> FLASK
@@ -116,22 +125,28 @@ graph TD
 
     JM --> CVPROC
 
-    MLG --> JDA
+    MLG --> JDA // Fallback data source
 
     CVPROC --> PYMUPDF
     CVPROC --> OPENAI
     JDA --> SCRAPEGRAPH
     JDA --> OPENAI
     JM --> OPENAI
-    MLG --> SCRAPEGRAPH
-    MLG --> OPENAI
+    MLG --> OPENAI // For structuring extracted text & generation
+    MLG --> REQUESTS // For HTTP requests (iframe, PDF checks)
+    MLG --> BS4 // For parsing HTML (iframe fallback, PDF link search)
+    MLG --> PYMUPDF // For PDF text extraction
+    MLG --> EASYOCR // Optional for PDF OCR
     WTG --> DOCXTPL
 
     classDef component fill:#f9f,stroke:#333,stroke-width:2px,color:#000;
     classDef external fill:#9cf,stroke:#333,stroke-width:1px,color:#000;
+    classDef optional fill:#cff,stroke:#333,stroke-width:1px,color:#000;
+
 
     class DASH,CVPROC,JDA,JM,MLG,WTG component;
-    class OPENAI,SCRAPEGRAPH,DOCXTPL,PYMUPDF,FLASK external;
+    class OPENAI,DOCXTPL,PYMUPDF,FLASK,REQUESTS,BS4 external;
+    class SCRAPEGRAPH,EASYOCR optional;
 ```
 
 **Notes:**

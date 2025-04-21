@@ -48,14 +48,19 @@
     *   View detailed match results on a separate page (`results.html`).
     *   Download job match reports (MD format).
     *   Delete individual or multiple reports (MD and associated JSON) (single via link, bulk via AJAX).
-5.  **Motivation Letter Generation**:
-    *   Generate personalized motivation letters for specific job postings from the results page (background task).
+5.  **Motivation Letter Generation (from Results Page)**:
+    *   **CV Selection**: A dropdown menu on the results page allows the user to select which CV summary to use for letter generation. It defaults to the CV used for the report (if found) or the first available CV.
+    *   Generate personalized motivation letters for specific job postings using the selected CV (background task).
     *   View generated letters (renders `motivation_letter.html`).
     *   Download motivation letters in HTML format.
     *   Download motivation letters in Word format (generates DOCX from JSON on-the-fly if needed).
     *   View the raw scraped data used for a specific letter via the "View Scraped Data" option in the Actions dropdown on the results page (renders `scraped_data_view.html`).
-    *   Select multiple job matches on the results page and generate letters for all selected jobs with a single click (AJAX call to `/generate_multiple_letters`).
-6.  **User Feedback and Progress Tracking**:
+    *   Select multiple job matches on the results page and generate letters for all selected jobs using the currently selected CV with a single click (AJAX call to `/generate_multiple_letters`).
+6.  **File Linking & Display (Results Page)**:
+    *   Improved logic reliably links job matches displayed on the results page to their corresponding generated files (`.html`, `.docx`, `_scraped_data.json`, `.json` letter structure).
+    *   Matching is done by comparing Application URLs between the report and scraped data files.
+    *   Filenames for checking existence are constructed using the Job Title found *within* the matched `_scraped_data.json` file.
+7.  **User Feedback and Progress Tracking**:
     *   Visual feedback via Flask `flash` messages and likely JS-driven button states (e.g., spinners).
     *   Background processing for long operations (scraping, matching, letter generation) using `threading`.
     *   Progress tracking via unique operation IDs (`uuid`) stored in server-side dictionaries (`operation_progress`, `operation_status`).
@@ -67,9 +72,11 @@
 2.  **Setup & Data Tab**: Allows users to upload CVs and run the job scraper (with configurable `max_pages`). Uploaded CVs are processed immediately to generate summaries.
 3.  **Run Process Tab**: Allows users to run the job matcher or the combined scrape-and-match process using a selected CV and configurable parameters. These run as background tasks.
 4.  **View Files Tab**: Displays available CVs, Job Data files, and Reports in collapsible accordion sections, showing timestamps and providing view/delete actions (single and bulk).
-5.  Displays job match results on a separate page (`/view_results/<report_file>`), checking for existing motivation letters and providing generation options.
+5.  Displays job match results on a separate page (`/view_results/<report_file>`). This page now includes:
+    *   A dropdown to select the CV for letter generation.
+    *   Improved logic to accurately check for and link to existing motivation letters (HTML, DOCX), structured letter JSON, and scraped job data JSON based on Application URL matching.
 6.  Provides options to download job match reports (MD).
-7.  Allows users to generate personalized motivation letters (single or multiple) for specific job postings from the results page. Generation runs as a background task.
+7.  Allows users to generate personalized motivation letters (single or multiple) for specific job postings from the results page, using the **currently selected CV** from the dropdown. Generation runs as a background task.
 8.  Displays generated motivation letters with options to download in HTML or Word format. Word documents are generated from JSON on demand if not already present.
 
 **Functions (Routes)**:
@@ -78,10 +85,10 @@
 - `run_job_matcher()`: Starts the job matcher background task with selected CV and parameters. Returns operation ID.
 - `run_job_scraper()`: Updates `settings.json` and starts the job scraper background task. Returns operation ID.
 - `run_combined_process()`: Starts the combined scraper and matcher background task. Returns operation ID.
-- `view_results(report_file)`: Loads results from JSON, checks for existing letters, renders `results.html`.
+- `view_results(report_file)`: Loads results from JSON, fetches available CV summaries for the dropdown, uses improved logic to check for existing letters/data files by matching Application URLs and using titles from scraped data, renders `results.html`.
 - `download_report(report_file)`: Download a job match report (MD).
 - `view_cv_summary(cv_file_rel_path)`: Fetch and display CV summary via AJAX, generating if needed.
-- `generate_motivation_letter_route()`: Starts the motivation letter generation background task for a specific job. Returns operation ID.
+- `generate_motivation_letter_route()`: Starts the motivation letter generation background task for a specific job, using the **selected CV** from the request data. Returns operation ID.
 - `download_motivation_letter()`: Download a generated motivation letter (HTML).
 - `download_motivation_letter_docx()`: Download a generated motivation letter (DOCX).
 - `download_docx_from_json()`: Generate DOCX from JSON if needed, then download.
@@ -92,5 +99,5 @@
 - `delete_files()`: Handle bulk file deletion (CVs, Job Data, Reports) via AJAX POST request.
 - `view_job_data(filename)`: Display contents of a bulk job data JSON file using `job_data_view.html`.
 - `view_scraped_data(scraped_data_filename)`: Display contents of a specific scraped job data JSON file using `scraped_data_view.html`.
-- `generate_multiple_letters()`: Handle bulk motivation letter generation via AJAX POST request.
+- `generate_multiple_letters()`: Handle bulk motivation letter generation via AJAX POST request, using the **selected CV** from the request data.
 - `get_operation_status(operation_id)`: Provide progress updates (percentage, status message) for background tasks via AJAX GET request.

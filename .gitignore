@@ -86,3 +86,4 @@ htmlcov/
 .env.development.local
 .env.test.local
 .env.production.local
+last_session.md
