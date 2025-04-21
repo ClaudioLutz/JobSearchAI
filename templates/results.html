@@ -115,6 +115,11 @@
                                                         {% if match.motivation_letter_docx_path %}
                                                             <li><a class="dropdown-item" href="{{ url_for('download_motivation_letter_docx', file_path=match.motivation_letter_docx_path) }}">Download Word</a></li>
                                                         {% endif %}
+
+                                                        <!-- View Scraped Data (conditional) -->
+                                                        {% if match.has_scraped_data %}
+                                                            <li><a class="dropdown-item" href="{{ url_for('view_scraped_data', scraped_data_filename=match.scraped_data_filename) }}">View Scraped Data</a></li>
+                                                        {% endif %}
                                                     {% else %}
                                                          <li><span class="dropdown-item disabled">Letter Actions N/A</span></li>
                                                     {% endif %}

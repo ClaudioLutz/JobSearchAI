@@ -453,10 +453,16 @@ def view_results(report_file):
                 json_path = os.path.join('motivation_letters', f"motivation_letter_{sanitized_job_title}.json")
                 docx_path = os.path.join('motivation_letters', f"motivation_letter_{sanitized_job_title}.docx")
                 
+                # Check for scraped data file
+                scraped_data_filename = f"motivation_letter_{sanitized_job_title}_scraped_data.json"
+                scraped_data_path = os.path.join('motivation_letters', scraped_data_filename)
+                
                 # Add flags to the match data
                 match['has_motivation_letter'] = os.path.exists(html_path) and os.path.exists(json_path)
                 match['motivation_letter_html_path'] = html_path if match['has_motivation_letter'] else None
                 match['motivation_letter_docx_path'] = docx_path if os.path.exists(docx_path) else None
+                match['has_scraped_data'] = os.path.exists(scraped_data_path) # Check if scraped data file exists
+                match['scraped_data_filename'] = scraped_data_filename if match['has_scraped_data'] else None # Pass filename if it exists
         
         return render_template('results.html', matches=matches, report_file=report_file, cv_filename=cv_filename)
     except Exception as e:
@@ -1165,6 +1171,43 @@ def delete_files():
         import traceback
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'message': f'An unexpected error occurred: {str(e)}'}), 500
+
+@app.route('/view_scraped_data/<scraped_data_filename>')
+def view_scraped_data(scraped_data_filename):
+    """Display the contents of a specific scraped job data JSON file."""
+    try:
+        # Secure the filename and construct the path
+        secure_name = secure_filename(scraped_data_filename)
+        file_path = Path('motivation_letters') / secure_name
+
+        if not file_path.is_file():
+            flash(f'Scraped job data file not found: {secure_name}')
+            logger.error(f"Scraped job data file not found: {file_path}")
+            # Redirect back to the main dashboard or results page? Let's use index for now.
+            return redirect(url_for('index'))
+
+        # Load the job data (which is a single dictionary)
+        with open(file_path, 'r', encoding='utf-8') as f:
+            job_details = json.load(f)
+
+        # Render a template to display the dictionary
+        # We might need to create scraped_data_view.html or adapt job_data_view.html
+        return render_template('scraped_data_view.html', job_details=job_details, filename=secure_name)
+
+    except FileNotFoundError:
+        flash(f'Scraped job data file not found: {scraped_data_filename}')
+        logger.error(f"FileNotFoundError for scraped data file: {scraped_data_filename}")
+        return redirect(url_for('index'))
+    except json.JSONDecodeError:
+        flash(f'Error decoding JSON from file: {scraped_data_filename}')
+        logger.error(f"JSONDecodeError for scraped data file: {scraped_data_filename}")
+        return redirect(url_for('index'))
+    except Exception as e:
+        flash(f'An error occurred while viewing scraped job data: {str(e)}')
+        logger.error(f'Error in view_scraped_data for {scraped_data_filename}: {str(e)}')
+        import traceback
+        logger.error(traceback.format_exc())
+        return redirect(url_for('index'))
 
 @app.route('/view_job_data/<filename>')
 def view_job_data(filename):

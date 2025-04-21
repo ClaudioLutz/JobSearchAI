@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scraped Job Data - JobsearchAI Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Scraped Job Data</h1>
+            {# Add a back button - maybe back to results? Requires passing report_file or using history #}
+            {# For simplicity, just back to dashboard for now #}
+            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Back to Dashboard</a>
+        </div>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-info alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="h5 mb-0">Details for: {{ filename }}</h2>
+            </div>
+            <div class="card-body">
+                {% if job_details %}
+                    <dl class="row">
+                        {% for key, value in job_details.items() %}
+                            <dt class="col-sm-3">{{ key.replace('_', ' ').title() }}</dt>
+                            <dd class="col-sm-9">
+                                {% if value is mapping %} {# Check if value is a dictionary #}
+                                    <pre>{{ value | tojson(indent=2) }}</pre>
+                                {% elif value is iterable and value is not string %} {# Check if value is a list/tuple #}
+                                    <ul>
+                                        {% for item in value %}
+                                            <li>{{ item }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                {% else %}
+                                    <pre style="white-space: pre-wrap; word-wrap: break-word;">{{ value }}</pre> {# Use <pre> to preserve newlines and wrap long lines #}
+                                {% endif %}
+                            </dd>
+                            <hr class="my-2"> {# Add a separator between items #}
+                        {% endfor %}
+                    </dl>
+                {% else %}
+                    <p>No job details found in this file.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

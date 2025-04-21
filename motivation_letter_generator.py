@@ -416,7 +416,7 @@ def generate_motivation_letter(cv_summary, job_details):
         
         WICHTIG: Verwende die detaillierten Informationen aus der Stellenbeschreibung, um ein personalisiertes und spezifisches Motivationsschreiben zu erstellen. Gehe auf konkrete Anforderungen und Verantwortlichkeiten ein und zeige, wie der Bewerber diese erfüllen kann.
         
-        WICHTIG: Der Motivtions Text darf maximal 150-200 Wörter beinhalten. 
+        WICHTIG: Der Motivtions Text darf maximal 200-300 Wörter beinhalten. 
 
         "ß" soll als "ss" geschrieben werden. 
 
@@ -515,12 +515,20 @@ def generate_motivation_letter(cv_summary, job_details):
             logger.info(f"Saving JSON motivation letter to file: {json_file_path}")
             with open(json_file_path, 'w', encoding='utf-8') as f:
                 json.dump(motivation_letter_json, f, ensure_ascii=False, indent=2)
+
+            # Save the scraped job details as well
+            scraped_data_filename = f"motivation_letter_{job_title}_scraped_data.json"
+            scraped_data_path = motivation_letters_dir / scraped_data_filename
+            logger.info(f"Saving scraped job details to file: {scraped_data_path}")
+            with open(scraped_data_path, 'w', encoding='utf-8') as f:
+                json.dump(job_details, f, ensure_ascii=False, indent=2) # Save the original job_details dict
             
             return {
                 'motivation_letter_json': motivation_letter_json,
                 'motivation_letter_html': html_content,
                 'html_file_path': str(html_file_path),
-                'json_file_path': str(json_file_path)
+                'json_file_path': str(json_file_path),
+                'scraped_data_path': str(scraped_data_path) # Add path to scraped data
             }
             
         except json.JSONDecodeError as e:
