@@ -306,13 +306,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const link = event.target;
             const jobUrl = link.dataset.jobUrl;
-            const cvFilename = link.dataset.cvFilename;
+            // const cvFilename = link.dataset.cvFilename; // No longer read from link
             const reportFile = link.dataset.reportFile;
             const jobTitle = link.dataset.jobTitle; // Optional, for potential status messages
 
+            // Get selected CV from dropdown
+            const cvSelectElement = document.getElementById('cv-select');
+            if (!cvSelectElement) {
+                console.error('CV select dropdown (#cv-select) not found.');
+                alert('Error: CV selection dropdown is missing.');
+                return;
+            }
+            const cvFilename = cvSelectElement.value;
+
             if (!jobUrl || !cvFilename || !reportFile) {
-                console.error('Missing data attributes on generate-letter-link:', link.dataset);
-                alert('Error: Could not get necessary data to generate letter.');
+                console.error('Missing data for generate letter link:', { jobUrl, cvFilename, reportFile });
+                alert('Error: Could not get necessary data (Job URL, CV Filename, Report File) to generate letter.');
                 return;
             }
 
@@ -472,11 +481,20 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log("#generate-selected-letters-btn clicked!"); // Debug log 2
             const selectedCheckboxes = document.querySelectorAll('.job-select-checkbox:checked');
             console.log(`Found ${selectedCheckboxes.length} selected checkboxes.`); // Debug log 3
-            const cvFilename = this.getAttribute('data-cv-filename'); // Get CV filename directly
+            // const cvFilename = this.getAttribute('data-cv-filename'); // No longer read from button
+
+            // Get selected CV from dropdown
+            const cvSelectElement = document.getElementById('cv-select');
+             if (!cvSelectElement) {
+                console.error('CV select dropdown (#cv-select) not found.');
+                alert('Error: CV selection dropdown is missing.');
+                return;
+            }
+            const cvFilename = cvSelectElement.value;
 
             if (!cvFilename) {
-                alert('Error: Could not determine the CV filename.');
-                console.error("CV filename not found in button's data attribute.");
+                alert('Error: No CV selected in the dropdown.');
+                console.error("CV filename is empty from dropdown.");
                 return;
             }
 

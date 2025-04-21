@@ -37,8 +37,26 @@
             </div>
             <div class="card-body">
                 {% if matches %}
-                    <div class="mb-3">
-                        <button id="generate-selected-letters-btn" class="btn btn-success" data-report-file="{{ report_file }}" data-cv-filename="{{ cv_filename|default('') }}">Generate Letters for Selected</button>
+                    <div class="mb-3 d-flex align-items-center">
+                        {# CV Selection Dropdown #}
+                        <div class="me-3">
+                            <label for="cv-select" class="form-label me-2">CV for Letter Generation:</label>
+                            <select id="cv-select" class="form-select d-inline-block w-auto">
+                                {% set default_cv = associated_cv_filename if associated_cv_filename else (available_cvs[0] if available_cvs else '') %}
+                                {% for cv_name in available_cvs %}
+                                    <option value="{{ cv_name }}" {% if cv_name == default_cv %}selected{% endif %}>{{ cv_name }}</option>
+                                {% endfor %}
+                                {% if not available_cvs %}
+                                    <option value="" disabled selected>No CVs found</option>
+                                {% endif %}
+                            </select>
+                            {% if not associated_cv_filename and available_cvs %}
+                                <small class="ms-2 text-muted">(Defaulted to first available CV)</small>
+                            {% endif %}
+                        </div>
+
+                        {# Generate Button #}
+                        <button id="generate-selected-letters-btn" class="btn btn-success" data-report-file="{{ report_file }}" {% if not available_cvs %}disabled title="No CVs available for selection."{% endif %}>Generate Letters for Selected</button>
                         <span id="selected-status" class="ms-2"></span> <!-- For status messages -->
                     </div>
                     <div class="table-responsive">
@@ -103,12 +121,12 @@
                                                         {% if match.has_motivation_letter %}
                                                             <li><a class="dropdown-item" href="{{ url_for('view_motivation_letter', operation_id='existing', file_path=match.motivation_letter_html_path, report_file=report_file) }}">View Letter</a></li>
                                                         {% else %}
-                                                            {# Use specific class and data attributes for JS hook #}
+                                                            {# Use specific class and data attributes for JS hook - CV filename will be read from dropdown by JS #}
                                                             <li><a class="dropdown-item generate-letter-link" href="#" role="button"
                                                                    data-job-url="{{ full_job_url }}"
-                                                                   data-cv-filename="{{ cv_filename|default('Lebenslauf') }}"
                                                                    data-report-file="{{ report_file }}"
-                                                                   data-job-title="{{ match.job_title|escape }}">Generate Letter</a></li>
+                                                                   data-job-title="{{ match.job_title|escape }}"
+                                                                   {% if not available_cvs %}disabled title="No CVs available for selection."{% endif %}>Generate Letter</a></li>
                                                         {% endif %}
 
                                                         <!-- Download Word (conditional) -->

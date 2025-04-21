@@ -409,66 +409,293 @@ def view_results(report_file):
     # Get the JSON file path
     json_file = report_file.replace('.md', '.json')
     json_path = os.path.join('job_matches', json_file)
-    
+
     try:
+        # Get list of available CV summary base names
+        processed_cv_dir = Path('process_cv/cv-data/processed')
+        available_cvs = []
+        if processed_cv_dir.exists():
+            available_cvs = sorted(
+                p.stem.replace('_summary', '')
+                for p in processed_cv_dir.glob('*_summary.txt')
+            )
+        logger.info(f"Available CVs for dropdown: {available_cvs}")
+
         # Load the job matches from the JSON file
         with open(json_path, 'r', encoding='utf-8') as f:
             matches = json.load(f)
 
-        # Extract CV base name from the 'cv_path' stored within the matches data
-        cv_filename = None
-        if matches and isinstance(matches, list) and len(matches) > 0 and 'cv_path' in matches[0]:
+        # Determine associated CV filename
+        associated_cv_filename = None
+        if matches and isinstance(matches, list) and matches and 'cv_path' in matches[0]:
             try:
-                # Extract the filename stem (name without extension) from the stored path
-                cv_full_path = matches[0]['cv_path']
-                cv_filename = Path(cv_full_path).stem
-                logger.info(f"Extracted CV filename '{cv_filename}' from matches[0]['cv_path']: {cv_full_path}")
+                potential = Path(matches[0]['cv_path']).stem
+                if potential in available_cvs:
+                    associated_cv_filename = potential
+                    logger.info(f"Associated CV '{potential}' for {json_path}")
+                else:
+                    logger.warning(
+                        f"'{potential}' not in available summaries {available_cvs}"
+                    )
             except Exception as path_e:
-                logger.error(f"Error extracting filename from cv_path '{matches[0].get('cv_path')}': {path_e}")
-        else:
-            logger.warning(f"Could not find 'cv_path' in the first match of {json_path} to determine CV filename.")
+                logger.error(f"Error extracting cv_path: {path_e}")
 
-        # Fix application URLs - extract path and create proper ostjob.ch URL
-        for match in matches:
-            if match.get('application_url') and match['application_url'] != 'N/A':
-                url = match['application_url']
-                if url.startswith("http://127.0.0.1:5000/") and url.count('/') >= 3:
-                    # Extract path from http://127.0.0.1:5000/path
-                    path = url.split('/', 3)[3]
-                    match['application_url'] = f"https://www.ostjob.ch/{path}"
-                elif url.startswith("127.0.0.1:5000/") and url.count('/') >= 1:
-                    # Extract path from 127.0.0.1:5000/path
-                    path = url.split('/', 1)[1]
-                    match['application_url'] = f"https://www.ostjob.ch/{path}"
-            
-            # Check if a motivation letter already exists for this job
-            if 'job_title' in match:
-                job_title = match['job_title']
-                # Sanitize job title to match the filename format
-                sanitized_job_title = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in job_title)
-                sanitized_job_title = sanitized_job_title.replace(' ', '_')[:30]
-                
-                # Check for existing HTML and JSON files
-                html_path = os.path.join('motivation_letters', f"motivation_letter_{sanitized_job_title}.html")
-                json_path = os.path.join('motivation_letters', f"motivation_letter_{sanitized_job_title}.json")
-                docx_path = os.path.join('motivation_letters', f"motivation_letter_{sanitized_job_title}.docx")
-                
-                # Check for scraped data file
-                scraped_data_filename = f"motivation_letter_{sanitized_job_title}_scraped_data.json"
-                scraped_data_path = os.path.join('motivation_letters', scraped_data_filename)
-                
-                # Add flags to the match data
-                match['has_motivation_letter'] = os.path.exists(html_path) and os.path.exists(json_path)
-                match['motivation_letter_html_path'] = html_path if match['has_motivation_letter'] else None
-                match['motivation_letter_docx_path'] = docx_path if os.path.exists(docx_path) else None
-                match['has_scraped_data'] = os.path.exists(scraped_data_path) # Check if scraped data file exists
-                match['scraped_data_filename'] = scraped_data_filename if match['has_scraped_data'] else None # Pass filename if it exists
+        if not associated_cv_filename:
+            logger.warning(f"No associated CV for report {json_path}")
+
+        # --- Check for generated files for each match ---
+        letters_dir = Path('motivation_letters')
+        existing_scraped = list(letters_dir.glob('*_scraped_data.json'))
         
-        return render_template('results.html', matches=matches, report_file=report_file, cv_filename=cv_filename)
+        # Get all motivation letter HTML, JSON, and DOCX files for direct checking
+        all_html_files = list(letters_dir.glob('motivation_letter_*.html'))
+        all_json_files = list(letters_dir.glob('motivation_letter_*.json'))
+        all_docx_files = list(letters_dir.glob('motivation_letter_*.docx'))
+        
+        logger.info(f"Found {len(existing_scraped)} scraped data files, {len(all_html_files)} HTML files, {len(all_json_files)} JSON files, and {len(all_docx_files)} DOCX files")
+
+        for match in matches:
+            # Normalize match_app_url
+            match_app_url = match.get('application_url')
+            if match_app_url and match_app_url != 'N/A':
+                if match_app_url.startswith('/'):
+                    match_app_url = urllib.parse.urljoin(
+                        "https://www.ostjob.ch/",
+                        match_app_url.lstrip('/')
+                    )
+            else:
+                match_app_url = None
+
+            # Initialize flags
+            match.update({
+                'has_motivation_letter': False,
+                'motivation_letter_html_path': None,
+                'motivation_letter_docx_path': None,
+                'has_scraped_data': False,
+                'scraped_data_filename': None,
+            })
+
+            if not match_app_url:
+                continue
+                
+            # Get job title from match for direct file checking
+            job_title = match.get('job_title', '')
+            if job_title:
+                logger.info(f"Original job title: '{job_title}'")
+                
+                # Try multiple sanitization approaches
+                sanitization_attempts = []
+                
+                # Approach 1: Standard sanitization as in motivation_letter_generator.py
+                sanitized_job_title_1 = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in job_title)
+                sanitized_job_title_1 = sanitized_job_title_1.replace(' ', '_')[:30]
+                sanitization_attempts.append(sanitized_job_title_1)
+                
+                # Approach 2: Replace "/" with "-" (common in filenames)
+                sanitized_job_title_2 = job_title.replace('/', '-')
+                sanitized_job_title_2 = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in sanitized_job_title_2)
+                sanitized_job_title_2 = sanitized_job_title_2.replace(' ', '_')[:30]
+                sanitization_attempts.append(sanitized_job_title_2)
+                
+                # Approach 3: Remove percentage and parentheses
+                sanitized_job_title_3 = job_title.replace('%', '').replace('(', '').replace(')', '')
+                sanitized_job_title_3 = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in sanitized_job_title_3)
+                sanitized_job_title_3 = sanitized_job_title_3.replace(' ', '_')[:30]
+                sanitization_attempts.append(sanitized_job_title_3)
+                
+                # Approach 4: Just the first part of the job title (before any special chars)
+                first_part = job_title.split(' ')[0]
+                sanitized_job_title_4 = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in first_part)
+                sanitized_job_title_4 = sanitized_job_title_4.replace(' ', '_')[:30]
+                sanitization_attempts.append(sanitized_job_title_4)
+                
+                # Log all sanitization attempts
+                logger.info(f"Trying multiple sanitized job titles: {sanitization_attempts}")
+                
+                # Try each sanitization approach
+                found_files = False
+                for sanitized_job_title in sanitization_attempts:
+                    # Direct file check based on sanitized job title
+                    html_file_direct = letters_dir / f"motivation_letter_{sanitized_job_title}.html"
+                    json_file_direct = letters_dir / f"motivation_letter_{sanitized_job_title}.json"
+                    docx_file_direct = letters_dir / f"motivation_letter_{sanitized_job_title}.docx"
+                    scraped_file_direct = letters_dir / f"motivation_letter_{sanitized_job_title}_scraped_data.json"
+                    
+                    # Check if files exist directly by job title
+                    has_letter_direct = html_file_direct.is_file() and json_file_direct.is_file()
+                    has_docx_direct = docx_file_direct.is_file()
+                    has_scraped_direct = scraped_file_direct.is_file()
+                    
+                    if has_letter_direct or has_docx_direct or has_scraped_direct:
+                        logger.info(f"Found files directly by sanitized job title '{sanitized_job_title}'")
+                        
+                        if has_letter_direct:
+                            match['has_motivation_letter'] = True
+                            match['motivation_letter_html_path'] = str(html_file_direct)
+                            logger.info(f"Found HTML letter directly: {html_file_direct}")
+                        
+                        if has_docx_direct:
+                            match['motivation_letter_docx_path'] = str(docx_file_direct)
+                            logger.info(f"Found DOCX letter directly: {docx_file_direct}")
+                        
+                        if has_scraped_direct:
+                            match['has_scraped_data'] = True
+                            match['scraped_data_filename'] = scraped_file_direct.name
+                            logger.info(f"Found scraped data directly: {scraped_file_direct}")
+                        
+                        found_files = True
+                        break
+                
+                # If we found files with any of the sanitization approaches, skip URL matching
+                if found_files:
+                    continue
+                
+                # If no exact matches found, try a more flexible approach by searching for files
+                # that contain parts of the job title
+                if not found_files:
+                    logger.info(f"No exact matches found, trying partial matching for job title: '{job_title}'")
+                    
+                    # Get key words from the job title (words with 3+ characters)
+                    key_words = [word.lower() for word in job_title.split() if len(word) >= 3]
+                    
+                    # Get all motivation letter files
+                    all_html_files = list(letters_dir.glob('motivation_letter_*.html'))
+                    all_json_files = list(letters_dir.glob('motivation_letter_*.json'))
+                    all_docx_files = list(letters_dir.glob('motivation_letter_*.docx'))
+                    all_scraped_files = list(letters_dir.glob('motivation_letter_*_scraped_data.json'))
+                    
+                    # Try to find files that contain key words from the job title
+                    best_match_html = None
+                    best_match_json = None
+                    best_match_docx = None
+                    best_match_scraped = None
+                    best_match_score = 0
+                    
+                    # Check HTML files
+                    for html_file in all_html_files:
+                        filename = html_file.name.lower()
+                        score = sum(1 for word in key_words if word in filename)
+                        if score > best_match_score:
+                            best_match_score = score
+                            best_match_html = html_file
+                            # Find corresponding JSON and DOCX files
+                            json_file = letters_dir / f"{html_file.stem}.json"
+                            docx_file = letters_dir / f"{html_file.stem}.docx"
+                            scraped_file = letters_dir / f"{html_file.stem}_scraped_data.json"
+                            
+                            if json_file.is_file():
+                                best_match_json = json_file
+                            
+                            if docx_file.is_file():
+                                best_match_docx = docx_file
+                                
+                            if scraped_file.is_file():
+                                best_match_scraped = scraped_file
+                    
+                    if best_match_score > 0:
+                        logger.info(f"Found partial match with score {best_match_score} for job title '{job_title}'")
+                        
+                        if best_match_html and best_match_json:
+                            match['has_motivation_letter'] = True
+                            match['motivation_letter_html_path'] = str(best_match_html)
+                            logger.info(f"Found HTML letter by partial match: {best_match_html}")
+                        
+                        if best_match_docx:
+                            match['motivation_letter_docx_path'] = str(best_match_docx)
+                            logger.info(f"Found DOCX letter by partial match: {best_match_docx}")
+                        
+                        if best_match_scraped:
+                            match['has_scraped_data'] = True
+                            match['scraped_data_filename'] = best_match_scraped.name
+                            logger.info(f"Found scraped data by partial match: {best_match_scraped}")
+                        
+                        # Skip URL matching if we found files by partial matching
+                        continue
+
+            # If direct file check didn't find anything, try URL matching
+            found_files = False
+            for scraped_path in existing_scraped:
+                try:
+                    with open(scraped_path, 'r', encoding='utf-8') as f_scraped:
+                        actual = json.load(f_scraped)
+                    stored_url = actual.get('Application URL')
+                    if stored_url and stored_url != 'N/A':
+                        if stored_url.startswith('/'):
+                            stored_url = urllib.parse.urljoin(
+                                "https://www.ostjob.ch/",
+                                stored_url.lstrip('/')
+                            )
+
+                        # Improved URL comparison - normalize URLs before comparing
+                        def normalize_url(url):
+                            parsed = urllib.parse.urlparse(url)
+                            # Remove trailing slashes and convert to lowercase
+                            path = parsed.path.rstrip('/').lower()
+                            # Remove common URL parameters that might differ
+                            query = urllib.parse.parse_qs(parsed.query)
+                            # Remove certain parameters if needed
+                            # if 'utm_source' in query: del query['utm_source']
+                            # Reconstruct normalized URL
+                            return f"{parsed.netloc}{path}"
+                        
+                        norm_match_url = normalize_url(match_app_url)
+                        norm_stored_url = normalize_url(stored_url)
+                        
+                        # Log normalized URLs for debugging
+                        logger.info(f"Comparing normalized URLs: '{norm_match_url}' vs '{norm_stored_url}'")
+                        
+                        # Check if URLs match after normalization
+                        if norm_match_url == norm_stored_url or norm_match_url in norm_stored_url or norm_stored_url in norm_match_url:
+                            # We have a match
+                            logger.info(f"Matched normalized URLs for scraped file {scraped_path.name}")
+                            match['has_scraped_data'] = True
+                            match['scraped_data_filename'] = scraped_path.name
+
+                            # Now check for motivation‐letter files
+                            title = actual.get('Job Title', 'job')
+                            sanitized = ''.join(
+                                c if c.isalnum() or c in ' _-' else '_'
+                                for c in title
+                            ).replace(' ', '_')[:30]
+
+                            html_file = letters_dir / f"motivation_letter_{sanitized}.html"
+                            json_file_check = letters_dir / f"motivation_letter_{sanitized}.json"
+                            docx_file = letters_dir / f"motivation_letter_{sanitized}.docx"
+
+                            has_letter = html_file.is_file() and json_file_check.is_file()
+                            has_docx = docx_file.is_file()
+
+                            match['has_motivation_letter'] = has_letter
+                            match['motivation_letter_html_path'] = str(html_file) if has_letter else None
+                            match['motivation_letter_docx_path'] = str(docx_file) if has_docx else None
+
+                            found_files = True
+                            break
+                        else:
+                            # no URL match; try next file
+                            continue
+                except Exception as e_load:
+                    logger.error(f"Error with scraped file {scraped_path}: {e_load}")
+                    continue
+
+            if not found_files:
+                logger.warning(
+                    f"No generated files for URL {match_app_url} (job title: {match.get('job_title')})"
+                )
+
+        return render_template(
+            'results.html',
+            matches=matches,
+            report_file=report_file,
+            available_cvs=available_cvs,
+            associated_cv_filename=associated_cv_filename
+        )
+
     except Exception as e:
-        flash(f'Error loading results: {str(e)}')
-        logger.error(f'Error loading results: {str(e)}')
+        flash(f'Error loading results: {e}')
+        logger.error(f'Error loading results: {e}')
         return redirect(url_for('index'))
+
 
 @app.route('/download_report/<report_file>')
 def download_report(report_file):

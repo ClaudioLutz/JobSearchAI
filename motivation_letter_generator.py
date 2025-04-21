@@ -6,6 +6,23 @@ from pathlib import Path
 from datetime import datetime
 import importlib.util
 import sys
+import requests
+from bs4 import BeautifulSoup
+# openai is already imported later, but ensuring it's available early if needed
+import openai
+import traceback # Ensure traceback is imported for error logging
+import fitz # PyMuPDF
+import io
+from urllib.parse import urljoin # Already imported below, but good to have here too
+# Imports for OCR fallback
+from PIL import Image
+import numpy as np
+try:
+    import easyocr
+    EASYOCR_AVAILABLE = True
+except ImportError:
+    EASYOCR_AVAILABLE = False
+    logger.warning("easyocr library not found. OCR fallback for image-based PDFs will be disabled. Install with: pip install easyocr")
 
 # Set up logging
 logging.basicConfig(
@@ -40,118 +57,299 @@ def load_cv_summary(cv_filename):
         return None
 
 def get_job_details_using_scrapegraph(job_url):
-    """Get job details using ScrapeGraph AI similar to job-data-acquisition/app.py"""
+    """
+    Get job details from ostjob.ch URLs by extracting text from an iframe
+    and structuring it using OpenAI.
+    """
+    logger.info(f"Attempting to get job details via iframe extraction for URL: {job_url}")
     try:
-        logger.info(f"Getting job details using ScrapeGraph AI for URL: {job_url}")
-        
-        # Load the job-data-acquisition app module
-        app_path = os.path.join(os.path.dirname(__file__), 'job-data-acquisition', 'app.py')
-        
-        if not os.path.exists(app_path):
-            logger.error(f"Job data acquisition app not found at: {app_path}")
+        # Step 1: Get the main job posting page
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        main_response = requests.get(job_url, headers=headers, timeout=15)
+        main_response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+        main_soup = BeautifulSoup(main_response.text, "html.parser")
+
+        # Step 2: Find the iframe and extract the src URL
+        iframe = main_soup.find("iframe", {"title": "vacancyDetailIFrame"})
+        iframe_url = iframe["src"] if iframe and "src" in iframe.attrs else None
+
+        if not iframe_url:
+            logger.warning(f"No iframe 'vacancyDetailIFrame' found on page: {job_url}. Returning main page soup for PDF link check.")
+            # Return the parsed main page soup instead of None
+            return main_soup
+
+        # --- If iframe IS found, proceed with iframe processing ---
+        # Ensure iframe URL is absolute
+        if iframe_url.startswith('/'):
+            from urllib.parse import urljoin
+            iframe_url = urljoin(job_url, iframe_url)
+        logger.info(f"Found iframe URL: {iframe_url}")
+
+        # Step 3: Load the iframe content
+        iframe_response = requests.get(iframe_url, headers=headers, timeout=15)
+        iframe_response.raise_for_status()
+        iframe_soup = BeautifulSoup(iframe_response.text, "html.parser")
+
+        # Step 4: Extract visible text from the iframe
+        iframe_text = iframe_soup.get_text(separator="\n", strip=True)
+        if not iframe_text:
+            logger.warning(f"No text extracted from iframe: {iframe_url}")
             return None
-        
-        # Load the module
-        spec = importlib.util.spec_from_file_location("app_module", app_path)
-        app_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(app_module)
-        
-        # Get the configuration
-        config = app_module.load_config()
-        if not config:
-            logger.error("Failed to load ScrapeGraph configuration")
+        logger.info(f"Extracted {len(iframe_text)} characters from iframe.")
+        # logger.debug(f"Iframe text:\n{iframe_text[:500]}...") # Log beginning of text
+
+        # Step 5: Structure the text using OpenAI
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        if not openai_api_key:
+            env_path = os.path.join('process_cv', '.env')
+            if os.path.exists(env_path):
+                with open(env_path, 'r') as f:
+                    for line in f:
+                        if line.startswith('OPENAI_API_KEY='):
+                            openai_api_key = line.strip().split('=')[1]
+                            break
+        if not openai_api_key:
+            logger.error("OpenAI API key not found for structuring iframe text.")
             return None
-        
-        # Define a specific extraction prompt for a single job page
-        extraction_prompt = """
-        Extrahiere und fasse detaillierte Informationen zu diesem spezifischen Stellenangebot zusammen. Konzentriere dich darauf, eine umfassende Zusammenfassung der Jobanforderungen, Verantwortlichkeiten und Erwartungen des Unternehmens zu liefern. Gib ein JSON-Objekt mit den folgenden Feldern zurück:
+
+        client = openai.OpenAI(api_key=openai_api_key)
+
+        structuring_prompt = f"""
+        Extrahiere die folgenden Informationen aus dem untenstehenden Text eines Stellenangebots und gib sie als JSON-Objekt zurück. Der Text wurde aus einem Iframe einer Jobseite extrahiert.
         Beachte, dass es sich um einen "Arbeitsvermittler" handeln könnte, was nicht das direkte Unternehmen wäre, bei dem man sich bewirbt.
+
+        Felder zum Extrahieren:
         1. Job Title (Stellentitel)
-        2. Company Name (Firmenname)
-        3. Job Description (Stellenbeschreibung - liefere eine detaillierte Zusammenfassung der Stellenbeschreibung)
-        4. Required Skills (Erforderliche Fähigkeiten - liste alle im Angebot genannten Fähigkeiten und Qualifikationen auf)
-        5. Responsibilities (Verantwortlichkeiten - fasse die Hauptverantwortlichkeiten der Rolle zusammen)
-        6. Company Information (Unternehmensinformationen - fasse alle Informationen über Unternehmenskultur, Werte oder Hintergrund zusammen)
-        7. Location (Standort)
-        8. Salary Range (Gehaltsspanne - falls verfügbar)
-        9. Posting Date (Veröffentlichungsdatum - falls verfügbar)
-        10. Application URL (Bewerbungs-URL)
-        11. Contact Person (Ansprechpartner - Name der Person, an die die Bewerbung gerichtet werden soll, falls angegeben)
-        12. Application Email (Bewerbungs-E-Mail - E-Mail-Adresse für die Bewerbung, falls angegeben)
+        2. Company Name (Firmenname - oft oben oder im Text erwähnt)
+        3. Job Description (Stellenbeschreibung - eine detaillierte Zusammenfassung)
+        4. Required Skills (Erforderliche Fähigkeiten/Qualifikationen)
+        5. Responsibilities (Verantwortlichkeiten/Aufgaben)
+        6. Company Information (Informationen über das Unternehmen, Kultur, etc., falls vorhanden)
+        7. Location (Standort/Arbeitsort)
+        8. Salary Range (Gehaltsspanne - falls erwähnt)
+        9. Posting Date (Veröffentlichungsdatum - falls erwähnt)
+        10. Application URL (Die ursprüngliche URL des Haupt-Jobs: {job_url})
+        11. Contact Person (Ansprechpartner für die Bewerbung, falls genannt)
+        12. Application Email (E-Mail-Adresse für die Bewerbung, falls genannt)
 
-        Sei bei den Feldern Job Description, Required Skills, Responsibilities und Company Information gründlich und schliesse alle relevanten Details aus dem Angebot ein. Diese Informationen werden verwendet, um ein personalisiertes Motivationsschreiben zu erstellen.
+        Stelle sicher, dass die extrahierten Informationen korrekt sind und im JSON-Format vorliegen. Wenn Informationen nicht gefunden werden, setze den Wert auf null oder einen leeren String.
 
-        **Ausgabe** muss ein **JSON-Objekt** mit diesen Feldern für dieses spezifische Stellenangebot sein.
+        **Text des Stellenangebots:**
+        ---
+        {iframe_text}
+        ---
+
+        **Ausgabe** muss ein **JSON-Objekt** sein.
         """
-        
-        # Configure the scraper
-        scraper_config = config["scraper"]
-        graph_config = {
-            "llm": scraper_config["llm"],
-            "verbose": scraper_config["verbose"],
-            "headless": scraper_config["headless"],
-            "output_format": scraper_config["output_format"]
-        }
-        
-        # Import ScrapeGraph
-        try:
-            from scrapegraphai.graphs import SmartScraperGraph
-        except ImportError:
-            logger.error("ScrapeGraph AI library not installed. Please install it with: pip install scrapegraphai")
-            return None
-        
-        # Create and run the scraper
-        scraper = SmartScraperGraph(
-            prompt=extraction_prompt,
-            source=job_url,
-            config=graph_config
+
+        response = client.chat.completions.create(
+            model="gpt-4.1", # Or your preferred model
+            messages=[
+                {"role": "system", "content": "Du bist ein Experte für die Extraktion strukturierter Daten aus Stellenanzeigen. Gib deine Antwort als valides JSON-Objekt zurück."},
+                {"role": "user", "content": structuring_prompt}
+            ],
+            temperature=0.2,
+            max_tokens=1000,
+            response_format={"type": "json_object"}
         )
-        
-        # Run the scraper
-        result = scraper.run()
-        
-        # Process the result
-        if result and 'content' in result:
-            # The result might be an array with one item or directly the job object
-            job_details = result['content'][0] if isinstance(result['content'], list) else result['content']
-            
-            # Ensure all required fields are present
-            if not job_details.get('Job Title'):
-                job_details['Job Title'] = 'Unknown_Job'
-            if not job_details.get('Company Name'):
-                job_details['Company Name'] = 'Unknown_Company'
-            if not job_details.get('Location'):
-                job_details['Location'] = 'Unknown_Location'
-            if not job_details.get('Job Description'):
-                job_details['Job Description'] = 'No description available'
-            if not job_details.get('Required Skills'):
-                job_details['Required Skills'] = 'No specific skills listed'
-            
-            # Add the application URL if not present
-            if not job_details.get('Application URL'):
-                job_details['Application URL'] = job_url
-            
-            logger.info(f"Successfully extracted job details using ScrapeGraph AI")
-            logger.info(f"Job Title: {job_details['Job Title']}")
-            logger.info(f"Company Name: {job_details['Company Name']}")
-            
-            # Log all extracted fields for debugging
-            logger.info("--- Extracted Job Details ---")
-            for key, value in job_details.items():
-                # Truncate long values for logging
-                log_value = value
-                if isinstance(log_value, str) and len(log_value) > 100:
-                    log_value = log_value[:100] + "... [truncated]"
-                logger.info(f"{key}: {log_value}")
-            logger.info("---------------------------")
-            
-            return job_details
-        else:
-            logger.error("ScrapeGraph AI returned no content")
-            return None
+
+        job_details_str = response.choices[0].message.content
+        job_details = json.loads(job_details_str)
+
+        # Ensure essential fields have fallbacks and add original URL
+        if not job_details.get('Job Title'):
+            job_details['Job Title'] = 'Unknown_Job'
+        if not job_details.get('Company Name'):
+            job_details['Company Name'] = 'Unknown_Company'
+        if not job_details.get('Location'):
+            job_details['Location'] = 'Unknown_Location'
+        if not job_details.get('Job Description'):
+            job_details['Job Description'] = 'No description available'
+        if not job_details.get('Required Skills'):
+            job_details['Required Skills'] = 'No specific skills listed'
+        job_details['Application URL'] = job_url # Ensure original URL is present
+
+        logger.info(f"Successfully extracted and structured job details via iframe/OpenAI.")
+        logger.info(f"Job Title: {job_details['Job Title']}")
+        logger.info(f"Company Name: {job_details['Company Name']}")
+        # Log all extracted fields for debugging
+        logger.info("--- Extracted Job Details (Iframe Method) ---")
+        for key, value in job_details.items():
+            log_value = value
+            if isinstance(log_value, str) and len(log_value) > 100:
+                log_value = log_value[:100] + "... [truncated]"
+            logger.info(f"{key}: {log_value}")
+        logger.info("---------------------------------------------")
+
+        return job_details
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"HTTP Request error during iframe extraction for {job_url}: {e}")
+        return None
+    except (AttributeError, KeyError) as e:
+        logger.error(f"HTML Parsing error during iframe extraction for {job_url}: {e}")
+        return None
+    except openai.OpenAIError as e:
+        logger.error(f"OpenAI API error during structuring for {job_url}: {e}")
+        return None
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON Parsing error after OpenAI structuring for {job_url}: {e}")
+        logger.error(f"Raw OpenAI response: {job_details_str}")
+        return None
     except Exception as e:
-        logger.error(f"Error getting job details using ScrapeGraph AI: {str(e)}")
-        import traceback
+        logger.error(f"Unexpected error in get_job_details_using_scrapegraph (iframe method) for {job_url}: {e}")
+        logger.error(traceback.format_exc())
+        # Return None on unexpected error during iframe processing
+        return None
+
+def get_job_details_from_pdf(job_url):
+    """
+    Get job details from a PDF URL by downloading, extracting text,
+    and structuring it using OpenAI.
+    """
+    logger.info(f"Attempting to get job details from PDF URL: {job_url}")
+    try:
+        # Step 1: Download the PDF content
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        pdf_response = requests.get(job_url, headers=headers, timeout=20, stream=True) # Use stream=True for potentially large files
+        pdf_response.raise_for_status()
+
+        # Check content type if possible (optional but good practice)
+        content_type = pdf_response.headers.get('Content-Type', '').lower()
+        if 'application/pdf' not in content_type:
+            logger.warning(f"URL {job_url} did not return PDF content type (got: {content_type}). Aborting PDF processing.")
+            return None
+
+        pdf_content = pdf_response.content # Read content after checks
+        logger.info(f"Downloaded {len(pdf_content)} bytes of PDF content.")
+
+        # Step 2: Extract text from PDF using PyMuPDF (fitz)
+        pdf_text = ""
+        MIN_TEXT_LENGTH_FOR_PYMUPDF = 100 # Heuristic: If less text than this, try OCR
+        try_ocr = False
+        with fitz.open(stream=pdf_content, filetype="pdf") as doc:
+            for page_num, page in enumerate(doc):
+                page_text = page.get_text()
+                pdf_text += page_text
+                # Check if text extraction seems insufficient and OCR is available
+                if len(pdf_text.strip()) < MIN_TEXT_LENGTH_FOR_PYMUPDF and EASYOCR_AVAILABLE:
+                    logger.warning(f"PyMuPDF extracted very little text ({len(pdf_text.strip())} chars) from page {page_num+1} of {job_url}. Will attempt OCR fallback.")
+                    try_ocr = True
+                    break # Stop PyMuPDF extraction if OCR is needed
+
+            if try_ocr:
+                pdf_text = "" # Reset text, OCR will provide it
+                logger.info("Attempting OCR extraction...")
+                # Initialize reader once if needed (consider moving outside function if called often)
+                # For simplicity here, initialize inside. Adjust language list as needed.
+                reader = easyocr.Reader(['de','en'], gpu=True) # Or gpu=False if no GPU/CUDA
+                for page_num, page in enumerate(doc):
+                    logger.info(f"Performing OCR on page {page_num+1}...")
+                    pix = page.get_pixmap()
+                    img_bytes = pix.tobytes("png") # Get image bytes
+                    img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+                    results = reader.readtext(np.array(img), detail=0, paragraph=True) # Use paragraph=True for better text flow
+                    page_ocr_text = "\n".join(results)
+                    pdf_text += page_ocr_text + "\n\n" # Add page breaks
+                logger.info(f"OCR extracted {len(pdf_text)} characters.")
+
+        # Check final extracted text length (either from PyMuPDF or OCR)
+        if len(pdf_text.strip()) < MIN_TEXT_LENGTH_FOR_PYMUPDF: # Use threshold again
+            logger.warning(f"Extracted text length ({len(pdf_text.strip())} chars) is below threshold after all attempts for {job_url}. Aborting.")
+            return None
+
+        logger.info(f"Final extracted text length: {len(pdf_text)} characters.")
+        # logger.debug(f"Final PDF text:\n{pdf_text[:500]}...")
+
+        # Step 3: Structure the text using OpenAI
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        # (API key loading logic omitted for brevity - assuming it's handled as before)
+        if not openai_api_key:
+             env_path = os.path.join('process_cv', '.env')
+             if os.path.exists(env_path):
+                 with open(env_path, 'r') as f:
+                     for line in f:
+                         if line.startswith('OPENAI_API_KEY='):
+                             openai_api_key = line.strip().split('=')[1]
+                             break
+        if not openai_api_key:
+            logger.error("OpenAI API key not found for structuring PDF text.")
+            return None
+
+        client = openai.OpenAI(api_key=openai_api_key)
+
+        structuring_prompt = f"""
+        Extrahiere die folgenden Informationen aus dem untenstehenden Text eines Stellenangebots und gib sie als JSON-Objekt zurück. Der Text wurde aus einem PDF-Dokument extrahiert.
+        Beachte, dass es sich um einen "Arbeitsvermittler" handeln könnte, was nicht das direkte Unternehmen wäre, bei dem man sich bewirbt.
+
+        Felder zum Extrahieren:
+        1. Job Title (Stellentitel)
+        2. Company Name (Firmenname - oft oben oder im Text erwähnt)
+        3. Job Description (Stellenbeschreibung - eine detaillierte Zusammenfassung)
+        4. Required Skills (Erforderliche Fähigkeiten/Qualifikationen)
+        5. Responsibilities (Verantwortlichkeiten/Aufgaben)
+        6. Company Information (Informationen über das Unternehmen, Kultur, etc., falls vorhanden)
+        7. Location (Standort/Arbeitsort)
+        8. Salary Range (Gehaltsspanne - falls erwähnt)
+        9. Posting Date (Veröffentlichungsdatum - falls erwähnt)
+        10. Application URL (Die ursprüngliche URL des PDFs: {job_url})
+        11. Contact Person (Ansprechpartner für die Bewerbung, falls genannt)
+        12. Application Email (E-Mail-Adresse für die Bewerbung, falls genannt)
+
+        Stelle sicher, dass die extrahierten Informationen korrekt sind und im JSON-Format vorliegen. Wenn Informationen nicht gefunden werden, setze den Wert auf null oder einen leeren String.
+
+        **Text des Stellenangebots (aus PDF):**
+        ---
+        {pdf_text}
+        ---
+
+        **Ausgabe** muss ein **JSON-Objekt** sein.
+        """
+
+        response = client.chat.completions.create(
+            model="gpt-4.1", # Or your preferred model
+            messages=[
+                {"role": "system", "content": "Du bist ein Experte für die Extraktion strukturierter Daten aus Stellenanzeigen (PDFs). Gib deine Antwort als valides JSON-Objekt zurück."},
+                {"role": "user", "content": structuring_prompt}
+            ],
+            temperature=0.2,
+            max_tokens=1000,
+            response_format={"type": "json_object"}
+        )
+
+        job_details_str = response.choices[0].message.content
+        job_details = json.loads(job_details_str)
+
+        # Ensure essential fields have fallbacks and add original URL
+        if not job_details.get('Job Title'):
+            job_details['Job Title'] = 'Unknown_Job'
+        if not job_details.get('Company Name'):
+            job_details['Company Name'] = 'Unknown_Company'
+        # ... (add other fallbacks as needed) ...
+        job_details['Application URL'] = job_url # Ensure original URL is present
+
+        logger.info(f"Successfully extracted and structured job details from PDF.")
+        logger.info(f"Job Title: {job_details['Job Title']}")
+        logger.info(f"Company Name: {job_details['Company Name']}")
+        # Log details...
+
+        return job_details
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"HTTP Request error during PDF download for {job_url}: {e}")
+        return None
+    except fitz.fitz.FitzError as e:
+        logger.error(f"PyMuPDF error processing PDF from {job_url}: {e}")
+        return None
+    except openai.OpenAIError as e:
+        logger.error(f"OpenAI API error during PDF structuring for {job_url}: {e}")
+        return None
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON Parsing error after OpenAI PDF structuring for {job_url}: {e}")
+        logger.error(f"Raw OpenAI response: {job_details_str}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error in get_job_details_from_pdf for {job_url}: {e}")
         logger.error(traceback.format_exc())
         return None
 
@@ -183,47 +381,60 @@ def get_job_details_from_scraped_data(job_url):
         
         # Load the job data
         with open(latest_job_data_file, 'r', encoding='utf-8') as f:
-            job_data = json.load(f)
-        
-        logger.info(f"Loaded job data with {len(job_data[0]['content'])} jobs")
-        
-        # Find the job with the matching ID
-        for i, job in enumerate(job_data[0]['content']):
-            # Extract the job ID from the Application URL
+            job_data_pages = json.load(f) # Rename to reflect it's a list of pages
+
+        # Flatten the list of lists into a single list of job dictionaries
+        all_jobs = []
+        if isinstance(job_data_pages, list):
+            for page_list in job_data_pages:
+                if isinstance(page_list, list):
+                    all_jobs.extend(page_list)
+                elif isinstance(page_list, dict): # Handle potential single job dict per page?
+                    all_jobs.append(page_list)
+            logger.info(f"Loaded and flattened job data with {len(all_jobs)} total jobs from {len(job_data_pages)} pages.")
+        else:
+            logger.error(f"Unexpected data structure in {latest_job_data_file}. Expected list of lists.")
+            return None
+
+        # Find the job with the matching ID in the flattened list
+        found_job = None
+        for i, job in enumerate(all_jobs):
+            if not isinstance(job, dict): # Skip if item is not a dictionary
+                logger.warning(f"Skipping non-dictionary item at index {i} in flattened job list.")
+                continue
+
             job_application_url = job.get('Application URL', '')
-            logger.info(f"Job {i+1} Application URL: {job_application_url}")
-            
+            # logger.debug(f"Checking Job {i+1} Application URL: {job_application_url}") # Use debug level
+
             if job_id in job_application_url:
                 logger.info(f"Found matching job: {job.get('Job Title', 'N/A')} at {job.get('Company Name', 'N/A')}")
-                
+                found_job = job
                 # Log all extracted fields for debugging
                 logger.info("--- Extracted Job Details from Pre-scraped Data ---")
-                for key, value in job.items():
+                for key, value in found_job.items():
                     # Truncate long values for logging
                     log_value = value
                     if isinstance(log_value, str) and len(log_value) > 100:
                         log_value = log_value[:100] + "... [truncated]"
                     logger.info(f"{key}: {log_value}")
                 logger.info("------------------------------------------")
-                
-                return job
-        
-        # If no exact match found, try a more flexible approach
-        logger.info("No exact match found, trying more flexible matching")
-        for i, job in enumerate(job_data[0]['content']):
-            # Try to match based on partial URL or other identifiers
-            job_application_url = job.get('Application URL', '')
-            job_title = job.get('Job Title', '')
-            company_name = job.get('Company Name', '')
-            
-            logger.info(f"Checking job {i+1}: {job_title} at {company_name}")
-            
-            # Return the first job as a fallback
-            if i == 0:
-                logger.info(f"Using first job as fallback: {job_title} at {company_name}")
-                return job
-        
-        logger.error(f"Job with ID {job_id} not found in job data")
+                break # Exit loop once found
+
+        if found_job:
+            return found_job
+
+        # If no exact match found, use the first job in the flattened list as a fallback
+        logger.warning(f"Job with ID {job_id} not found in pre-scraped data. Using first available job as fallback.")
+        if all_jobs:
+            first_job = all_jobs[0]
+            if isinstance(first_job, dict):
+                 logger.info(f"Using first job as fallback: {first_job.get('Job Title', 'N/A')} at {first_job.get('Company Name', 'N/A')}")
+                 return first_job
+            else:
+                 logger.error("First item in flattened job list is not a dictionary, cannot use as fallback.")
+                 return None
+        else:
+            logger.error("No jobs found in the pre-scraped data file after processing.")
         return None
     except Exception as e:
         logger.error(f"Error getting job details from pre-scraped data: {str(e)}")
@@ -232,29 +443,85 @@ def get_job_details_from_scraped_data(job_url):
         return None
 
 def get_job_details(job_url):
-    """Get job details from the job URL, first trying to use ScrapeGraph AI, then falling back to pre-scraped data"""
+    """
+    Get job details from the job URL using multiple methods:
+    1. Try iframe/HTML extraction + OpenAI structuring.
+    2. If URL suggests PDF, try PDF download/extraction + OpenAI structuring.
+    3. Fallback to pre-scraped data file.
+    """
     try:
-        # First try to get job details using ScrapeGraph AI
-        logger.info(f"Attempting to get job details using ScrapeGraph AI for URL: {job_url}")
-        
-        # Check if scrapegraphai is installed
+        # --- Attempt 1: Iframe Method ---
+        logger.info(f"Attempt 1: Trying iframe/HTML extraction for URL: {job_url}")
+        iframe_or_soup_result = get_job_details_using_scrapegraph(job_url)
+
+        if isinstance(iframe_or_soup_result, dict):
+            # Success: iframe found and processed by get_job_details_using_scrapegraph
+            logger.info("Success with iframe/OpenAI extraction method.")
+            return iframe_or_soup_result
+
+        # --- Attempt 2: Search HTML for PDF Link (if iframe failed but page loaded) ---
+        job_details = None # Reset job_details
+        if isinstance(iframe_or_soup_result, BeautifulSoup):
+            main_soup = iframe_or_soup_result
+            logger.info("Attempt 2: Iframe method failed (no iframe found). Checking main page HTML for PDF links.")
+            pdf_link_found = False
+            # Search for links containing '/preview/pdf' or ending in '.pdf'
+            for link in main_soup.find_all('a', href=True):
+                href = link['href']
+                # Prioritize links specifically containing '/preview/pdf' as seen in examples
+                if '/preview/pdf' in href or href.lower().endswith('.pdf'):
+                    pdf_url = urljoin(job_url, href) # Ensure absolute URL
+                    logger.info(f"Found potential PDF link in HTML: {pdf_url}. Attempting PDF/OCR processing.")
+                    job_details = get_job_details_from_pdf(pdf_url) # Try processing this PDF URL
+                    if job_details:
+                        logger.info("Success extracting details from linked PDF.")
+                        return job_details # Return immediately if PDF processing successful
+                    else:
+                        logger.warning(f"Failed to extract details from linked PDF: {pdf_url}")
+                    pdf_link_found = True
+                    break # Stop after finding the first likely PDF link
+            if not pdf_link_found:
+                 logger.info("No direct PDF link found in main page HTML.")
+        elif iframe_or_soup_result is None:
+             # Initial request or parsing failed in get_job_details_using_scrapegraph
+             logger.info("Iframe/HTML extraction method failed completely (request/parse error).")
+        # If we reach here, either iframe failed and no PDF link worked, or the initial page load failed.
+
+        # --- Attempt 3: Check Content-Type of the *original* URL via HEAD request ---
+        # This is a fallback in case the main URL itself is a direct PDF link,
+        # or if the HTML parsing for links failed unexpectedly.
+        is_pdf = False
         try:
-            import scrapegraphai
-            job_details = get_job_details_using_scrapegraph(job_url)
-        except ImportError:
-            logger.warning("ScrapeGraph AI library not installed, skipping direct scraping")
-            job_details = None
-        
-        if job_details:
-            logger.info("Successfully got job details using ScrapeGraph AI")
-            return job_details
-        
-        # If ScrapeGraph AI fails or is not installed, fall back to pre-scraped data
-        logger.info("Getting job details from pre-scraped data")
+            logger.info(f"Attempt 2: Checking Content-Type via HEAD request for URL: {job_url}")
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+            head_response = requests.head(job_url, headers=headers, timeout=10, allow_redirects=True) # Allow redirects for HEAD
+            head_response.raise_for_status()
+            content_type = head_response.headers.get('Content-Type', '').lower()
+            logger.info(f"HEAD request successful. Content-Type: {content_type}")
+            if 'application/pdf' in content_type:
+                is_pdf = True
+        except requests.exceptions.RequestException as head_err:
+            logger.warning(f"HEAD request failed for {job_url}: {head_err}. Cannot determine content type via HEAD.")
+        except Exception as head_exc:
+             logger.error(f"Unexpected error during HEAD request for {job_url}: {head_exc}")
+
+        if is_pdf:
+            logger.info(f"Content-Type of original URL indicates PDF. Trying PDF/OCR extraction for URL: {job_url}")
+            job_details = get_job_details_from_pdf(job_url) # Try processing original URL as PDF
+            if job_details:
+                logger.info("Success with PDF/OCR extraction method on original URL.")
+                return job_details
+            else:
+                logger.info("PDF/OCR extraction method failed on original URL.")
+        else:
+             logger.info("Content-Type of original URL is not PDF or HEAD request failed.")
+
+        # --- Attempt 4: Fallback to pre-scraped data ---
+        logger.info("Attempt 3: Falling back to pre-scraped data.")
         job_details = get_job_details_from_scraped_data(job_url)
-        
+
         if job_details:
-            logger.info("Successfully got job details from pre-scraped data")
+            logger.info("Success with pre-scraped data fallback.")
             return job_details
         
         # If all methods fail, return a default job details object
