@@ -95,58 +95,70 @@ The primary way to interact with the system is through the Flask dashboard:
 This diagram illustrates the primary code dependencies between the system's components and key external libraries/services. The Dashboard acts as the central orchestrator, calling functions from the other modules.
 
 ```mermaid
-graph TD
-    subgraph JobsearchAI System
-        DASH[Dashboard - dashboard.py]
-        CVPROC[CV Processor - cv_processor.py]
-        JDA[Job Data Acquisition - app.py]
-        JM[Job Matcher - job_matcher.py]
-        MLG[Motivation Letter Generator - motivation_letter_generator.py]
-        WTG[Word Template Generator - word_template_generator.py]
-    end
+graph TD 
+  subgraph JobsearchAI System
+    DASH[Dashboard - dashboard.py]
+    CVPROC[CV Processor - cv_processor.py]
+    JDA[Job Data Acquisition - app.py]
+    JM[Job Matcher - job_matcher.py]
+    MLG[Motivation Letter Generator - motivation_letter_generator.py]
+    WTG[Word Template Generator - word_template_generator.py]
+  end
 
-    subgraph External Services/Libraries
-        OPENAI[OpenAI API]
-        SCRAPEGRAPH[ScrapeGraph AI (Optional/Implicit)]
-        DOCXTPL[docxtpl]
-        PYMUPDF[PyMuPDF]
-        FLASK[Flask]
-        REQUESTS[requests]
-        BS4[BeautifulSoup4]
-        EASYOCR[easyocr (Optional)]
-    end
+  subgraph External Services/Libraries
+    OPENAI[OpenAI API]
+    SCRAPEGRAPH["ScrapeGraph AI (Optional/Implicit)"]
+    DOCXTPL[docxtpl]
+    PYMUPDF[PyMuPDF]
+    FLASK[Flask]
+    REQUESTS[requests]
+    BS4[BeautifulSoup4]
+    EASYOCR[easyocr (Optional)]
+  end
 
-    DASH --> FLASK
-    DASH --> CVPROC
-    DASH --> JDA
-    DASH --> JM
-    DASH --> MLG
-    DASH --> WTG
+  DASH --> FLASK
+  DASH --> CVPROC
+  DASH --> JDA
+  DASH --> JM
+  DASH --> MLG
+  DASH --> WTG
 
-    JM --> CVPROC
+  JM --> CVPROC
 
-    MLG --> JDA // Fallback data source
+  %% Fallback data source
+  MLG --> JDA
 
-    CVPROC --> PYMUPDF
-    CVPROC --> OPENAI
-    JDA --> SCRAPEGRAPH
-    JDA --> OPENAI
-    JM --> OPENAI
-    MLG --> OPENAI // For structuring extracted text & generation
-    MLG --> REQUESTS // For HTTP requests (iframe, PDF checks)
-    MLG --> BS4 // For parsing HTML (iframe fallback, PDF link search)
-    MLG --> PYMUPDF // For PDF text extraction
-    MLG --> EASYOCR // Optional for PDF OCR
-    WTG --> DOCXTPL
+  CVPROC --> PYMUPDF
+  CVPROC --> OPENAI
+  JDA --> SCRAPEGRAPH
+  JDA --> OPENAI
+  JM --> OPENAI
 
-    classDef component fill:#f9f,stroke:#333,stroke-width:2px,color:#000;
-    classDef external fill:#9cf,stroke:#333,stroke-width:1px,color:#000;
-    classDef optional fill:#cff,stroke:#333,stroke-width:1px,color:#000;
+  %% For structuring extracted text & generation
+  MLG --> OPENAI
 
+  %% For HTTP requests (iframe, PDF checks)
+  MLG --> REQUESTS
 
-    class DASH,CVPROC,JDA,JM,MLG,WTG component;
-    class OPENAI,DOCXTPL,PYMUPDF,FLASK,REQUESTS,BS4 external;
-    class SCRAPEGRAPH,EASYOCR optional;
+  %% For parsing HTML (iframe fallback, PDF link search)
+  MLG --> BS4
+
+  %% For PDF text extraction
+  MLG --> PYMUPDF
+
+  %% Optional for PDF OCR
+  MLG --> EASYOCR
+
+  WTG --> DOCXTPL
+
+  classDef component fill:#f9f,stroke:#333,stroke-width:2px,color:#000;
+  classDef external  fill:#9cf,stroke:#333,stroke-width:1px,color:#000;
+  classDef optional  fill:#cff,stroke:#333,stroke-width:1px,color:#000;
+
+  class DASH,CVPROC,JDA,JM,MLG,WTG component;
+  class OPENAI,DOCXTPL,PYMUPDF,FLASK,REQUESTS,BS4 external;
+  class SCRAPEGRAPH,EASYOCR optional;
+
 ```
 
 **Notes:**

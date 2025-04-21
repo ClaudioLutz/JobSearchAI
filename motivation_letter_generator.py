@@ -17,6 +17,15 @@ from urllib.parse import urljoin # Already imported below, but good to have here
 # Imports for OCR fallback
 from PIL import Image
 import numpy as np
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 try:
     import easyocr
     EASYOCR_AVAILABLE = True
