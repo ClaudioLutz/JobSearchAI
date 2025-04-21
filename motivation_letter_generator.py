@@ -64,22 +64,22 @@ def get_job_details_using_scrapegraph(job_url):
         
         # Define a specific extraction prompt for a single job page
         extraction_prompt = """
-        Extract and summarize detailed information about this specific job posting. Focus on providing a comprehensive summary of the job requirements, responsibilities, and company expectations. Return a JSON object with the following fields:
-        Mind you it could be "Arbeitsvermittler" which would not be the direct company to apply to.
-        1. Job Title
-        2. Company Name
-        3. Job Description (provide a detailed summary of the job description)
-        4. Required Skills (list all skills and qualifications mentioned in the posting)
-        5. Responsibilities (summarize the main responsibilities of the role)
-        6. Company Information (summarize any information about the company culture, values, or background)
-        7. Location
-        8. Salary Range (if available)
-        9. Posting Date (if available)
-        10. Application URL
+        Extrahiere und fasse detaillierte Informationen zu diesem spezifischen Stellenangebot zusammen. Konzentriere dich darauf, eine umfassende Zusammenfassung der Jobanforderungen, Verantwortlichkeiten und Erwartungen des Unternehmens zu liefern. Gib ein JSON-Objekt mit den folgenden Feldern zurück:
+        Beachte, dass es sich um einen "Arbeitsvermittler" handeln könnte, was nicht das direkte Unternehmen wäre, bei dem man sich bewirbt.
+        1. Job Title (Stellentitel)
+        2. Company Name (Firmenname)
+        3. Job Description (Stellenbeschreibung - liefere eine detaillierte Zusammenfassung der Stellenbeschreibung)
+        4. Required Skills (Erforderliche Fähigkeiten - liste alle im Angebot genannten Fähigkeiten und Qualifikationen auf)
+        5. Responsibilities (Verantwortlichkeiten - fasse die Hauptverantwortlichkeiten der Rolle zusammen)
+        6. Company Information (Unternehmensinformationen - fasse alle Informationen über Unternehmenskultur, Werte oder Hintergrund zusammen)
+        7. Location (Standort)
+        8. Salary Range (Gehaltsspanne - falls verfügbar)
+        9. Posting Date (Veröffentlichungsdatum - falls verfügbar)
+        10. Application URL (Bewerbungs-URL)
 
-        For the Job Description, Required Skills, Responsibilities, and Company Information fields, be thorough and include all relevant details from the posting. This information will be used to create a personalized motivation letter.
+        Sei bei den Feldern Job Description, Required Skills, Responsibilities und Company Information gründlich und schliesse alle relevanten Details aus dem Angebot ein. Diese Informationen werden verwendet, um ein personalisiertes Motivationsschreiben zu erstellen.
 
-        **Output** should be a **JSON object** with these fields for this specific job posting.
+        **Ausgabe** muss ein **JSON-Objekt** mit diesen Feldern für dieses spezifische Stellenangebot sein.
         """
         
         # Configure the scraper
