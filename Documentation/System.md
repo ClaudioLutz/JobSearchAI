@@ -30,7 +30,8 @@ The system operates through a series of interconnected components, primarily man
     *   The `Motivation Letter Generator` (`motivation_letter_generator.py`) retrieves the relevant CV summary and job details.
     *   It attempts to get up-to-date job details using ScrapeGraph AI directly from the job URL, falling back to the pre-scraped data if necessary.
     *   It uses OpenAI (`gpt-4.1`) with a detailed prompt (including CV summary and job details) to generate a personalized motivation letter, requesting a specific JSON structure.
-    *   The generated letter is saved as both JSON and HTML files in the `motivation_letters/` directory, using a sanitized job title in the filename.
+    *   The generated letter is saved as both JSON and HTML files in the `motivation_letters/` directory.
+    *   The raw scraped job details used for generation are also saved to a separate JSON file (`_scraped_data.json`) in the same directory.
 
 5.  **Word Document Generation**:
     *   User requests a Word version of a generated motivation letter via the dashboard.
@@ -43,7 +44,7 @@ The system operates through a series of interconnected components, primarily man
     *   The Flask application (`dashboard.py`) provides the central user interface.
     *   It allows users to manage files (upload CVs, view/delete CVs, job data, reports, letters).
     *   It triggers the execution of the different components (scraping, matching, letter generation), often using background threads (`threading`) for long-running tasks.
-    *   It displays results (job matches, generated letters, job data contents).
+    *   It displays results (job matches, generated letters, bulk job data contents, specific scraped job data).
     *   It provides progress tracking for background operations via AJAX polling.
 
 ## Core Components Summary

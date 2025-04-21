@@ -76,6 +76,8 @@ def get_job_details_using_scrapegraph(job_url):
         8. Salary Range (Gehaltsspanne - falls verfügbar)
         9. Posting Date (Veröffentlichungsdatum - falls verfügbar)
         10. Application URL (Bewerbungs-URL)
+        11. Contact Person (Ansprechpartner - Name der Person, an die die Bewerbung gerichtet werden soll, falls angegeben)
+        12. Application Email (Bewerbungs-E-Mail - E-Mail-Adresse für die Bewerbung, falls angegeben)
 
         Sei bei den Feldern Job Description, Required Skills, Responsibilities und Company Information gründlich und schliesse alle relevanten Details aus dem Angebot ein. Diese Informationen werden verwendet, um ein personalisiertes Motivationsschreiben zu erstellen.
 

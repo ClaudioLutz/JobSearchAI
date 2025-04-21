@@ -7,7 +7,8 @@
 - `templates/index.html`: Main dashboard page template.
 - `templates/results.html`: Job match results page template.
 - `templates/motivation_letter.html`: Motivation letter display template.
-- `templates/job_data_view.html`: Template for viewing job data file contents.
+- `templates/job_data_view.html`: Template for viewing bulk job data file contents.
+- `templates/scraped_data_view.html`: Template for viewing specific scraped job data.
 - `static/css/styles.css`: CSS styles for the dashboard.
 - `static/js/main.js`: JavaScript for dashboard interactions (e.g., AJAX calls, progress polling).
 - **Interacts with:**
@@ -16,7 +17,7 @@
     - `job-data-acquisition/job-data-acquisition/data/`: For reading/deleting job data JSON files.
     - `job-data-acquisition/settings.json`: Updates `max_pages` before running scraper.
     - `job_matches/`: For reading/deleting report files (MD and JSON).
-    - `motivation_letters/`: For reading/deleting generated letters (HTML and DOCX).
+    - `motivation_letters/`: For reading/deleting generated letters (HTML, JSON, DOCX) and scraped job data (`_scraped_data.json`).
 
 **Technologies**:
 - Flask web framework.
@@ -52,6 +53,7 @@
     *   View generated letters (renders `motivation_letter.html`).
     *   Download motivation letters in HTML format.
     *   Download motivation letters in Word format (generates DOCX from JSON on-the-fly if needed).
+    *   View the raw scraped data used for a specific letter via the "View Scraped Data" option in the Actions dropdown on the results page (renders `scraped_data_view.html`).
     *   Select multiple job matches on the results page and generate letters for all selected jobs with a single click (AJAX call to `/generate_multiple_letters`).
 6.  **User Feedback and Progress Tracking**:
     *   Visual feedback via Flask `flash` messages and likely JS-driven button states (e.g., spinners).
@@ -88,6 +90,7 @@
 - `delete_job_data(job_data_file)`: Delete a job data file from `job-data-acquisition/job-data-acquisition/data/`.
 - `delete_report(report_file)`: Delete a report file (MD and JSON) from `job_matches/`.
 - `delete_files()`: Handle bulk file deletion (CVs, Job Data, Reports) via AJAX POST request.
-- `view_job_data(filename)`: Display contents of a job data JSON file using `job_data_view.html`.
+- `view_job_data(filename)`: Display contents of a bulk job data JSON file using `job_data_view.html`.
+- `view_scraped_data(scraped_data_filename)`: Display contents of a specific scraped job data JSON file using `scraped_data_view.html`.
 - `generate_multiple_letters()`: Handle bulk motivation letter generation via AJAX POST request.
 - `get_operation_status(operation_id)`: Provide progress updates (percentage, status message) for background tasks via AJAX GET request.
