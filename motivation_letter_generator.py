@@ -6,16 +6,15 @@ from pathlib import Path
 from datetime import datetime
 import importlib.util
 import sys
-import requests
-from bs4 import BeautifulSoup, Tag # Import Tag for type checking
+# Removed requests, BeautifulSoup, fitz, io, urljoin, PIL, numpy
 import openai
 import traceback
-import fitz # PyMuPDF
-import io
-from urllib.parse import urljoin
-from PIL import Image
-import numpy as np
 import logging
+from urllib.parse import urljoin # Re-add urljoin for the fallback function
+# Kept os, json, Path, datetime, importlib.util
+
+# Import the structured extraction utility function (renamed back)
+from graph_scraper_utils import get_job_details_with_graphscrapeai
 
 # Configure logging
 logging.basicConfig(
@@ -24,12 +23,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-try:
-    import easyocr
-    EASYOCR_AVAILABLE = True
-except ImportError:
-    EASYOCR_AVAILABLE = False
-    logger.warning("easyocr library not found. OCR fallback for image-based PDFs will be disabled. Install with: pip install easyocr")
+# Removed easyocr check
 
 # Set up logging
 logging.basicConfig(
@@ -41,6 +35,27 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("motivation_letter_generator")
+
+# Helper function to check quality of extracted details
+def has_sufficient_content(details_dict):
+    """Checks if extracted details have meaningful content for key fields."""
+    if not isinstance(details_dict, dict):
+        return False
+
+    description = details_dict.get('Job Description')
+    responsibilities = details_dict.get('Responsibilities')
+    skills = details_dict.get('Required Skills')
+
+    # Check description (allow for slightly longer placeholders, check length)
+    has_desc = description and isinstance(description, str) and len(description.strip()) > 25 and "No description available" not in description
+    # Check responsibilities (allow for slightly longer placeholders, check length)
+    has_resp = responsibilities and isinstance(responsibilities, str) and len(responsibilities.strip()) > 25 and "No specific responsibilities listed" not in responsibilities
+    # Check skills (check against common placeholders, check length)
+    has_skills = skills and isinstance(skills, str) and len(skills.strip()) > 10 and "No specific skills listed" not in skills and skills.upper() not in ["N/A", "NA"]
+
+    # Require description OR (responsibilities OR skills) to be considered sufficient
+    # This ensures we have *some* content to base the motivation letter on.
+    return has_desc or has_resp or has_skills
 
 def load_cv_summary(cv_filename):
     """Load the CV summary from the processed CV file"""
@@ -152,13 +167,142 @@ def structure_text_with_openai(text_content, source_url, source_type="HTML"):
         logger.error(traceback.format_exc())
         return None
 
+# Removed extract_details_from_html function (no longer used)
 
-def extract_details_from_html(soup, job_url):
-    """Extracts job details directly from HTML soup using specific selectors."""
-    logger.info("Attempting direct HTML extraction...")
-    job_details = {'Application URL': job_url} # Start with the URL
+# Removed get_job_details_using_scrapegraph function (no longer used)
 
-    # Title (more specific selector)
+# Removed get_job_details_from_pdf function (no longer used)
+
+def get_job_details_from_scraped_data(job_url):
+    """Get job details from pre-scraped data"""
+    try:
+        logger.info(f"Getting job details from pre-scraped data for URL: {job_url}")
+        # Extract a unique identifier from the URL, often the last part
+        # Handle potential trailing slashes
+        url_parts = job_url.strip('/').split('/')
+        job_id = url_parts[-1] if url_parts else None
+        if not job_id:
+             logger.warning(f"Could not extract job ID from URL: {job_url}")
+             return None # Return None if job_id cannot be extracted
+
+        job_data_dir = Path('job-data-acquisition/job-data-acquisition/data')
+        if not job_data_dir.exists():
+            logger.error(f"Job data directory not found: {job_data_dir}")
+            return None
+        job_data_files = list(job_data_dir.glob('job_data_*.json'))
+        if not job_data_files:
+            logger.error("No job data files found in pre-scraped data directory.")
+            return None
+
+        latest_job_data_file = max(job_data_files, key=lambda p: p.stat().st_mtime)
+        # Removed timestamp logic as recency check is removed from this flow
+        logger.info(f"Using latest pre-scraped data file: {latest_job_data_file}")
+
+        with open(latest_job_data_file, 'r', encoding='utf-8') as f:
+            job_data_pages = json.load(f)
+
+        all_jobs = []
+        if isinstance(job_data_pages, list):
+            for page_list in job_data_pages:
+                if isinstance(page_list, list):
+                    all_jobs.extend(page_list)
+                elif isinstance(page_list, dict):
+                    all_jobs.append(page_list)
+            logger.info(f"Loaded and flattened job data with {len(all_jobs)} total jobs from {len(job_data_pages)} pages.")
+        else:
+            logger.error(f"Unexpected data structure in {latest_job_data_file}. Expected list of lists.")
+            return None
+
+        found_job = None
+        for i, job in enumerate(all_jobs):
+            if not isinstance(job, dict):
+                logger.warning(f"Skipping non-dictionary item at index {i} in flattened job list.")
+                continue
+            # Match based on the extracted job_id being present in the stored URL
+            job_application_url = job.get('Application URL', '')
+            # Ensure comparison is robust against missing/non-string URLs
+            if isinstance(job_application_url, str) and job_id in job_application_url.split('/')[-1]:
+                logger.info(f"Found matching job in pre-scraped data: {job.get('Job Title', 'N/A')} at {job.get('Company Name', 'N/A')}")
+                found_job = job
+                logger.info("--- Extracted Job Details from Pre-scraped Data ---")
+                for key, value in found_job.items():
+                    log_value = value
+                    if isinstance(log_value, str) and len(log_value) > 100:
+                        log_value = log_value[:100] + "... [truncated]"
+                    logger.info(f"{key}: {log_value}")
+                logger.info("------------------------------------------")
+                break
+
+        if found_job:
+            # Ensure Application URL is absolute if it's relative
+            if isinstance(found_job.get('Application URL'), str) and found_job['Application URL'].startswith('/'):
+                 # Need urljoin, let's re-add the import temporarily or handle manually
+                 base_url = "https://www.ostjob.ch/" # Assuming base URL
+                 found_job['Application URL'] = base_url + found_job['Application URL'].lstrip('/')
+            return found_job # Return data dictionary
+
+        logger.warning(f"Job with ID '{job_id}' not found in latest pre-scraped data file: {latest_job_data_file}")
+        return None # Indicate not found
+
+    except Exception as e:
+        logger.error(f"Error getting job details from pre-scraped data: {str(e)}", exc_info=True)
+        return None # Return None on error
+
+
+def get_job_details(job_url):
+    """
+    Get job details for a given URL using the simplified ScrapeGraphAI-first approach.
+
+    Order of operations:
+    1. Attempt live fetch: GraphScrapeAI Text Extraction + OpenAI Structuring.
+    2. Fallback to pre-scraped data.
+    """
+    # --- Attempt 1: GraphScrapeAI Text Extraction + OpenAI Structuring ---
+    logger.info(f"Attempt 1: Trying GraphScrapeAI text extraction for URL: {job_url}")
+    structured_details = None
+    try:
+        graphscrape_text = extract_text_with_graphscrapeai(job_url)
+
+        if graphscrape_text:
+            logger.info(f"GraphScrapeAI extracted text ({len(graphscrape_text)} chars). Now structuring with OpenAI.")
+            structured_details_graph = structure_text_with_openai(graphscrape_text, job_url, source_type="GraphScrapeAI Text")
+
+            if structured_details_graph:
+                if has_sufficient_content(structured_details_graph):
+                    logger.info("GraphScrapeAI text extraction + OpenAI structuring yielded sufficient content.")
+                    structured_details = structured_details_graph # Store the good result
+                else:
+                    logger.warning("GraphScrapeAI text extraction + OpenAI structuring did NOT yield sufficient content.")
+            else:
+                logger.warning("Failed to structure text obtained from GraphScrapeAI using OpenAI.")
+        else:
+            logger.warning("GraphScrapeAI text extraction failed or returned insufficient text.")
+
+    except Exception as live_fetch_err:
+         logger.error(f"Error during GraphScrapeAI/Structuring attempt for {job_url}: {live_fetch_err}", exc_info=True)
+         structured_details = None # Ensure it's None if the fetch/structure itself failed
+
+    # If live fetch and structuring succeeded, return the result
+    if structured_details:
+        return structured_details
+
+    # --- Attempt 2: Fallback to Pre-scraped Data ---
+    logger.info("Attempt 2: Falling back to pre-scraped data.")
+    job_details = get_job_details_from_scraped_data(job_url)
+    if job_details:
+        logger.info("Success with pre-scraped data fallback.")
+        return job_details
+
+    # --- Final Default ---
+    logger.warning(f"All methods failed for {job_url}. Returning default values.")
+    return {
+        'Job Title': 'Unknown_Job', 'Company Name': 'Unknown_Company',
+        'Location': 'Unknown_Location', 'Job Description': 'No description available',
+        'Required Skills': 'No specific skills listed', 'Application URL': job_url
+    }
+
+
+def json_to_html(motivation_letter_json):
     title_tag = soup.find('h1', class_='vacancy-title')
     title_text = title_tag.get_text(strip=True) if title_tag else None
     logger.info(f"Direct HTML - Found title tag: {title_tag is not None}, Text: '{title_text}'")
@@ -277,7 +421,8 @@ def get_job_details_using_scrapegraph(job_url):
     logger.info(f"Attempting to get job details via iframe/HTML extraction for URL: {job_url}")
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-        main_response = requests.get(job_url, headers=headers, timeout=15)
+        # Increased timeout from 15 to 30 seconds
+        main_response = requests.get(job_url, headers=headers, timeout=30)
         main_response.raise_for_status()
         main_soup = BeautifulSoup(main_response.text, "html.parser")
 
@@ -295,9 +440,14 @@ def get_job_details_using_scrapegraph(job_url):
 
             if iframe_text:
                 logger.info(f"Extracted {len(iframe_text)} characters from iframe. Structuring with OpenAI.")
-                structured_details = structure_text_with_openai(iframe_text, job_url, source_type="Iframe HTML")
-                if structured_details:
-                    return structured_details # Return structured data from iframe
+                structured_details_iframe = structure_text_with_openai(iframe_text, job_url, source_type="Iframe HTML")
+                if structured_details_iframe:
+                    # Check if the extracted content is sufficient
+                    if has_sufficient_content(structured_details_iframe):
+                        logger.info("Iframe extraction via OpenAI yielded sufficient content.")
+                        return structured_details_iframe # Return good result
+                    else:
+                        logger.warning("Iframe extraction via OpenAI did NOT yield sufficient content (Description/Responsibilities/Skills).")
                 else:
                     logger.warning("Failed to structure iframe text with OpenAI.")
             else:
@@ -305,16 +455,43 @@ def get_job_details_using_scrapegraph(job_url):
         else:
             logger.info("No iframe 'vacancyDetailIFrame' found.")
 
-        # --- Attempt 2: Direct HTML Extraction (if iframe failed or not found) ---
+        # --- Attempt 2: Direct HTML Extraction (if iframe failed or yielded insufficient content) ---
         logger.info("Attempting direct extraction from main page HTML.")
         direct_html_details = extract_details_from_html(main_soup, job_url)
         if direct_html_details:
-            return direct_html_details # Return structured data from direct HTML
+            # Check if the extracted content is sufficient
+            if has_sufficient_content(direct_html_details):
+                 logger.info("Direct HTML extraction yielded sufficient content.")
+                 return direct_html_details # Return good result
+            else:
+                 logger.warning("Direct HTML extraction did NOT yield sufficient content (Description/Responsibilities/Skills).")
 
-        # If both iframe and direct HTML extraction fail, return the soup object
-        # so the caller can check for PDF links.
-        logger.warning("Both iframe and direct HTML extraction failed to yield structured details. Returning soup object.")
-        return main_soup
+        # --- Attempt 3: GraphScrapeAI Text Extraction + OpenAI Structuring ---
+        logger.info("Previous methods failed or yielded insufficient content. Attempting GraphScrapeAI text extraction.")
+        graphscrape_text = extract_text_with_graphscrapeai(job_url) # Call the text extraction function
+
+        if graphscrape_text:
+            logger.info(f"GraphScrapeAI extracted text ({len(graphscrape_text)} chars). Now structuring with OpenAI.")
+            # Pass the extracted text to the existing structuring function
+            structured_details_graph = structure_text_with_openai(graphscrape_text, job_url, source_type="GraphScrapeAI Text")
+
+            if structured_details_graph:
+                # Check if the structured content is sufficient
+                if has_sufficient_content(structured_details_graph):
+                    logger.info("GraphScrapeAI text extraction + OpenAI structuring yielded sufficient content.")
+                    return structured_details_graph # Return good result
+                else:
+                    logger.warning("GraphScrapeAI text extraction + OpenAI structuring did NOT yield sufficient content.")
+            else:
+                logger.warning("Failed to structure text obtained from GraphScrapeAI using OpenAI.")
+        else:
+            logger.warning("GraphScrapeAI text extraction failed or returned insufficient text.")
+
+
+        # If all extraction methods (iframe, direct HTML, GraphScrapeAI+Structure) fail or are insufficient,
+        # return the soup object so the caller can check for PDF links.
+        logger.warning("All text/structured extraction methods failed or insufficient. Returning soup object for PDF check.")
+        return main_soup # Proceed to PDF checks etc.
 
     except requests.exceptions.RequestException as e:
         logger.error(f"HTTP Request error during HTML/iframe extraction for {job_url}: {e}")
@@ -461,112 +638,52 @@ def get_job_details_from_scraped_data(job_url):
 
 def get_job_details(job_url):
     """
-    Get job details from the job URL using multiple methods:
-    1. Try iframe/HTML extraction + OpenAI structuring.
-    2. If HTML loaded but extraction failed, check for PDF links in HTML.
-    3. If original URL might be PDF, check Content-Type and try PDF extraction.
-    4. Fallback to pre-scraped data file.
+    Get job details for a given URL using the ScrapeGraphAI-first approach (headless=False).
+
+    Order of operations:
+    1. Attempt live fetch: GraphScrapeAI Structured Extraction (headless=False).
+    2. Fallback to pre-scraped data.
     """
+    # --- Attempt 1: GraphScrapeAI Structured Extraction (headless=False) ---
+    logger.info(f"Attempt 1: Trying GraphScrapeAI structured extraction (headless=False) for URL: {job_url}")
+    structured_details = None
     try:
-        # --- Attempt 1: Iframe / Direct HTML Extraction ---
-        logger.info(f"Attempt 1: Trying iframe/HTML extraction for URL: {job_url}")
-        extraction_result = get_job_details_using_scrapegraph(job_url)
+        # Directly call the function that attempts structured extraction with headless=False
+        structured_details = get_job_details_with_graphscrapeai(job_url)
 
-        if isinstance(extraction_result, dict):
-            logger.info("Success with iframe/HTML extraction method.")
-            return extraction_result # Got structured data
+        if structured_details:
+            # The function already performs validation including has_sufficient_content check
+            logger.info("GraphScrapeAI (headless=False) extraction successful and content sufficient.")
+            # Ensure Application URL is absolute (might be redundant if handled in util, but safe)
+            if isinstance(structured_details.get('Application URL'), str) and not structured_details['Application URL'].startswith('http'):
+                 from urllib.parse import urljoin # Add import back if needed here
+                 base_url = "https://www.ostjob.ch/" # Assuming base URL
+                 structured_details['Application URL'] = urljoin(base_url, structured_details['Application URL'].lstrip('/'))
+            return structured_details
+        else:
+            # Log message already handled within get_job_details_with_graphscrapeai if it failed
+            logger.warning("GraphScrapeAI (headless=False) extraction failed or returned insufficient content.")
 
-        # --- Attempt 2: PDF Link in HTML (if HTML was loaded but extraction failed) ---
-        job_details = None
-        if isinstance(extraction_result, BeautifulSoup):
-            main_soup = extraction_result
-            logger.info("Attempt 2: Checking main page HTML for PDF links.")
-            pdf_link_found = False
-            potential_pdf_links = []
-            for link in main_soup.find_all('a', href=True):
-                href = link['href']
-                link_text = link.get_text(strip=True).lower()
-                if '/preview/pdf' in href:
-                    potential_pdf_links.append({'url': urljoin(job_url, href), 'priority': 1, 'text': link_text})
-                elif href.lower().endswith('.pdf') and not any(term in href.lower() for term in ['flyer', 'download', 'broschuere']):
-                     priority = 2
-                     if any(term in link_text for term in ['inserat', 'stellenbeschreibung', 'job', 'pdf']):
-                          priority = 1.5
-                     potential_pdf_links.append({'url': urljoin(job_url, href), 'priority': priority, 'text': link_text})
+    except Exception as live_fetch_err:
+         logger.error(f"Error during GraphScrapeAI attempt for {job_url}: {live_fetch_err}", exc_info=True)
+         structured_details = None # Ensure it's None if the fetch itself failed
 
-            potential_pdf_links.sort(key=lambda x: x['priority'])
+    # --- Attempt 2: Fallback to Pre-scraped Data ---
+    # This runs only if structured_details is still None after Attempt 1
+    logger.info("Attempt 2: Falling back to pre-scraped data.")
+    job_details_scraped = get_job_details_from_scraped_data(job_url) # This function now returns dict or None
+    if job_details_scraped:
+        logger.info("Success with pre-scraped data fallback.")
+        # Ensure Application URL is absolute (handled within get_job_details_from_scraped_data now)
+        return job_details_scraped
 
-            if potential_pdf_links:
-                 logger.info(f"Found {len(potential_pdf_links)} potential PDF links. Trying highest priority.")
-                 for potential_link in potential_pdf_links:
-                    pdf_url = potential_link['url']
-                    logger.info(f"Attempting PDF/OCR processing for link (priority {potential_link['priority']}): {pdf_url}")
-                    job_details = get_job_details_from_pdf(pdf_url)
-                    if job_details:
-                        logger.info("Success extracting details from linked PDF.")
-                        return job_details # Return immediately
-                    else:
-                        logger.warning(f"Failed to extract details from linked PDF: {pdf_url}")
-                    pdf_link_found = True
-                    # Only try the highest priority link for now to avoid processing generic PDFs if specific one fails
-                    break
-            if not pdf_link_found:
-                 logger.info("No suitable PDF link found in main page HTML.")
-
-        elif extraction_result is None:
-             logger.info("HTML/iframe extraction method failed completely (request/parse error).")
-
-        # --- Attempt 3: Check Original URL Content-Type (if other methods failed) ---
-        if not job_details: # Only proceed if we haven't found details yet
-            is_pdf = False
-            try:
-                logger.info(f"Attempt 3: Checking Content-Type via HEAD request for URL: {job_url}")
-                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-                head_response = requests.head(job_url, headers=headers, timeout=10, allow_redirects=True)
-                head_response.raise_for_status()
-                content_type = head_response.headers.get('Content-Type', '').lower()
-                logger.info(f"HEAD request successful. Content-Type: {content_type}")
-                if 'application/pdf' in content_type:
-                    is_pdf = True
-            except requests.exceptions.RequestException as head_err:
-                logger.warning(f"HEAD request failed for {job_url}: {head_err}. Cannot determine content type via HEAD.")
-            except Exception as head_exc:
-                 logger.error(f"Unexpected error during HEAD request for {job_url}: {head_exc}")
-
-            if is_pdf:
-                logger.info(f"Content-Type of original URL indicates PDF. Trying PDF/OCR extraction for URL: {job_url}")
-                job_details = get_job_details_from_pdf(job_url)
-                if job_details:
-                    logger.info("Success with PDF/OCR extraction method on original URL.")
-                    return job_details
-                else:
-                    logger.info("PDF/OCR extraction method failed on original URL.")
-            else:
-                 logger.info("Content-Type of original URL is not PDF or HEAD request failed.")
-
-        # --- Attempt 4: Fallback to pre-scraped data ---
-        if not job_details: # Only fallback if still no details
-            logger.info("Attempt 4: Falling back to pre-scraped data.")
-            job_details = get_job_details_from_scraped_data(job_url)
-            if job_details:
-                logger.info("Success with pre-scraped data fallback.")
-                return job_details
-
-        # If all methods fail, return a default job details object
-        logger.warning("All methods to get job details failed, using default values")
-        return {
-            'Job Title': 'Unknown_Job', 'Company Name': 'Unknown_Company',
-            'Location': 'Unknown_Location', 'Job Description': 'No description available',
-            'Required Skills': 'No specific skills listed', 'Application URL': job_url
-        }
-    except Exception as e:
-        logger.error(f"Critical error in get_job_details main logic: {str(e)}")
-        logger.error(traceback.format_exc())
-        return { # Return default values on critical error
-            'Job Title': 'Error_Fetching', 'Company Name': 'Error_Fetching',
-            'Location': 'Error_Fetching', 'Job Description': f'Error fetching details: {e}',
-            'Required Skills': 'Error_Fetching', 'Application URL': job_url
-        }
+    # --- Final Default ---
+    logger.warning(f"All methods (GraphScrapeAI live, Pre-scraped) failed for {job_url}. Returning default values.")
+    return {
+        'Job Title': 'Unknown_Job', 'Company Name': 'Unknown_Company',
+        'Location': 'Unknown_Location', 'Job Description': 'No description available',
+        'Required Skills': 'No specific skills listed', 'Application URL': job_url
+    }
 
 
 def json_to_html(motivation_letter_json):
