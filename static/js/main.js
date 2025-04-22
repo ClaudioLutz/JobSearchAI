@@ -512,8 +512,8 @@ document.addEventListener('DOMContentLoaded', function() {
             selectedStatusSpan.textContent = `Generating ${jobUrls.length} letter(s)...`;
             selectedStatusSpan.className = 'ms-2 text-info'; // Reset class
 
-            console.log("Initiating fetch to /generate_multiple_letters"); // Debug log 6
-            fetch('/generate_multiple_letters', {
+            console.log("Initiating fetch to /motivation_letter/generate_multiple"); // Debug log 6 - Updated URL
+            fetch('/motivation_letter/generate_multiple', { // Use the correct blueprint endpoint
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

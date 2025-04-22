@@ -32,15 +32,17 @@
         <div class="d-flex justify-content-between align-items-center mb-4 no-print">
             <h1>Motivationsschreiben</h1>
             <div>
-                <a href="{{ url_for('view_results', report_file=report_file) }}" class="btn btn-outline-secondary me-2">Zurück zu den Ergebnissen</a>
+                <a href="{{ url_for('job_matching.view_results', report_file=report_file) }}" class="btn btn-outline-secondary me-2">Zurück zu den Ergebnissen</a>
                 <button onclick="window.print()" class="btn btn-primary me-2">Drucken</button>
-                <a href="{{ url_for('download_motivation_letter', file_path=file_path) }}" class="btn btn-success me-2">HTML herunterladen</a>
+                <a href="{{ url_for('motivation_letter.download_motivation_letter_html', file_path=file_path) }}" class="btn btn-success me-2">HTML herunterladen</a>
                 {% if has_docx %}
-                <a href="{{ url_for('download_motivation_letter_docx', file_path=docx_file_path) }}" class="btn btn-success">Word herunterladen</a>
+                <a href="{{ url_for('motivation_letter.download_motivation_letter_docx', file_path=docx_file_path) }}" class="btn btn-success">Word herunterladen</a>
                 {% elif file_path and file_path.endswith('.json') %}
-                <a href="{{ url_for('download_docx_from_json', json_file_path=file_path) }}" class="btn btn-success">Word herunterladen</a>
+                {# Assuming file_path here is the relative JSON path #}
+                <a href="{{ url_for('motivation_letter.download_docx_from_json', json_file_path=file_path) }}" class="btn btn-success">Word herunterladen</a>
                 {% elif file_path and file_path.endswith('.html') %}
-                <a href="{{ url_for('download_docx_from_json', json_file_path=file_path|replace('.html', '.json')) }}" class="btn btn-success">Word herunterladen</a>
+                 {# Construct relative JSON path from HTML path #}
+                <a href="{{ url_for('motivation_letter.download_docx_from_json', json_file_path=file_path|replace('.html', '.json')) }}" class="btn btn-success">Word herunterladen</a>
                 {% endif %}
             </div>
         </div>

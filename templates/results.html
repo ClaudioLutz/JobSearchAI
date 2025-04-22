@@ -14,7 +14,7 @@
             <h1>Job Match Results</h1>
             <div>
                 <a href="{{ url_for('index') }}" class="btn btn-outline-secondary me-2">Back to Dashboard</a>
-                <a href="{{ url_for('download_report', report_file=report_file) }}" class="btn btn-primary">Download Report</a>
+                <a href="{{ url_for('job_matching.download_report', report_file=report_file) }}" class="btn btn-primary">Download Report</a>
             </div>
         </div>
         
@@ -119,7 +119,7 @@
                                                     <!-- Generate/View Letter -->
                                                     {% if full_job_url and full_job_url != 'N/A' %}
                                                         {% if match.has_motivation_letter %}
-                                                            <li><a class="dropdown-item" href="{{ url_for('view_motivation_letter', operation_id='existing', file_path=match.motivation_letter_html_path, report_file=report_file) }}">View Letter</a></li>
+                                                            <li><a class="dropdown-item" href="{{ url_for('motivation_letter.view_motivation_letter', operation_id='existing', html_path=match.motivation_letter_html_path, report_file=report_file) }}">View Letter</a></li> {# Updated url_for and parameter name #}
                                                         {% else %}
                                                             {# Use specific class and data attributes for JS hook - CV filename will be read from dropdown by JS #}
                                                             <li><a class="dropdown-item generate-letter-link" href="#" role="button"
@@ -131,12 +131,12 @@
 
                                                         <!-- Download Word (conditional) -->
                                                         {% if match.motivation_letter_docx_path %}
-                                                            <li><a class="dropdown-item" href="{{ url_for('download_motivation_letter_docx', file_path=match.motivation_letter_docx_path) }}">Download Word</a></li>
+                                                            <li><a class="dropdown-item" href="{{ url_for('motivation_letter.download_motivation_letter_docx', file_path=match.motivation_letter_docx_path) }}">Download Word</a></li>
                                                         {% endif %}
 
                                                         <!-- View Scraped Data (conditional) -->
                                                         {% if match.has_scraped_data %}
-                                                            <li><a class="dropdown-item" href="{{ url_for('view_scraped_data', scraped_data_filename=match.scraped_data_filename) }}">View Scraped Data</a></li>
+                                                            <li><a class="dropdown-item" href="{{ url_for('motivation_letter.view_scraped_data', scraped_data_filename=match.scraped_data_filename) }}">View Scraped Data</a></li>
                                                         {% endif %}
                                                     {% else %}
                                                          <li><span class="dropdown-item disabled">Letter Actions N/A</span></li>
@@ -191,13 +191,14 @@
                                 {% set path = match.application_url.split('/', 3)[3] if match.application_url.startswith('http://127.0.0.1:5000/') and match.application_url.count('/') >= 3 else (match.application_url.split('/', 1)[1] if match.application_url.startswith('127.0.0.1:5000/') and match.application_url.count('/') >= 1 else match.application_url) %}
                                 <a href="https://www.ostjob.ch/{{ path }}" target="_blank" class="btn btn-primary">Link zum Inserat</a>
                                 {% if match.has_motivation_letter %}
-                                    <a href="{{ url_for('view_motivation_letter', operation_id='existing', file_path=match.motivation_letter_html_path, report_file=report_file) }}" class="btn btn-outline-primary w-100 mb-2">Motivationsschreiben anzeigen</a>
+                                    <a href="{{ url_for('motivation_letter.view_motivation_letter', operation_id='existing', html_path=match.motivation_letter_html_path, report_file=report_file) }}" class="btn btn-outline-primary w-100 mb-2">Motivationsschreiben anzeigen</a> {# Updated url_for and parameter name #}
                                     {% if match.motivation_letter_docx_path %}
-                                        <a href="{{ url_for('download_motivation_letter_docx', file_path=match.motivation_letter_docx_path) }}" class="btn btn-outline-success w-100">Word herunterladen</a>
+                                        <a href="{{ url_for('motivation_letter.download_motivation_letter_docx', file_path=match.motivation_letter_docx_path) }}" class="btn btn-outline-success w-100">Word herunterladen</a>
                                     {% endif %}
                                 {% else %}
-                                    <form action="{{ url_for('generate_motivation_letter_route') }}" method="post" class="mt-2">
-                                        <input type="hidden" name="cv_filename" value="Lebenslauf">
+                                    {# This form submits via JS now, but keeping url_for correct just in case #}
+                                    <form action="{{ url_for('motivation_letter.generate_motivation_letter_route') }}" method="post" class="mt-2 generate-letter-form" style="display: none;"> {# Hide form, trigger via JS #}
+                                        <input type="hidden" name="cv_filename" class="cv-filename-input" value=""> {# Value set by JS #}
                                         <input type="hidden" name="job_url" value="https://www.ostjob.ch/{{ path }}">
                                         <input type="hidden" name="report_file" value="{{ report_file }}">
                                         <input type="hidden" name="job_title" value="{{ match.job_title }}">
