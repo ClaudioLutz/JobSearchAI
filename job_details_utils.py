@@ -91,6 +91,7 @@ def structure_text_with_openai(text_content, source_url, source_type="HTML"):
     10. Application URL (Die ursprüngliche URL der Quelle: {source_url})
     11. Contact Person (Ansprechpartner für die Bewerbung, falls genannt)
     12. Application Email (E-Mail-Adresse für die Bewerbung, falls genannt)
+    13. Salutation (Anrede - z.B. 'Sehr geehrter Herr Müller', 'Sehr geehrte Frau Meier', oder 'Sehr geehrte Damen und Herren', falls kein spezifischer Kontakt gefunden wird)
 
     Stelle sicher, dass die extrahierten Informationen korrekt sind und im JSON-Format vorliegen. Wenn Informationen nicht gefunden werden, setze den Wert auf null oder einen leeren String.
 

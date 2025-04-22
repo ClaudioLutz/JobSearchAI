@@ -20,9 +20,10 @@ def json_to_docx(motivation_letter_json, template_path='motivation_letters/templ
             'company_department': motivation_letter_json.get('company_department', ''),
             'company_street_number': motivation_letter_json.get('company_street_number', ''),
             'company_plz_city': motivation_letter_json.get('company_plz_city', ''),
+            'contact_person': motivation_letter_json.get('contact_person', ''), # Added contact person
             'date': motivation_letter_json.get('date', ''),
             'subject': motivation_letter_json.get('subject', ''),
-            'greeting': motivation_letter_json.get('greeting', ''),
+            'Salutation': motivation_letter_json.get('greeting', 'Sehr geehrte Damen und Herren'), # Map JSON 'greeting' to template 'Salutation'
             'introduction': motivation_letter_json.get('introduction', ''),
             'body_paragraphs': motivation_letter_json.get('body_paragraphs', []),
             'closing': motivation_letter_json.get('closing', ''),

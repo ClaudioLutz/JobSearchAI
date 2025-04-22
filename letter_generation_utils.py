@@ -26,7 +26,8 @@ def json_to_html(motivation_letter_json):
         company_plz_city = motivation_letter_json.get('company_plz_city', '')
         date = motivation_letter_json.get('date', '')
         subject = motivation_letter_json.get('subject', '')
-        greeting = motivation_letter_json.get('greeting', '')
+        # Use the 'greeting' field directly from the JSON
+        greeting = motivation_letter_json.get('greeting', 'Sehr geehrte Damen und Herren') # Fallback greeting
         introduction = motivation_letter_json.get('introduction', '')
         body_paragraphs = motivation_letter_json.get('body_paragraphs', [])
         closing = motivation_letter_json.get('closing', '')
@@ -76,20 +77,36 @@ def generate_motivation_letter(cv_summary, job_details):
             logger.error("OpenAI library not found. Please install it: pip install openai")
             return None
 
+        # Extract pre-determined salutation, default if not found
+        extracted_salutation = job_details.get('Salutation', 'Sehr geehrte Damen und Herren')
+        if not extracted_salutation or not isinstance(extracted_salutation, str) or len(extracted_salutation.strip()) == 0:
+             extracted_salutation = 'Sehr geehrte Damen und Herren'
+             logger.warning("Using default greeting as extracted 'Salutation' was empty or invalid.")
+        else:
+             logger.info(f"Using extracted salutation: '{extracted_salutation}'")
+
+
+        # Updated prompt: Include Contact Person in input, request contact_person in output JSON.
         prompt = """
         Schreibe ein Motivationsschreiben aus den Informationen von der Webseite und dem Lebenslauf:
         ## Lebenslauf des Bewerbers:\n{}\n
-        ## Stellenangebot (von der Webseite):\nTitel: {}\nFirma: {}\nOrt: {}\nBeschreibung: \n{}\nErforderliche Fähigkeiten: \n{}\nVerantwortlichkeiten: \n{}\nUnternehmensinformationen: \n{}\n
-        Das Motivationsschreiben sollte:\n1. Professionell und überzeugend sein\n2. Die Qualifikationen und Erfahrungen des Bewerbers KONKRET mit den Anforderungen der Stelle verknüpfen\n3. Die Motivation des Bewerbers für die Stelle und das Unternehmen zum Ausdruck bringen\n4. Etwa eine halbe Seite lang sein (ca. 150-200 Wörter)\n5. Auf Deutsch verfasst sein\n6. Im formalen Bewerbungsstil mit Anrede, Einleitung, Hauptteil, Schluss und Grußformel sein\n7. SPEZIFISCH auf die Stellenanforderungen und Verantwortlichkeiten eingehen, die aus der Webseite extrahiert wurden\n8. Die Stärken des Bewerbers hervorheben, die besonders relevant für diese Position sind\n9. Auf die Unternehmenskultur und -werte eingehen, wenn diese Informationen verfügbar sind\n10. KONKRETE BEISPIELE aus dem Lebenslauf des Bewerbers verwenden, die zeigen, wie er/sie die Anforderungen erfüllt\n
+        ## Stellenangebot (von der Webseite):\nTitel: {}\nFirma: {}\nOrt: {}\nBeschreibung: \n{}\nErforderliche Fähigkeiten: \n{}\nVerantwortlichkeiten: \n{}\nUnternehmensinformationen: \n{}\nAnrede (Salutation): {}\nAnsprechpartner (Contact Person): {}\n
+        Das Motivationsschreiben sollte:\n1. Professionell und überzeugend sein\n2. Die Qualifikationen und Erfahrungen des Bewerbers KONKRET mit den Anforderungen der Stelle verknüpfen\n3. Die Motivation des Bewerbers für die Stelle und das Unternehmen zum Ausdruck bringen\n4. Etwa eine halbe Seite lang sein (ca. 150-200 Wörter)\n5. Auf Deutsch verfasst sein\n6. Im formalen Bewerbungsstil mit Einleitung, Hauptteil, Schluss und Grußformel sein (OHNE die Anrede/greeting selbst zu generieren)\n7. SPEZIFISCH auf die Stellenanforderungen und Verantwortlichkeiten eingehen, die aus der Webseite extrahiert wurden\n8. Die Stärken des Bewerbers hervorheben, die besonders relevant für diese Position sind\n9. Auf die Unternehmenskultur und -werte eingehen, wenn diese Informationen verfügbar sind\n10. KONKRETE BEISPIELE aus dem Lebenslauf des Bewerbers verwenden, die zeigen, wie er/sie die Anforderungen erfüllt\n
         WICHTIG: Falls die Firma der ausgeschriebenen Stell die "Universal-Job AG" ist, behandle sie als Personalvermittler in deinem Schreiben und passe den Inhalt entsprechend an. In diesem Fall wissen wir nicht wer die Stelle schlussendlich ausgeschrieben hat.\n
         WICHTIG: Verwende die detaillierten Informationen aus der Stellenbeschreibung, um ein personalisiertes und spezifisches Motivationsschreiben zu erstellen. Gehe auf konkrete Anforderungen und Verantwortlichkeiten ein und zeige, wie der Bewerber diese erfüllen kann.\n
         WICHTIG: Der Motivtions Text darf maximal 200-300 Wörter beinhalten.\n"ß" soll als "ss" geschrieben werden.\n
-        Gib das Motivationsschreiben als JSON-Objekt mit folgender Struktur zurück:\n```json\n{{\n  "candidate_name": "Vollständiger Name des Bewerbers",\n  "candidate_address": "Straße und Hausnummer",\n  "candidate_city": "PLZ und Ort",\n  "candidate_email": "E-Mail-Adresse",\n  "candidate_phone": "Telefonnummer",\n  "company_name": "Name des Unternehmens",\n  "company_department": "Abteilung (falls bekannt, sonst 'Personalabteilung')",\n  "company_street_number": "Strasse und Hausnummerdes Unternehmens (falls bekannt)",\n  "company_plz_city": "Postleitzahl und Stadt (falls bekannt)",\n  "date": "Ort, den [aktuelles Datum]",\n  "subject": "Bewerbung als [Stellentitel]",\n  "greeting": "Anrede (z.B. 'Sehr geehrte Damen und Herren')",\n  "introduction": "Einleitungsabsatz",\n  "body_paragraphs": [\n    "Erster Hauptabsatz",\n    "Zweiter Hauptabsatz",\n    "Dritter Hauptabsatz (falls nötig)"\n  ],\n  "closing": "Schlussabsatz",\n  "signature": "Grussformel (z.B. 'Mit freundlichen Grüssen')",\n  "full_name": "Vollständiger Name des Bewerbers"\n}}\n```\nStelle sicher, dass alle Felder korrekt befüllt sind und das JSON-Format gültig ist.
+        Gib das Motivationsschreiben als JSON-Objekt mit folgender Struktur zurück (das 'greeting'-Feld wird später hinzugefügt):\n```json\n{{\n  "candidate_name": "Vollständiger Name des Bewerbers",\n  "candidate_address": "Straße und Hausnummer",\n  "candidate_city": "PLZ und Ort",\n  "candidate_email": "E-Mail-Adresse",\n  "candidate_phone": "Telefonnummer",\n  "company_name": "Name des Unternehmens",\n  "company_department": "Abteilung (falls bekannt, sonst 'Personalabteilung')",\n  "company_street_number": "Strasse und Hausnummerdes Unternehmens (falls bekannt)",\n  "company_plz_city": "Postleitzahl und Stadt (falls bekannt)",\n  "contact_person": "Name des Ansprechpartners (falls bekannt, sonst null)",\n  "date": "Ort, den [aktuelles Datum]",\n  "subject": "Bewerbung als [Stellentitel]",\n  "introduction": "Einleitungsabsatz",\n  "body_paragraphs": [\n    "Erster Hauptabsatz",\n    "Zweiter Hauptabsatz",\n    "Dritter Hauptabsatz (falls nötig)"\n  ],\n  "closing": "Schlussabsatz",\n  "signature": "Grussformel (z.B. 'Mit freundlichen Grüssen')",\n  "full_name": "Vollständiger Name des Bewerbers"\n}}\n```\nStelle sicher, dass alle Felder korrekt befüllt sind und das JSON-Format gültig ist. Das Feld 'greeting' wird NICHT von dir generiert.
         """.format(
-            cv_summary, job_details.get('Job Title', 'N/A'), job_details.get('Company Name', 'N/A'),
-            job_details.get('Location', 'N/A'), job_details.get('Job Description', 'N/A'),
-            job_details.get('Required Skills', 'N/A'), job_details.get('Responsibilities', 'Keine spezifischen Verantwortlichkeiten aufgeführt.'),
-            job_details.get('Company Information', 'Keine spezifischen Unternehmensinformationen verfügbar.')
+            cv_summary,
+            job_details.get('Job Title', 'N/A'),
+            job_details.get('Company Name', 'N/A'),
+            job_details.get('Location', 'N/A'),
+            job_details.get('Job Description', 'N/A'),
+            job_details.get('Required Skills', 'N/A'),
+            job_details.get('Responsibilities', 'Keine spezifischen Verantwortlichkeiten aufgeführt.'),
+            job_details.get('Company Information', 'Keine spezifischen Unternehmensinformationen verfügbar.'),
+            extracted_salutation, # Include the extracted salutation in the input context
+            job_details.get('Contact Person', 'N/A') # Include the contact person name in the input context
         )
         response = client.chat.completions.create(
             model="gpt-4.1", messages=[{"role": "system", "content": "Du bist ein professioneller Bewerbungsberater..."}, {"role": "user", "content": prompt}],
@@ -97,8 +114,15 @@ def generate_motivation_letter(cv_summary, job_details):
         )
         motivation_letter_json_str = response.choices[0].message.content
         try:
+            # Parse the JSON generated by the LLM (which should now include contact_person but exclude greeting)
             motivation_letter_json = json.loads(motivation_letter_json_str)
-            logger.info("Successfully parsed motivation letter JSON")
+            # Add the pre-extracted greeting back into the dictionary
+            motivation_letter_json['greeting'] = extracted_salutation
+            # Ensure contact_person is present, even if null
+            if 'contact_person' not in motivation_letter_json:
+                 motivation_letter_json['contact_person'] = job_details.get('Contact Person') # Get from original details if LLM missed it
+            logger.info("Successfully parsed motivation letter JSON and added greeting.")
+
             html_content = json_to_html(motivation_letter_json)
 
             # --- File Saving Logic ---
@@ -125,7 +149,7 @@ def generate_motivation_letter(cv_summary, job_details):
             with open(html_file_path, 'w', encoding='utf-8') as f:
                 f.write(html_content)
 
-            # Save JSON
+            # Save JSON (now including the greeting)
             logger.info(f"Saving JSON motivation letter to file: {json_file_path}")
             with open(json_file_path, 'w', encoding='utf-8') as f:
                 json.dump(motivation_letter_json, f, ensure_ascii=False, indent=2)

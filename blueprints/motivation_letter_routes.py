@@ -257,6 +257,9 @@ def generate_multiple_letters():
                                  abs_json_path = Path(app.root_path) / result['json_file_path']
 
                              abs_docx_path = abs_json_path.with_suffix('.docx')
+                             # TODO: Update json_to_docx in word_template_generator.py to accept and use
+                             # the 'contact_person' field from result['motivation_letter_json']
+                             # Example: docx_path = json_to_docx(result['motivation_letter_json'], output_path=str(abs_docx_path), contact_person=result['motivation_letter_json'].get('contact_person'))
                              docx_path = json_to_docx(result['motivation_letter_json'], output_path=str(abs_docx_path))
                              if docx_path:
                                  logger.info(f"Generated Word document: {docx_path} for URL: {job_url}")

@@ -52,6 +52,7 @@ Extrahiere die Details des Stellenangebots von dieser Seite. Gib ein JSON-Objekt
 10. Application URL (Verwende die ursprüngliche Quell-URL)
 11. Contact Person (Ansprechpartner - Falls erwähnt)
 12. Application Email (Bewerbungs-E-Mail - Falls erwähnt)
+13. Salutation (Anrede - z.B. 'Sehr geehrter Herr **Nachname Contact Person**', 'Sehr geehrte Frau **Nachname Contact Person**', oder 'Sehr geehrte Damen und Herren', falls kein spezifischer Kontakt gefunden wird)
 
 Die Ausgabe muss ein einzelnes JSON-Objekt sein. Wenn ein Feld nicht gefunden wird, verwende null oder einen leeren String.
 Priorisiere die Extraktion aussagekräftiger Inhalte für 'Job Description', 'Required Skills' und 'Responsibilities'.
