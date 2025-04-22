@@ -82,7 +82,8 @@
                             <tbody>
                                 {% for match in matches %}
                                     {% set path = match.application_url.split('/', 3)[3] if match.application_url.startswith('http://127.0.0.1:5000/') and match.application_url.count('/') >= 3 else (match.application_url.split('/', 1)[1] if match.application_url.startswith('127.0.0.1:5000/') and match.application_url.count('/') >= 1 else match.application_url) %}
-                                    {% set full_job_url = "https://www.ostjob.ch/" + path if path else 'N/A' %}
+                                    {# Strip leading slash from path before joining to prevent double slashes #}
+                                    {% set full_job_url = "https://www.ostjob.ch/" + path.lstrip('/') if path else 'N/A' %}
                                     <tr>
                                         <td><input type="checkbox" class="form-check-input job-select-checkbox" value="{{ full_job_url }}" data-job-title="{{ match.job_title }}"></td>
                                         <td>{{ loop.index }}</td>
@@ -108,10 +109,10 @@
                                                     <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#reasoningModal" data-reasoning="{{ match.reasoning|escape }}" data-job-title="{{ match.job_title|escape }}">View Reasoning</a></li>
 
                                                     <!-- View Job Ad (external link) -->
-                                                    {% if full_job_url and full_job_url != 'N/A' %}
-                                                        <li><a class="dropdown-item" href="{{ full_job_url }}" target="_blank">View Job Ad <i class="bi bi-box-arrow-up-right"></i></a></li>
-                                                    {% else %}
-                                                        <li><span class="dropdown-item disabled">No Job Ad Link</span></li>
+                                                        {% if full_job_url and full_job_url != 'N/A' %}
+                                                            <li><a class="dropdown-item" href="{{ full_job_url }}" target="_blank">View Job Ad <i class="bi bi-box-arrow-up-right"></i></a></li> {# Uses corrected full_job_url #}
+                                                        {% else %}
+                                                            <li><span class="dropdown-item disabled">No Job Ad Link</span></li>
                                                     {% endif %}
 
                                                     <li><hr class="dropdown-divider"></li>
@@ -123,7 +124,7 @@
                                                         {% else %}
                                                             {# Use specific class and data attributes for JS hook - CV filename will be read from dropdown by JS #}
                                                             <li><a class="dropdown-item generate-letter-link" href="#" role="button"
-                                                                   data-job-url="{{ full_job_url }}"
+                                                                   data-job-url="{{ full_job_url }}" {# Uses corrected full_job_url #}
                                                                    data-report-file="{{ report_file }}"
                                                                    data-job-title="{{ match.job_title|escape }}"
                                                                    {% if not available_cvs %}disabled title="No CVs available for selection."{% endif %}>Generate Letter</a></li>
@@ -187,9 +188,8 @@
                             </div>
                         </div>
                         <div class="card-footer">
-                            {% if match.application_url and match.application_url != 'N/A' %}
-                                {% set path = match.application_url.split('/', 3)[3] if match.application_url.startswith('http://127.0.0.1:5000/') and match.application_url.count('/') >= 3 else (match.application_url.split('/', 1)[1] if match.application_url.startswith('127.0.0.1:5000/') and match.application_url.count('/') >= 1 else match.application_url) %}
-                                <a href="https://www.ostjob.ch/{{ path }}" target="_blank" class="btn btn-primary">Link zum Inserat</a>
+                            {% if full_job_url and full_job_url != 'N/A' %} {# Use the corrected full_job_url here too #}
+                                <a href="{{ full_job_url }}" target="_blank" class="btn btn-primary">Link zum Inserat</a>
                                 {% if match.has_motivation_letter %}
                                     <a href="{{ url_for('motivation_letter.view_motivation_letter', operation_id='existing', html_path=match.motivation_letter_html_path, report_file=report_file) }}" class="btn btn-outline-primary w-100 mb-2">Motivationsschreiben anzeigen</a> {# Updated url_for and parameter name #}
                                     {% if match.motivation_letter_docx_path %}
@@ -199,7 +199,7 @@
                                     {# This form submits via JS now, but keeping url_for correct just in case #}
                                     <form action="{{ url_for('motivation_letter.generate_motivation_letter_route') }}" method="post" class="mt-2 generate-letter-form" style="display: none;"> {# Hide form, trigger via JS #}
                                         <input type="hidden" name="cv_filename" class="cv-filename-input" value=""> {# Value set by JS #}
-                                        <input type="hidden" name="job_url" value="https://www.ostjob.ch/{{ path }}">
+                                        <input type="hidden" name="job_url" value="{{ full_job_url }}"> {# Use corrected full_job_url #}
                                         <input type="hidden" name="report_file" value="{{ report_file }}">
                                         <input type="hidden" name="job_title" value="{{ match.job_title }}">
                                         <button type="submit" class="btn btn-outline-primary w-100">Motivationsschreiben erstellen</button>

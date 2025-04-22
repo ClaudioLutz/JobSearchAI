@@ -126,8 +126,29 @@ def run_scraper():
 
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
+    # --- Clean Application URLs before saving ---
+    cleaned_results = []
+    for page_result in all_results:
+        cleaned_page = []
+        if isinstance(page_result, list): # Check if the page result is a list of jobs
+            for job in page_result:
+                if isinstance(job, dict) and 'Application URL' in job and isinstance(job['Application URL'], str):
+                    original_url = job['Application URL']
+                    # Replace double slashes after the protocol part
+                    protocol_part, rest_of_url = original_url.split('://', 1) if '://' in original_url else ('', original_url)
+                    cleaned_rest = rest_of_url.replace('//', '/')
+                    job['Application URL'] = f"{protocol_part}://{cleaned_rest}" if protocol_part else cleaned_rest
+                    if original_url != job['Application URL']:
+                         logger.debug(f"Cleaned URL: '{original_url}' -> '{job['Application URL']}'")
+                cleaned_page.append(job)
+        else:
+             logger.warning(f"Unexpected page result format, skipping cleaning for this page: {type(page_result)}")
+             cleaned_page = page_result # Keep original if format is unexpected
+        cleaned_results.append(cleaned_page)
+    # --- End URL Cleaning ---
+
     with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(all_results, f, indent=2, ensure_ascii=False)
+        json.dump(cleaned_results, f, indent=2, ensure_ascii=False) # Save cleaned results
 
     logger.info(f"Scraping completed. Results saved to: {output_file}")
     return output_file

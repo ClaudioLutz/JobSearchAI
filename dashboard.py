@@ -233,10 +233,14 @@ def create_app():
         cv_files_data.sort(key=lambda x: x.get('timestamp', '0'), reverse=True) # Sort by timestamp descending
 
         # Get list of available job data files with timestamps
-        job_data_dir = Path('job-data-acquisition/job-data-acquisition/data')
+        # Use absolute path based on app root for consistency
+        # Corrected path to match settings.json output_directory
+        job_data_dir = Path(app.root_path) / 'job-data-acquisition/data'
         job_data_files_data = []
+        logger.info(f"Checking for job data files in: {job_data_dir}") # Add logging
         if job_data_dir.exists():
             job_data_paths = list(job_data_dir.glob('job_data_*.json'))
+            logger.info(f"Found {len(job_data_paths)} job data files.") # Add logging
             for f_path in job_data_paths:
                 try:
                     mtime = os.path.getmtime(f_path)
