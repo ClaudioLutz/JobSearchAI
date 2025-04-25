@@ -94,7 +94,8 @@ def generate_motivation_letter(cv_summary, job_details):
         Das Motivationsschreiben sollte:\n1. Professionell und überzeugend sein\n2. Die Qualifikationen und Erfahrungen des Bewerbers KONKRET mit den Anforderungen der Stelle verknüpfen\n3. Die Motivation des Bewerbers für die Stelle und das Unternehmen zum Ausdruck bringen\n4. Etwa eine halbe Seite lang sein (ca. 150-200 Wörter)\n5. Auf Deutsch verfasst sein\n6. Im formalen Bewerbungsstil mit Einleitung, Hauptteil, Schluss und Grußformel sein (OHNE die Anrede/greeting selbst zu generieren)\n7. SPEZIFISCH auf die Stellenanforderungen und Verantwortlichkeiten eingehen, die aus der Webseite extrahiert wurden\n8. Die Stärken des Bewerbers hervorheben, die besonders relevant für diese Position sind\n9. Auf die Unternehmenskultur und -werte eingehen, wenn diese Informationen verfügbar sind\n10. KONKRETE BEISPIELE aus dem Lebenslauf des Bewerbers verwenden, die zeigen, wie er/sie die Anforderungen erfüllt\n
         WICHTIG: Falls die Firma der ausgeschriebenen Stell die "Universal-Job AG" ist, behandle sie als Personalvermittler in deinem Schreiben und passe den Inhalt entsprechend an. In diesem Fall wissen wir nicht wer die Stelle schlussendlich ausgeschrieben hat.\n
         WICHTIG: Verwende die detaillierten Informationen aus der Stellenbeschreibung, um ein personalisiertes und spezifisches Motivationsschreiben zu erstellen. Gehe auf konkrete Anforderungen und Verantwortlichkeiten ein und zeige, wie der Bewerber diese erfüllen kann.\n
-        WICHTIG: Der Motivtions Text darf maximal 200-300 Wörter beinhalten.\n"ß" soll als "ss" geschrieben werden.\n
+        WICHTIG: Der Motivations Text darf maximal 200-300 Wörter beinhalten.\n"ß" soll als "ss" geschrieben werden.\n
+        ACHTE AUF DIE RECHTSCHREIBUNG UND GRAMMATIK DENN DAS IST EIN BEWERBUNGSSCHREIBEN!  \n
         Gib das Motivationsschreiben als JSON-Objekt mit folgender Struktur zurück (das 'greeting'-Feld wird später hinzugefügt):\n```json\n{{\n  "candidate_name": "Vollständiger Name des Bewerbers",\n  "candidate_address": "Straße und Hausnummer",\n  "candidate_city": "PLZ und Ort",\n  "candidate_email": "E-Mail-Adresse",\n  "candidate_phone": "Telefonnummer",\n  "company_name": "Name des Unternehmens",\n  "company_department": "Abteilung (falls bekannt, sonst 'Personalabteilung')",\n  "company_street_number": "Strasse und Hausnummerdes Unternehmens (falls bekannt)",\n  "company_plz_city": "Postleitzahl und Stadt (falls bekannt)",\n  "contact_person": "Name des Ansprechpartners (falls bekannt, sonst null)",\n  "date": "Ort, den [aktuelles Datum]",\n  "subject": "Bewerbung als [Stellentitel]",\n  "introduction": "Einleitungsabsatz",\n  "body_paragraphs": [\n    "Erster Hauptabsatz",\n    "Zweiter Hauptabsatz",\n    "Dritter Hauptabsatz (falls nötig)"\n  ],\n  "closing": "Schlussabsatz",\n  "signature": "Grussformel (z.B. 'Mit freundlichen Grüssen')",\n  "full_name": "Vollständiger Name des Bewerbers"\n}}\n```\nStelle sicher, dass alle Felder korrekt befüllt sind und das JSON-Format gültig ist. Das Feld 'greeting' wird NICHT von dir generiert.
         """.format(
             cv_summary,
@@ -110,7 +111,7 @@ def generate_motivation_letter(cv_summary, job_details):
         )
         response = client.chat.completions.create(
             model="gpt-4.1", messages=[{"role": "system", "content": "Du bist ein professioneller Bewerbungsberater..."}, {"role": "user", "content": prompt}],
-            temperature=0.7, max_tokens=1500, response_format={"type": "json_object"}
+            temperature=0.7, max_tokens=20000, response_format={"type": "json_object"}
         )
         motivation_letter_json_str = response.choices[0].message.content
         try:
