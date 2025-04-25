@@ -283,7 +283,23 @@ def generate_multiple_letters():
     lock = threading.Lock()
     app_instance = current_app._get_current_object() # Get app instance
 
-    def generate_single_letter_task(app, job_url): # Pass app instance
+    # --- Load CV Summary Once ---
+    # Load the summary outside the thread function to avoid redundant reads
+    cv_summary_text = None
+    try:
+        summary_path_main = Path(app_instance.root_path) / 'process_cv/cv-data/processed' / f"{cv_base_name}_summary.txt"
+        with open(summary_path_main, 'r', encoding='utf-8') as f_cv_main:
+            cv_summary_text = f_cv_main.read()
+        if not cv_summary_text:
+            raise ValueError("CV summary file is empty.")
+        logger.info(f"Successfully loaded CV summary for {cv_base_name} for bulk generation.")
+    except Exception as cv_load_err:
+        logger.error(f"Error reading CV summary file {summary_path_main} before starting threads: {cv_load_err}", exc_info=True)
+        return jsonify({'error': f'Error reading CV summary: {cv_load_err}'}), 500
+    # --- End Load CV Summary Once ---
+
+
+    def generate_single_letter_task(app, job_url, cv_summary_content): # Pass app instance and loaded summary
         nonlocal results
         # Create an app context for this thread
         with app.app_context():
@@ -295,11 +311,20 @@ def generate_multiple_letters():
 
             try:
                 logger.info(f"Generating letter for CV '{cv_base_name}' and URL '{job_url}'")
-                # job_details = get_job_details_for_url(job_url) # No longer needed here
 
-                # Call the main generation function - remove existing_job_details to force live scrape
-                logger.info(f"Calling generate_motivation_letter for CV '{cv_base_name}' and URL '{job_url}' (forcing live scrape)")
-                result = generate_motivation_letter(cv_base_name, job_url) # Removed existing_job_details
+                # 1. Fetch Job Details
+                logger.info(f"Fetching job details for URL: {job_url}")
+                job_details = get_job_details(job_url) # Use the main function to get details
+
+                if not job_details or not has_sufficient_content(job_details):
+                     logger.error(f"Failed to fetch sufficient job details for {job_url} in bulk generation.")
+                     with lock:
+                         results['errors'].append(job_url)
+                     return # Stop processing this job
+
+                # 2. Call the generation function with loaded summary and fetched details
+                logger.info(f"Calling generate_motivation_letter for CV '{cv_base_name}' and URL '{job_url}'")
+                result = generate_motivation_letter(cv_summary_content, job_details) # Pass summary text and details dict
 
                 if result:
                     logger.info(f"Generator returned result for URL: {job_url}")
@@ -333,9 +358,9 @@ def generate_multiple_letters():
                 with lock:
                     results['errors'].append(job_url)
 
-    # Create and start threads, passing the app instance
+    # Create and start threads, passing the app instance and the loaded CV summary
     for url in job_urls:
-        thread = threading.Thread(target=generate_single_letter_task, args=(app_instance, url,))
+        thread = threading.Thread(target=generate_single_letter_task, args=(app_instance, url, cv_summary_text))
         threads.append(thread)
         thread.start()
 

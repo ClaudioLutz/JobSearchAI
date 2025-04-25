@@ -38,7 +38,8 @@ def load_latest_job_data(max_jobs=50):
     Args:
         max_jobs (int): Maximum number of job listings to return (default: 50)
     """
-    job_data_dir = Path("job-data-acquisition/job-data-acquisition/data")
+    # Corrected path: removed extra 'job-data-acquisition' segment
+    job_data_dir = Path("job-data-acquisition/data")
     logger.info(f"Looking for job data files in: {job_data_dir.absolute()}")
     
     if not job_data_dir.exists():
