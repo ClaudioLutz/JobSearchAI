@@ -347,6 +347,7 @@ def view_results(report_file):
                 'motivation_letter_html_path': None, # Store relative path for URL generation
                 'motivation_letter_json_path': None, # Store relative path
                 'motivation_letter_docx_path': None, # Store relative path
+                'has_email_text': False, # NEW: Flag for email text existence
                 'has_scraped_data': False,
                 'scraped_data_filename': None, # Store filename for URL generation
             })
@@ -384,7 +385,15 @@ def view_results(report_file):
                     if has_letter_direct:
                         match['has_motivation_letter'] = True
                         match['motivation_letter_html_path'] = str(html_file_direct.relative_to(current_app.root_path))
-                        match['motivation_letter_json_path'] = str(json_file_direct.relative_to(current_app.root_path))
+                        match['motivation_letter_json_path'] = str(json_file_direct.relative_to(current_app.root_path)) # Store JSON path
+                        # Check for email text in the found JSON
+                        try:
+                            with open(json_file_direct, 'r', encoding='utf-8') as f_json:
+                                letter_data = json.load(f_json)
+                            if letter_data.get('email_text'):
+                                match['has_email_text'] = True
+                        except Exception as e_json_load:
+                            logger.warning(f"Could not load or check email_text in {json_file_direct}: {e_json_load}")
                     if has_docx_direct:
                         match['motivation_letter_docx_path'] = str(docx_file_direct.relative_to(current_app.root_path))
                     if has_scraped_direct:
@@ -447,7 +456,15 @@ def view_results(report_file):
                             if has_letter:
                                 match['has_motivation_letter'] = True
                                 match['motivation_letter_html_path'] = str(html_file.relative_to(current_app.root_path))
-                                match['motivation_letter_json_path'] = str(json_file_check.relative_to(current_app.root_path))
+                                match['motivation_letter_json_path'] = str(json_file_check.relative_to(current_app.root_path)) # Store JSON path
+                                # Check for email text in the found JSON
+                                try:
+                                    with open(json_file_check, 'r', encoding='utf-8') as f_json:
+                                        letter_data = json.load(f_json)
+                                    if letter_data.get('email_text'):
+                                        match['has_email_text'] = True
+                                except Exception as e_json_load:
+                                    logger.warning(f"Could not load or check email_text in {json_file_check}: {e_json_load}")
                             if has_docx:
                                 match['motivation_letter_docx_path'] = str(docx_file.relative_to(current_app.root_path))
 

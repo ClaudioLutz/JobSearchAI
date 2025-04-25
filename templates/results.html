@@ -55,8 +55,9 @@
                             {% endif %}
                         </div>
 
-                        {# Generate Button #}
-                        <button id="generate-selected-letters-btn" class="btn btn-success" data-report-file="{{ report_file }}" {% if not available_cvs %}disabled title="No CVs available for selection."{% endif %}>Generate Letters for Selected</button>
+                        {# Generate Buttons #}
+                        <button id="generate-selected-letters-btn" class="btn btn-success me-2" data-report-file="{{ report_file }}" {% if not available_cvs %}disabled title="No CVs available for selection."{% endif %}>Generate Letters for Selected</button>
+                        <button id="generate-selected-emails-btn" class="btn btn-info" data-report-file="{{ report_file }}" {% if not available_cvs %}disabled title="No CVs available for selection."{% endif %}>Generate Email for Selected</button>
                         <span id="selected-status" class="ms-2"></span> <!-- For status messages -->
                     </div>
                     <div class="table-responsive">
@@ -138,6 +139,11 @@
                                                         <!-- View Scraped Data (conditional) -->
                                                         {% if match.has_scraped_data %}
                                                             <li><a class="dropdown-item" href="{{ url_for('motivation_letter.view_scraped_data', scraped_data_filename=match.scraped_data_filename) }}">View Scraped Data</a></li>
+                                                        {% endif %}
+
+                                                        <!-- View Email Text (conditional on has_email_text flag and JSON path) -->
+                                                        {% if match.has_email_text and match.motivation_letter_json_path %}
+                                                            <li><a class="dropdown-item" href="{{ url_for('motivation_letter.view_email_text', json_path=match.motivation_letter_json_path, report_file=report_file) }}">View Email Text</a></li>
                                                         {% endif %}
                                                     {% else %}
                                                          <li><span class="dropdown-item disabled">Letter Actions N/A</span></li>

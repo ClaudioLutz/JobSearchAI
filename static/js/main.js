@@ -573,6 +573,101 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     // --- End Generate Letters for Selected Jobs ---
 
+    // --- Generate Email Texts for Selected Jobs ---
+    console.log("Checking for multi-email button elements.");
+    const generateSelectedEmailsBtn = document.getElementById('generate-selected-emails-btn');
+    // Use the same status span as the letter generation
+    // const selectedStatusSpan = document.getElementById('selected-status'); // Already defined above
+
+    if (generateSelectedEmailsBtn && selectedStatusSpan) {
+        console.log("Attempting to attach listener to #generate-selected-emails-btn");
+        generateSelectedEmailsBtn.addEventListener('click', function() {
+            console.log("#generate-selected-emails-btn clicked!");
+            const selectedCheckboxes = document.querySelectorAll('.job-select-checkbox:checked');
+            console.log(`Found ${selectedCheckboxes.length} selected checkboxes for email generation.`);
+
+            // Get selected CV from dropdown
+            const cvSelectElement = document.getElementById('cv-select');
+            if (!cvSelectElement) {
+                console.error('CV select dropdown (#cv-select) not found.');
+                alert('Error: CV selection dropdown is missing.');
+                return;
+            }
+            const cvFilename = cvSelectElement.value;
+
+            if (!cvFilename) {
+                alert('Error: No CV selected in the dropdown.');
+                console.error("CV filename is empty from dropdown for email generation.");
+                return;
+            }
+
+            if (selectedCheckboxes.length === 0) {
+                alert('Please select at least one job to generate email texts for.');
+                return;
+            }
+
+            const jobUrls = Array.from(selectedCheckboxes).map(cb => cb.value);
+            const jobTitles = Array.from(selectedCheckboxes).map(cb => cb.getAttribute('data-job-title')); // For status messages
+            console.log("Selected Job URLs for email:", jobUrls);
+            console.log("CV Filename for email:", cvFilename);
+
+            setButtonLoading(this, true);
+            selectedStatusSpan.textContent = `Generating ${jobUrls.length} email text(s)...`;
+            selectedStatusSpan.className = 'ms-2 text-info'; // Reset class
+
+            console.log("Initiating fetch to /motivation_letter/generate_multiple_emails");
+            fetch('/motivation_letter/generate_multiple_emails', { // Call the new endpoint
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    job_urls: jobUrls,
+                    cv_filename: cvFilename
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(errData => {
+                        throw new Error(errData.error || `Server error: ${response.statusText}`);
+                    }).catch(() => {
+                        throw new Error(`Server error: ${response.statusText}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log("Backend response (email generation):", data);
+                let message = `Generated/Updated ${data.success_count}/${jobUrls.length} email texts.`;
+                if (data.errors && data.errors.length > 0) {
+                    // Extract reasons or URLs for failed jobs
+                    const failedDetails = data.errors.map(err => err.url || 'Unknown URL').join(', ');
+                    message += ` Failed for: ${failedDetails}.`;
+                    selectedStatusSpan.className = 'ms-2 text-warning';
+                } else {
+                    selectedStatusSpan.className = 'ms-2 text-success';
+                }
+                selectedStatusSpan.textContent = message;
+                // Optional: Reload or update UI. Reload might be simplest to show new "View Email Text" links.
+                // setTimeout(() => window.location.reload(), 3000);
+            })
+            .catch(error => {
+                console.error('Error generating multiple email texts:', error);
+                selectedStatusSpan.textContent = `Error: ${error.message}`;
+                selectedStatusSpan.className = 'ms-2 text-danger';
+            })
+            .finally(() => {
+                setButtonLoading(this, false);
+            });
+        });
+        console.log("Listener attached to #generate-selected-emails-btn");
+    } else {
+        if (document.querySelector('.job-matches-table')) { // Check if on results page
+             console.error("#generate-selected-emails-btn or #selected-status not found on results page!");
+        }
+    }
+    // --- End Generate Email Texts for Selected Jobs ---
+
     // Auto-dismiss alerts after 5 seconds
     const alerts = document.querySelectorAll('.alert');
     alerts.forEach(alert => {

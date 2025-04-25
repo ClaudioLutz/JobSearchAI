@@ -48,8 +48,8 @@ The system operates through a series of interconnected components, primarily man
 6.  **Dashboard Interface**:
     *   The Flask application (`dashboard.py`) provides the central user interface.
     *   It allows users to manage files (upload CVs, view/delete CVs, job data, reports, letters).
-    *   It triggers the execution of the different components (scraping, matching, letter generation), often using background threads (`threading`) for long-running tasks.
-    *   It displays results (job matches, generated letters, bulk job data contents, specific scraped job data).
+    *   It triggers the execution of the different components (scraping, matching, letter generation, bulk email text generation), often using background threads (`threading`) for long-running tasks.
+    *   It displays results (job matches, generated letters, generated email texts, bulk job data contents, specific scraped job data).
     *   It provides progress tracking for background operations via AJAX polling.
 
 ## Core Components Summary
@@ -57,9 +57,9 @@ The system operates through a series of interconnected components, primarily man
 *   **CV Processor (`process_cv/`)**: Extracts text from PDF CVs and uses AI to generate structured summaries focusing on career aspects. Requires OpenAI API key.
 *   **Job Data Acquisition (`job-data-acquisition/`)**: Scrapes job listings from web pages using ScrapeGraph AI and saves structured data to JSON files. Configured via `settings.json`. Requires OpenAI API key (or other LLM config).
 *   **Job Matcher (`job_matcher.py`)**: Compares CV summaries against scraped job listings using AI evaluation to score and rank potential matches. Outputs JSON and Markdown reports. Requires OpenAI API key.
-*   **Motivation Letter Generator (`motivation_letter_generator.py`)**: Creates personalized motivation letters using AI, combining CV summary and job details (obtained via direct scraping or pre-scraped data). Outputs JSON and HTML letters. Requires OpenAI API key.
+*   **Motivation Letter Generator (`motivation_letter_generator.py`, `letter_generation_utils.py`)**: Creates personalized motivation letters and/or short email texts using AI, combining CV summary and job details. Outputs/updates JSON files and generates HTML letters. Requires OpenAI API key.
 *   **Word Template Generator (`word_template_generator.py`)**: Converts structured JSON motivation letters into formatted Word documents using a template and `docxtpl`.
-*   **Dashboard (`dashboard.py`)**: Flask web application providing the user interface to manage files, run processes, view results, and track progress. Orchestrates the interaction between components.
+*   **Dashboard (`dashboard.py`, `blueprints/`)**: Flask web application providing the user interface to manage files, run processes (including bulk letter and email generation), view results, and track progress. Orchestrates the interaction between components.
 
 ## Key Technologies
 

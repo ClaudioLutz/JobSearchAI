@@ -181,3 +181,92 @@ def generate_motivation_letter(cv_summary, job_details):
     except Exception as e:
         logger.error(f"Error generating motivation letter: {str(e)}", exc_info=True)
         return None
+
+
+def generate_email_text_only(cv_summary, job_details):
+    """Generate only the short email text using GPT-4.1"""
+    try:
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        if not openai_api_key:
+            env_path = Path(__file__).parent / 'process_cv' / '.env'
+            if env_path.exists():
+                from dotenv import load_dotenv
+                load_dotenv(dotenv_path=env_path)
+                openai_api_key = os.getenv('OPENAI_API_KEY')
+
+        if not openai_api_key:
+            logger.error("OpenAI API key not found for email text generation.")
+            return None
+
+        try:
+            client = openai.OpenAI(api_key=openai_api_key)
+        except ImportError:
+            logger.error("OpenAI library not found. Please install it: pip install openai")
+            return None
+
+        # Extract contact person if available for personalization
+        contact_person = job_details.get('Contact Person', None)
+        greeting = f"Sehr geehrte/r Herr/Frau {contact_person.split()[-1]}" if contact_person else "Sehr geehrte Damen und Herren"
+
+        prompt = f"""
+        Erstelle einen kurzen, kreativen E-Mail-Text (ca. 50-70 Wörter) basierend auf dem Lebenslauf und der Stellenbeschreibung. Dieser Text dient als Begleittext für eine E-Mail-Bewerbung, in der die Anhänge (Lebenslauf, Motivationsschreiben) gesendet werden.
+
+        Der Text sollte:
+        - Professionell, aber ansprechend und nicht zu generisch sein.
+        - Kurz auf die beworbene Stelle ({job_details.get('Job Title', 'diese interessante Position')}) bei {job_details.get('Company Name', 'Ihrem Unternehmen')} eingehen.
+        - Die Motivation oder eine Schlüsselqualifikation des Bewerbers andeuten.
+        - Auf die angehängten Dokumente (Lebenslauf, Motivationsschreiben) hinweisen.
+        - Mit einer passenden Grußformel enden.
+        - Auf Deutsch verfasst sein.
+        - "ß" soll als "ss" geschrieben werden.
+
+        Lebenslauf-Zusammenfassung:
+        {cv_summary}
+
+        Stellenbeschreibung (Auszug):
+        Titel: {job_details.get('Job Title', 'N/A')}
+        Firma: {job_details.get('Company Name', 'N/A')}
+        Beschreibung: {job_details.get('Job Description', 'N/A')[:200]}...
+        Ansprechpartner: {contact_person if contact_person else 'Nicht angegeben'}
+
+        Gib NUR den E-Mail-Text als JSON-Objekt mit folgender Struktur zurück:
+        ```json
+        {{
+          "email_text": "Der generierte E-Mail-Text hier (ca. 50-70 Wörter)."
+        }}
+        ```
+        Stelle sicher, dass das JSON-Format gültig ist und nur das Feld "email_text" enthält.
+        """
+
+        response = client.chat.completions.create(
+            model="gpt-4.1",
+            messages=[
+                {"role": "system", "content": "Du bist ein Assistent, der prägnante und kreative E-Mail-Texte für Bewerbungen schreibt."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.8, # Slightly higher temp for creativity
+            max_tokens=150, # Limit tokens for short text
+            response_format={"type": "json_object"}
+        )
+
+        email_text_json_str = response.choices[0].message.content
+        try:
+            email_text_json = json.loads(email_text_json_str)
+            email_text = email_text_json.get('email_text')
+            if email_text:
+                logger.info("Successfully generated email text.")
+                return email_text
+            else:
+                logger.error("Generated JSON did not contain 'email_text' field.")
+                return None
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing JSON response for email text: {str(e)}")
+            logger.error(f"Raw OpenAI response for email text: {email_text_json_str}")
+            return None
+
+    except openai.OpenAIError as e:
+        logger.error(f"OpenAI API error during email text generation: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error generating email text: {str(e)}", exc_info=True)
+        return None

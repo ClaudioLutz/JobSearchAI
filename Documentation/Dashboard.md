@@ -1,4 +1,4 @@
-# 6. Dashboard
+g# 6. Dashboard
 
 **Purpose**: Provide a web interface for interacting with all components of the system, structured using Flask Blueprints.
 
@@ -8,10 +8,11 @@
     - `cv_routes.py`: Blueprint (`cv_bp`) handling CV upload, deletion, and summary viewing.
     - `job_data_routes.py`: Blueprint (`job_data_bp`) handling job scraper execution, job data viewing, and deletion.
     - `job_matching_routes.py`: Blueprint (`job_matching_bp`) handling job matcher execution, combined process execution, results viewing, report downloading, and report deletion.
-    - `motivation_letter_routes.py`: Blueprint (`motivation_letter_bp`) handling single/multiple motivation letter generation, letter viewing, downloading (HTML/DOCX), and viewing scraped data associated with letters.
+    - `motivation_letter_routes.py`: Blueprint (`motivation_letter_bp`) handling single/multiple motivation letter generation, bulk email text generation, letter/email viewing, downloading (HTML/DOCX), and viewing scraped data associated with letters.
 - `templates/index.html`: Main dashboard page template.
 - `templates/results.html`: Job match results page template.
 - `templates/motivation_letter.html`: Motivation letter display template.
+- `templates/email_text_view.html`: Template for viewing generated email text.
 - `templates/job_data_view.html`: Template for viewing bulk job data file contents.
 - `templates/scraped_data_view.html`: Template for viewing specific scraped job data.
 - `static/css/styles.css`: CSS styles for the dashboard.
@@ -66,8 +67,10 @@
     *   Download motivation letters in Word format (via `/motivation_letter/download_docx?...` or `/motivation_letter/download_docx_from_json?...`).
     *   View the raw scraped data used for a specific letter via the "View Scraped Data" option in the Actions dropdown on the results page (renders `scraped_data_view.html` via `/motivation_letter/view_scraped_data/...`).
     *   Select multiple job matches on the results page and generate letters for all selected jobs using the currently selected CV with a single click (AJAX call to `/motivation_letter/generate_multiple`).
+    *   Select multiple job matches on the results page and generate email texts for all selected jobs using the currently selected CV with a single click (AJAX call to `/motivation_letter/generate_multiple_emails`). The generated email text is stored within the corresponding `motivation_letter_{job_title}.json` file.
+    *   View generated email text (if available) via the "View Email Text" option in the Actions dropdown on the results page (renders `email_text_view.html` via `/motivation_letter/view_email_text/existing?...`).
 6.  **File Linking & Display (Results Page)**:
-    *   Logic reliably links job matches displayed on the results page to their corresponding generated files (`.html`, `.docx`, `_scraped_data.json`, `.json` letter structure).
+    *   Logic reliably links job matches displayed on the results page to their corresponding generated files (`.html`, `.docx`, `_scraped_data.json`, `.json` letter structure, including checking for `email_text` within the JSON).
     *   Matching is done by comparing Application URLs between the report and scraped data files.
     *   Filenames for checking existence are constructed using the Job Title found *within* the matched `_scraped_data.json` file.
 7.  **User Feedback and Progress Tracking**:
@@ -111,6 +114,10 @@
     *   `generate_motivation_letter_route()`: Starts single letter generation background task (POST).
     *   `generate_multiple_letters()`: Handles bulk letter generation via POST (AJAX).
     *   `view_motivation_letter(operation_id)`: Renders `motivation_letter.html` for new or existing letters.
+    *   `download_motivation_letter_html()`: Serves HTML letter for download.
+    *   `generate_multiple_emails()`: Handles bulk email text generation via POST (AJAX).
+    *   `view_motivation_letter(operation_id)`: Renders `motivation_letter.html` for new or existing letters.
+    *   `view_email_text()`: Renders `email_text_view.html` for existing email texts.
     *   `download_motivation_letter_html()`: Serves HTML letter for download.
     *   `download_motivation_letter_docx()`: Serves DOCX letter for download.
     *   `download_docx_from_json()`: Generates/serves DOCX from JSON.

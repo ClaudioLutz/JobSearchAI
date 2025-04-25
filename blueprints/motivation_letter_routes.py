@@ -290,6 +290,128 @@ def generate_multiple_letters():
     return jsonify(results)
 
 
+@motivation_letter_bp.route('/generate_multiple_emails', methods=['POST'])
+def generate_multiple_emails():
+    """Generate email texts for multiple selected jobs and update their JSON files."""
+    data = request.get_json()
+    if not data:
+        logger.error("Invalid request format for /generate_multiple_emails")
+        return jsonify({'error': 'Invalid request format'}), 400
+
+    job_urls = data.get('job_urls')
+    cv_base_name = data.get('cv_filename') # Base name like 'Lebenslauf'
+
+    if not job_urls or not isinstance(job_urls, list) or not cv_base_name:
+        logger.error(f"Missing job_urls or cv_filename in request: {data}")
+        return jsonify({'error': 'Missing job_urls or cv_filename'}), 400
+
+    logger.info(f"Received request to generate {len(job_urls)} email texts for CV: {cv_base_name}")
+
+    # --- Load CV Summary ---
+    cv_summary = None
+    try:
+        summary_path = Path(current_app.root_path) / 'process_cv/cv-data/processed' / f"{cv_base_name}_summary.txt"
+        if not summary_path.exists():
+            logger.error(f"Required CV summary file not found: {summary_path}")
+            return jsonify({'error': f'Required CV summary file not found for {cv_base_name}'}), 400
+        with open(summary_path, 'r', encoding='utf-8') as f:
+            cv_summary = f.read()
+    except Exception as e:
+        logger.error(f"Error loading CV summary {summary_path}: {e}", exc_info=True)
+        return jsonify({'error': f'Error loading CV summary: {e}'}), 500
+
+    if not cv_summary:
+         return jsonify({'error': 'CV summary could not be loaded.'}), 500
+
+    # --- Use threading with app context for generation and file updates ---
+    results = {'success_count': 0, 'errors': [], 'not_found': []}
+    threads = []
+    lock = threading.Lock()
+    app_instance = current_app._get_current_object() # Get app instance
+
+    # Import the new function using absolute import from project root
+    from letter_generation_utils import generate_email_text_only
+
+    def generate_and_update_task(app, job_url): # Pass app instance
+        nonlocal results
+        with app.app_context(): # Establish app context for this thread
+            if not job_url or job_url == 'N/A' or not job_url.startswith('http'):
+                logger.warning(f"Skipping invalid job URL for email generation: {job_url}")
+                with lock: results['errors'].append({'url': job_url, 'reason': 'Invalid URL'})
+                return
+
+            try:
+                # 1. Get Job Details (needed for title and context)
+                # Use the app's shared function
+                job_details = get_job_details_for_url(job_url)
+                if not job_details or not job_details.get('Job Title'):
+                    logger.warning(f"Could not get sufficient job details for URL: {job_url}")
+                    with lock: results['errors'].append({'url': job_url, 'reason': 'Failed to get job details'})
+                    return
+
+                job_title = job_details['Job Title']
+                sanitized_job_title = sanitize_filename(job_title) # Use helper
+                letters_dir = Path(app.root_path) / 'motivation_letters'
+                json_file_path = letters_dir / f"motivation_letter_{sanitized_job_title}.json"
+
+                # 2. Generate Email Text
+                logger.info(f"Generating email text for CV '{cv_base_name}' and Job '{job_title}' (URL: {job_url})")
+                email_text = generate_email_text_only(cv_summary, job_details)
+
+                if not email_text:
+                    logger.error(f"Failed to generate email text (generate_email_text_only returned None) for Job: {job_title}")
+                    with lock: results['errors'].append({'url': job_url, 'reason': 'Email text generation failed'})
+                    return
+
+                # 3. Load existing JSON or create new dict
+                letter_data = {}
+                if json_file_path.is_file():
+                    try:
+                        with open(json_file_path, 'r', encoding='utf-8') as f:
+                            letter_data = json.load(f)
+                        logger.info(f"Loaded existing JSON: {json_file_path}")
+                    except Exception as load_e:
+                        logger.error(f"Error loading existing JSON {json_file_path}: {load_e}. Will overwrite.")
+                        letter_data = {} # Reset if loading failed
+                else:
+                    logger.info(f"JSON file not found ({json_file_path}), will create new.")
+                    # Optionally populate with minimal data if needed, or just add email_text
+                    letter_data['job_title_source'] = job_title # Add source title for reference
+
+                # 4. Update email_text field
+                letter_data['email_text'] = email_text
+
+                # 5. Save JSON back
+                try:
+                    letters_dir.mkdir(parents=True, exist_ok=True) # Ensure directory exists
+                    with open(json_file_path, 'w', encoding='utf-8') as f:
+                        json.dump(letter_data, f, ensure_ascii=False, indent=2)
+                    logger.info(f"Successfully updated/created JSON with email text: {json_file_path}")
+                    with lock:
+                        results['success_count'] += 1
+                except Exception as save_e:
+                    logger.error(f"Error saving updated JSON {json_file_path}: {save_e}", exc_info=True)
+                    with lock: results['errors'].append({'url': job_url, 'reason': f'Failed to save JSON: {save_e}'})
+
+            except Exception as e:
+                logger.error(f"Exception generating/updating email text for URL {job_url}: {str(e)}", exc_info=True)
+                with lock:
+                    results['errors'].append({'url': job_url, 'reason': f'Unexpected error: {e}'})
+
+    # Create and start threads
+    for url in job_urls:
+        thread = threading.Thread(target=generate_and_update_task, args=(app_instance, url,))
+        threads.append(thread)
+        thread.start()
+
+    # Wait for all threads
+    for thread in threads:
+        thread.join()
+
+    logger.info(f"Multiple email text generation/update complete. Success: {results['success_count']}, Failures: {len(results['errors'])}")
+    return jsonify(results)
+
+
 @motivation_letter_bp.route('/view/<operation_id>')
 def view_motivation_letter(operation_id):
     """View a generated motivation letter (newly generated or existing)"""
@@ -460,3 +582,54 @@ def view_scraped_data(scraped_data_filename):
         flash(f'An error occurred while viewing scraped job data: {str(e)}')
         logger.error(f'Error in view_scraped_data for {scraped_data_filename}: {str(e)}', exc_info=True)
         return redirect(url_for('index'))
+
+
+@motivation_letter_bp.route('/view_email_text/existing')
+def view_email_text():
+    """View the generated email text from a JSON file."""
+    json_path_rel = request.args.get('json_path')
+    report_file = request.args.get('report_file') # Optional, for back button context
+
+    if not json_path_rel:
+        flash('Motivation letter JSON path missing')
+        logger.error("Missing json_path for viewing email text.")
+        return redirect(url_for('index'))
+
+    try:
+        json_full_path = Path(current_app.root_path) / json_path_rel
+        if not json_full_path.is_file():
+            flash(f'Motivation letter JSON file not found: {json_path_rel}')
+            logger.error(f"JSON file not found for email text view: {json_full_path}")
+            # Try redirecting back to results if possible
+            if report_file:
+                 return redirect(url_for('job_matching.view_results', report_file=report_file))
+            else:
+                 return redirect(url_for('index'))
+
+        with open(json_full_path, 'r', encoding='utf-8') as f:
+            letter_data = json.load(f)
+
+        # Get email_text, default to None if not found or empty
+        email_text = letter_data.get('email_text')
+        if not email_text: # Check if it's None or empty string
+             logger.warning(f"No 'email_text' found or text is empty in {json_path_rel}")
+             email_text = None # Ensure it's None if empty for template logic
+
+        return render_template('email_text_view.html',
+                               email_text=email_text,
+                               report_file=report_file) # Pass report_file for potential back button logic
+
+    except json.JSONDecodeError:
+        flash(f'Error decoding JSON from file: {json_path_rel}')
+        logger.error(f"JSONDecodeError for email text view: {json_path_rel}")
+        if report_file:
+             return redirect(url_for('job_matching.view_results', report_file=report_file))
+        else:
+             return redirect(url_for('index'))
+    except Exception as e:
+        flash(f'Error viewing email text: {str(e)}')
+        logger.error(f'Error viewing email text from {json_path_rel}: {str(e)}', exc_info=True)
+        if report_file:
+             return redirect(url_for('job_matching.view_results', report_file=report_file))
+        else:
+             return redirect(url_for('index'))

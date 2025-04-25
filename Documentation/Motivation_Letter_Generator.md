@@ -78,15 +78,17 @@
 *   **`letter_generation_utils.py`**:
     *   `json_to_html(motivation_letter_json)`: Converts the final letter JSON into an HTML string.
     *   `generate_motivation_letter(cv_summary, job_details)`: Takes CV summary and structured job details, prompts OpenAI to generate the letter JSON, saves all output files (JSON letter, HTML letter, input job details), and returns file paths.
+    *   `generate_email_text_only(cv_summary, job_details)`: Takes CV summary and structured job details, prompts OpenAI to generate *only* a short email text, and returns the text string.
 *   **`graph_scraper_utils.py`**:
     *   `load_config()`: Loads configuration from `job-data-acquisition/settings.json`.
     *   `get_job_details_with_graphscrapeai(job_url)`: Uses `scrapegraphai` (with `headless=False` and structured prompt) to attempt live extraction of job details. Includes validation.
 
 **Output Format**:
-- **Letter JSON File**: Saved to `motivation_letters/motivation_letter_{job_title}.json`. Contains a structured JSON object representing the generated letter, including:
+- **Letter JSON File**: Saved to `motivation_letters/motivation_letter_{job_title}.json`. Contains a structured JSON object representing the generated letter and potentially the email text, including:
   - Candidate information (name, address, city, email, phone)
   - Company information (name, department, street/number, PLZ/city)
   - Letter components (date, subject, greeting, introduction, body_paragraphs (list), closing, signature, full_name)
+  - `email_text` (string, optional): Contains the generated short email text if created via the "Generate Email for Selected" button.
 - **Scraped Data JSON File**: Saved to `motivation_letters/motivation_letter_{job_title}_scraped_data.json`. Contains the raw dictionary of job details extracted by `get_job_details` (e.g., Job Title, Company Name, Description, Skills, Responsibilities, Contact Person, Application Email, etc.). This is the data used as input for the letter generation.
 - **HTML File**: Saved to `motivation_letters/motivation_letter_{job_title}.html`. Contains a basic HTML representation generated from the JSON structure (or the raw OpenAI response in case of JSON parsing failure). Includes:
   - Candidate's contact information block
