@@ -639,21 +639,23 @@ def download_docx_from_json():
 def view_scraped_data(scraped_data_filename):
     """Display the contents of a specific scraped job data JSON file."""
     try:
-        secure_name = secure_filename(scraped_data_filename)
-        file_path = Path(current_app.root_path) / 'motivation_letters' / secure_name
+        # Use the filename directly as passed from the URL (it was determined safely before)
+        # Do NOT use secure_filename here as it can alter valid characters like umlauts.
+        filename = scraped_data_filename
+        file_path = Path(current_app.root_path) / 'motivation_letters' / filename
 
         if not file_path.is_file():
-            flash(f'Scraped job data file not found: {secure_name}')
+            flash(f'Scraped job data file not found: {filename}')
             logger.error(f"Scraped job data file not found: {file_path}")
             return redirect(url_for('index'))
 
         with open(file_path, 'r', encoding='utf-8') as f:
             job_details = json.load(f)
 
-        return render_template('scraped_data_view.html', job_details=job_details, filename=secure_name)
+        return render_template('scraped_data_view.html', job_details=job_details, filename=filename)
 
     except FileNotFoundError:
-        flash(f'Scraped job data file not found: {scraped_data_filename}')
+        flash(f'Scraped job data file not found: {filename}') # Use original filename in flash
         logger.error(f"FileNotFoundError for scraped data file: {scraped_data_filename}")
         return redirect(url_for('index'))
     except json.JSONDecodeError:

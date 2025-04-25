@@ -355,55 +355,16 @@ def view_results(report_file):
             if not match_app_url:
                 continue
 
-            # --- Direct File Check Logic (using sanitized job title) ---
-            job_title = match.get('job_title', '')
-            found_files_by_title = False
-            if job_title:
-                # Use a robust sanitization function (consider moving to utils)
-                def sanitize_filename(name, length=30):
-                    # Allow alphanumeric, space, underscore, hyphen. Replace others with underscore.
-                    sanitized = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in name)
-                    # Replace spaces with underscores
-                    sanitized = sanitized.replace(' ', '_')
-                    # Limit length
-                    return sanitized[:length]
+            # --- URL Matching Logic (Primary Method) ---
+            # Define sanitize_filename helper here or move to a shared utils module
+            def sanitize_filename(name, length=30):
+                # Allow alphanumeric, space, underscore, hyphen. Replace others with underscore.
+                sanitized = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in name)
+                # Replace spaces with underscores
+                sanitized = sanitized.replace(' ', '_')
+                # Limit length
+                return sanitized[:length]
 
-                sanitized_job_title = sanitize_filename(job_title)
-                logger.debug(f"Checking files for sanitized title: '{sanitized_job_title}' (from '{job_title}')")
-
-                html_file_direct = letters_dir / f"motivation_letter_{sanitized_job_title}.html"
-                json_file_direct = letters_dir / f"motivation_letter_{sanitized_job_title}.json"
-                docx_file_direct = letters_dir / f"motivation_letter_{sanitized_job_title}.docx"
-                scraped_file_direct = letters_dir / f"motivation_letter_{sanitized_job_title}_scraped_data.json"
-
-                has_letter_direct = html_file_direct.is_file() and json_file_direct.is_file()
-                has_docx_direct = docx_file_direct.is_file()
-                has_scraped_direct = scraped_file_direct.is_file()
-
-                if has_letter_direct or has_docx_direct or has_scraped_direct:
-                    logger.info(f"Found files directly by sanitized job title '{sanitized_job_title}'")
-                    if has_letter_direct:
-                        match['has_motivation_letter'] = True
-                        match['motivation_letter_html_path'] = str(html_file_direct.relative_to(current_app.root_path))
-                        match['motivation_letter_json_path'] = str(json_file_direct.relative_to(current_app.root_path)) # Store JSON path
-                        # Check for email text in the found JSON
-                        try:
-                            with open(json_file_direct, 'r', encoding='utf-8') as f_json:
-                                letter_data = json.load(f_json)
-                            if letter_data.get('email_text'):
-                                match['has_email_text'] = True
-                        except Exception as e_json_load:
-                            logger.warning(f"Could not load or check email_text in {json_file_direct}: {e_json_load}")
-                    if has_docx_direct:
-                        match['motivation_letter_docx_path'] = str(docx_file_direct.relative_to(current_app.root_path))
-                    if has_scraped_direct:
-                        match['has_scraped_data'] = True
-                        match['scraped_data_filename'] = scraped_file_direct.name
-                    found_files_by_title = True
-                    # Continue to next match if found by title
-                    continue
-
-            # --- URL Matching Logic (if not found by title) ---
             # Normalize URLs function (consider moving to utils)
             def normalize_url(url):
                 if not url: return ""
@@ -474,8 +435,9 @@ def view_results(report_file):
                     logger.error(f"Error processing scraped file {scraped_path}: {e_load}")
                     continue # Skip this scraped file
 
-            if not found_files_by_title and not found_files_by_url:
-                logger.warning(f"No generated files found for URL {match_app_url} (job title: {match.get('job_title')})")
+            # Log if files weren't found by URL match
+            if not found_files_by_url:
+                logger.warning(f"No generated files could be associated with URL {match_app_url} (Report Job Title: {match.get('job_title')}) via URL matching.")
 
         # Render the results template
         return render_template(
