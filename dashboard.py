@@ -30,7 +30,8 @@ def get_job_details_for_url(job_url):
         temp_logger.info(f"Extracted job ID: {job_id}")
 
         # Find the job data file (relative to current working directory)
-        job_data_dir = Path('job-data-acquisition/job-data-acquisition/data')
+        # Corrected path
+        job_data_dir = Path('job-data-acquisition/data')
         temp_logger.info(f"Job data directory: {job_data_dir}")
 
         if job_data_dir.exists():
@@ -55,32 +56,43 @@ def get_job_details_for_url(job_url):
                         if isinstance(job_data[0], list):
                             # It's an array of arrays - flatten it
                             for job_array in job_data:
-                                job_listings.extend(job_array)
+                                if isinstance(job_array, list): # Ensure inner item is a list
+                                    job_listings.extend(job_array)
                             temp_logger.info(f"Found array of arrays structure with {len(job_listings)} total job listings")
                         elif isinstance(job_data[0], dict) and 'content' in job_data[0]:
-                            # It's the old structure with a 'content' property
-                            job_listings = job_data[0]['content']
-                            temp_logger.info(f"Found old structure with {len(job_listings)} job listings in 'content' array")
+                             # Structure: List of Dictionaries, each with a 'content' key
+                             for page_dict in job_data:
+                                 if isinstance(page_dict, dict) and 'content' in page_dict and isinstance(page_dict['content'], list):
+                                     job_listings.extend(page_dict['content'])
+                             temp_logger.info(f"Found list of dicts structure with {len(job_listings)} total job listings")
                         else:
                             # Assume it's a flat array of job listings
                             job_listings = job_data
                             temp_logger.info(f"Using flat job data structure with {len(job_listings)} job listings")
+                elif isinstance(job_data, dict) and 'content' in job_data: # Handle case where root is dict with content
+                     job_listings = job_data['content']
+                     temp_logger.info(f"Found root dict structure with {len(job_listings)} job listings")
+
 
                 temp_logger.info(f"Processed job data with {len(job_listings)} total job listings")
 
                 # Find the job with the matching ID
                 for i, job in enumerate(job_listings):
-                    # Extract the job ID from the Application URL
-                    job_application_url = job.get('Application URL', '')
-                    temp_logger.info(f"Job {i+1} Application URL: {job_application_url}")
+                     if not isinstance(job, dict): # Skip if item is not a dict
+                         temp_logger.warning(f"Skipping non-dictionary item at index {i}")
+                         continue
+                     # Extract the job ID from the Application URL
+                     job_application_url = job.get('Application URL', '')
+                     temp_logger.info(f"Job {i+1} Application URL: {job_application_url}")
 
-                    if job_id in job_application_url:
-                        temp_logger.info(f"Found matching job: {job.get('Job Title', 'N/A')} at {job.get('Company Name', 'N/A')}")
-                        job_details = job
-                        break
+                     # More robust check for job ID within the URL path
+                     if isinstance(job_application_url, str) and job_id in job_application_url.split('/')[-1]:
+                         temp_logger.info(f"Found matching job: {job.get('Job Title', 'N/A')} at {job.get('Company Name', 'N/A')}")
+                         job_details = job
+                         break
 
-                # If no exact match found, use the first job as a fallback
-                if not job_details and job_listings:
+                # If no exact match found, use the first job as a fallback (if any jobs exist)
+                if not job_details and job_listings and isinstance(job_listings[0], dict):
                     temp_logger.info("No exact match found, using first job as fallback")
                     job_details = job_listings[0]
     except Exception as e:
@@ -264,12 +276,86 @@ def create_app():
                 except Exception as e:
                     logger.error(f"Error getting timestamp for report file {f_path.name}: {e}")
                     report_files_data.append({'name': f_path.name, 'timestamp': 'N/A'})
-        report_files_data.sort(key=lambda x: x.get('timestamp', '0'), reverse=True) # Sort by timestamp descending
+        report_files_data.sort(key=lambda x: x.get('timestamp', '0'), reverse=True) # Sort by timestamp
+
+        # --- Get list of generated motivation letters ---
+        generated_letters_data = []
+        letters_dir = Path(app.root_path) / 'motivation_letters'
+        if letters_dir.exists():
+            # Helper to get relative path safely
+            def get_relative_path(file_path, base_path):
+                try:
+                    return str(file_path.relative_to(base_path)).replace('\\', '/')
+                except ValueError:
+                    logger.warning(f"Could not make path relative: {file_path} to {base_path}")
+                    return None # Or return absolute path as string?
+
+            # Use sanitize_filename helper (assuming it's defined globally or imported)
+            # If not, define it here or import it
+            def sanitize_filename_local(name, length=30):
+                 sanitized = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in name)
+                 sanitized = sanitized.replace(' ', '_')
+                 return sanitized[:length]
+
+            json_files = list(letters_dir.glob('motivation_letter_*.json'))
+            logger.info(f"Found {len(json_files)} potential letter JSON files in {letters_dir}")
+            for json_path in json_files:
+                if "_scraped_data" in json_path.name: # Skip scraped data files
+                    continue
+                try:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+
+                    # Extract info from JSON content
+                    job_title = data.get('subject', 'Unknown Job Title').replace('Bewerbung als ', '') # Try to get from subject
+                    if job_title == 'Unknown Job Title': # Fallback to filename guess if subject missing/wrong
+                         job_title = json_path.stem.replace('motivation_letter_', '').replace('_', ' ')
+                    company_name = data.get('company_name', 'Unknown Company')
+                    has_email = bool(data.get('email_text')) # Check if email_text exists and is not empty
+
+                    # Determine corresponding filenames based on the JSON filename's stem
+                    base_name = json_path.stem
+                    html_path = letters_dir / f"{base_name}.html"
+                    docx_path = letters_dir / f"{base_name}.docx"
+                    scraped_path = letters_dir / f"{base_name}_scraped_data.json"
+
+                    # Check existence
+                    has_html = html_path.is_file()
+                    has_docx = docx_path.is_file()
+                    has_scraped = scraped_path.is_file()
+
+                    # Get modification time from JSON file
+                    mtime = os.path.getmtime(json_path)
+                    timestamp = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
+
+                    generated_letters_data.append({
+                        'job_title': job_title,
+                        'company_name': company_name,
+                        'timestamp': timestamp,
+                        'json_filename': json_path.name, # Filename for delete action
+                        'json_path': get_relative_path(json_path, app.root_path),
+                        'html_path': get_relative_path(html_path, app.root_path) if has_html else None,
+                        'docx_path': get_relative_path(docx_path, app.root_path) if has_docx else None,
+                        'scraped_path': get_relative_path(scraped_path, app.root_path) if has_scraped else None,
+                        'scraped_filename': scraped_path.name if has_scraped else None,
+                        'has_html': has_html,
+                        'has_docx': has_docx,
+                        'has_scraped': has_scraped,
+                        'has_email': has_email
+                    })
+                except json.JSONDecodeError:
+                    logger.error(f"Error decoding JSON from letter file: {json_path.name}")
+                except Exception as e:
+                    logger.error(f"Error processing letter file {json_path.name}: {e}", exc_info=True)
+
+        generated_letters_data.sort(key=lambda x: x.get('timestamp', '0'), reverse=True)
+        # --- End Get list of generated motivation letters ---
 
         return render_template('index.html',
                               cv_files=cv_files_data,
                               job_data_files=job_data_files_data,
-                              report_files=report_files_data)
+                              report_files=report_files_data,
+                              generated_letters=generated_letters_data) # Pass new list
 
     @app.route('/delete_files', methods=['POST'])
     def delete_files_route():
@@ -291,7 +377,8 @@ def create_app():
 
         try:
             if file_type == 'job_data':
-                target_dir = base_dir / 'job-data-acquisition/job-data-acquisition/data'
+                # Corrected path
+                target_dir = base_dir / 'job-data-acquisition/data'
                 for filename in filenames:
                     # Secure filename before joining path
                     file_path = target_dir / secure_filename(filename)
@@ -342,7 +429,7 @@ def create_app():
                 # Base directory for CV related files
                 cv_base_dir = base_dir / 'process_cv/cv-data'
                 processed_dir = cv_base_dir / 'processed'
-                input_dir = cv_base_dir / 'input'
+                # input_dir = cv_base_dir / 'input' # Not needed directly
 
                 for filename in filenames:
                     # Filename is expected to be the relative path from process_cv/cv-data

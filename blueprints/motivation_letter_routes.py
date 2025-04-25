@@ -16,18 +16,18 @@ import sys
 sys.path.append('.')
 
 # Import necessary functions from other modules
-# We now call the specific function from letter_generation_utils directly in the task
-# from motivation_letter_generator import main as generate_motivation_letter_main # Keep old import name distinct if needed elsewhere
 from word_template_generator import json_to_docx, create_word_document_from_json_file
 # Import functions needed for manual text structuring and generation
 from job_details_utils import structure_text_with_openai, has_sufficient_content, get_job_details
-from letter_generation_utils import generate_motivation_letter # Import the correct generator function
+from letter_generation_utils import generate_motivation_letter, generate_email_text_only # Import the correct generator functions
 
 motivation_letter_bp = Blueprint('motivation_letter', __name__, url_prefix='/motivation_letter')
 
 logger = logging.getLogger("dashboard.motivation_letter") # Use a child logger
 
 # Helper function to get job details - uses the function attached to current_app
+# Note: This might be redundant if get_job_details from job_details_utils is always used now.
+# Consider refactoring depending on usage patterns.
 def get_job_details_for_url(job_url):
     """Gets job details using the function attached to the app context."""
     if hasattr(current_app, 'get_job_details_for_url'):
@@ -46,7 +46,7 @@ def sanitize_filename(name, length=30):
 
 @motivation_letter_bp.route('/generate', methods=['POST'])
 def generate_motivation_letter_route():
-    """Generate a motivation letter for a single job"""
+    """Generate a motivation letter for a single job, handling manual text input."""
     try:
         # Get data from the form
         cv_filename = request.form.get('cv_filename')
@@ -61,26 +61,18 @@ def generate_motivation_letter_route():
 
         if not cv_filename or not job_url:
             logger.error(f"Missing CV filename or job URL: cv_filename={cv_filename}, job_url={job_url}")
-            flash('Missing CV filename or job URL')
-            if report_file:
-                return redirect(url_for('job_matching.view_results', report_file=report_file))
-            else:
-                return redirect(url_for('index'))
+            return jsonify({'success': False, 'error': 'Missing CV filename or job URL'}), 400
 
         # Check if the CV summary file exists (relative to app root)
         summary_path = Path(current_app.root_path) / 'process_cv/cv-data/processed' / f"{cv_filename}_summary.txt"
         if not summary_path.exists():
             logger.error(f"CV summary file not found: {summary_path}")
-            flash(f'CV summary file not found: {summary_path.name}')
-            return redirect(url_for('job_matching.view_results', report_file=report_file))
+            return jsonify({'success': False, 'error': f'CV summary file not found: {summary_path.name}'}), 400
 
         # --- Check if letter already exists --- ONLY if not using manual text input ---
         if not manual_job_text:
-            job_details_check = get_job_details_for_url(job_url) # Use helper that accesses current_app
+            job_details_check = get_job_details(job_url) # Use the main function
             existing_letter_found = False
-            existing_html_path = None
-            existing_json_path = None
-            existing_docx_path = None
 
             if job_details_check and 'Job Title' in job_details_check:
                 job_title = job_details_check['Job Title']
@@ -88,25 +80,14 @@ def generate_motivation_letter_route():
                 letters_dir = Path(current_app.root_path) / 'motivation_letters'
                 html_path = letters_dir / f"motivation_letter_{sanitized_job_title}.html"
                 json_path = letters_dir / f"motivation_letter_{sanitized_job_title}.json"
-                docx_path = letters_dir / f"motivation_letter_{sanitized_job_title}.docx"
 
                 if html_path.is_file() and json_path.is_file():
                     logger.info(f"Motivation letter already exists for job title: {job_title} (Automatic check)")
                     existing_letter_found = True
-                    existing_html_path = str(html_path.relative_to(current_app.root_path))
-                    existing_json_path = str(json_path.relative_to(current_app.root_path))
-                    if docx_path.is_file():
-                        existing_docx_path = str(docx_path.relative_to(current_app.root_path))
 
             if existing_letter_found:
-                flash(f'Existing motivation letter found for job title: {job_title}')
-                return redirect(url_for('.view_motivation_letter',
-                                        operation_id='existing',
-                                        html_path=existing_html_path,
-                                        json_path=existing_json_path,
-                                        docx_path=existing_docx_path,
-                                        report_file=report_file))
-        # --- End Check if letter already exists --- (Skipped if manual_job_text is present)
+                logger.warning(f"Attempted to generate letter automatically, but it already exists for: {job_title}")
+                return jsonify({'success': False, 'error': f'Letter already exists for {job_title}. Generate manually to overwrite or delete existing files.'}), 409 # 409 Conflict
 
         # --- Generate new letter ---
         start_operation = current_app.extensions['start_operation']
@@ -124,7 +105,6 @@ def generate_motivation_letter_route():
                 cv_summary_text = None # Initialize variable for CV summary content
                 try:
                     # --- Load CV Summary ---
-                    # cv_name is the base filename passed to the task
                     summary_path_task = Path(app.root_path) / 'process_cv/cv-data/processed' / f"{cv_name}_summary.txt"
                     if not summary_path_task.is_file():
                          logger.error(f"CV summary file not found inside task: {summary_path_task}")
@@ -145,7 +125,6 @@ def generate_motivation_letter_route():
                     if manual_job_text_task:
                         update_operation_progress(op_id, 10, 'processing', 'Structuring manual text...')
                         logger.info(f"Structuring manually provided text for job URL: {job_url_task}")
-                        # Call the structuring function from job_details_utils
                         job_details = structure_text_with_openai(manual_job_text_task, job_url_task, source_type="Manual Input")
 
                         if not job_details:
@@ -154,16 +133,13 @@ def generate_motivation_letter_route():
                             return
                         if not has_sufficient_content(job_details):
                              logger.warning("Manually provided text structured, but content might be insufficient.")
-                             # Proceed anyway, but log warning
                              update_operation_progress(op_id, 20, 'processing', 'Manual text structured (warning: content may be insufficient). Generating letter...')
                         else:
                              update_operation_progress(op_id, 20, 'processing', 'Manual text structured successfully. Generating letter...')
-
                     else:
                         update_operation_progress(op_id, 10, 'processing', 'Fetching/Scraping job details...')
                         logger.info(f"Attempting automatic job detail fetching for URL: {job_url_task}")
-                        # Use the existing automatic fetching logic
-                        job_details = get_job_details(job_url_task) # Assumes get_job_details is imported correctly
+                        job_details = get_job_details(job_url_task)
 
                         if not job_details or not has_sufficient_content(job_details):
                              logger.error(f"Failed to fetch sufficient job details automatically for {job_url_task}.")
@@ -173,7 +149,6 @@ def generate_motivation_letter_route():
 
                     # --- Step 2: Generate Letter using job_details and cv_summary_text ---
                     logger.info(f"Calling letter_generation_utils.generate_motivation_letter for CV '{cv_name}'")
-                    # Call the function from letter_generation_utils, passing the loaded CV summary text
                     result = generate_motivation_letter(cv_summary_text, job_details) # Pass the actual summary text
 
                     if not result:
@@ -192,14 +167,11 @@ def generate_motivation_letter_route():
                         logger.info(f"Generated JSON motivation letter: {json_file_path_abs_str}")
                         update_operation_progress(op_id, 80, 'processing', 'Creating Word document...')
                         try:
-                            # Ensure paths are absolute for docx generation
                             abs_json_path = Path(json_file_path_abs_str)
                             if not abs_json_path.is_absolute():
                                 abs_json_path = Path(app.root_path) / json_file_path_abs_str
-
                             abs_docx_path = abs_json_path.with_suffix('.docx')
                             docx_path_abs = json_to_docx(result['motivation_letter_json'], output_path=str(abs_docx_path))
-
                             if docx_path_abs:
                                  docx_file_path_rel = str(Path(docx_path_abs).relative_to(app.root_path))
                                  logger.info(f"Generated Word document: {docx_path_abs}")
@@ -212,7 +184,6 @@ def generate_motivation_letter_route():
 
                     update_operation_progress(op_id, 95, 'processing', 'Finalizing...')
 
-                    # Determine relative paths for storing in result
                     html_file_path_abs_str = result.get('html_file_path') if has_json else result.get('file_path')
                     html_file_path_rel = None
                     if html_file_path_abs_str:
@@ -221,35 +192,29 @@ def generate_motivation_letter_route():
                               abs_html_path = Path(app.root_path) / html_file_path_abs_str
                          html_file_path_rel = str(abs_html_path.relative_to(app.root_path))
 
-
                     complete_operation(op_id, 'completed', 'Motivation letter generated successfully')
 
-                    # Store relative paths and necessary info in the operation status
-                    # Make sure job_details used here is the one obtained above
                     operation_status[op_id]['result'] = {
                         'has_json': has_json,
-                        'motivation_letter_content': result.get('motivation_letter_html'), # Should always come from result dict now
+                        'motivation_letter_content': result.get('motivation_letter_html'),
                         'html_file_path': html_file_path_rel,
-                        'json_file_path': result.get('json_file_path'), # Pass json path too
+                        'json_file_path': result.get('json_file_path'),
                         'docx_file_path': docx_file_path_rel,
-                        'job_details': job_details, # Store the details used (structured or scraped)
+                        'job_details': job_details,
                         'report_file': report_file_task
                     }
                 except Exception as e:
                     logger.error(f'Error in motivation letter generation task: {str(e)}', exc_info=True)
                     complete_operation(op_id, 'failed', f'Error generating motivation letter: {str(e)}')
 
-        # Start the background thread, passing the app instance and necessary args (including manual_job_text)
         thread_args = (app_instance, operation_id, cv_filename, job_url, report_file, manual_job_text)
         thread = threading.Thread(target=generate_motivation_letter_task, args=thread_args)
         thread.daemon = True
         thread.start()
 
-        # Return JSON response with operation ID instead of flashing and redirecting
         return jsonify({'success': True, 'operation_id': operation_id})
 
     except Exception as e:
-        # Return JSON error response
         logger.error(f'Error generating motivation letter route: {str(e)}', exc_info=True)
         return jsonify({'success': False, 'error': f'Error starting generation: {str(e)}'}), 500
 
@@ -277,14 +242,11 @@ def generate_multiple_letters():
         logger.error(f"Required CV summary file not found: {summary_path}")
         return jsonify({'error': f'Required CV summary file not found for {cv_base_name}'}), 400
 
-    # --- Use threading with app context ---
     results = {'success_count': 0, 'errors': []}
     threads = []
     lock = threading.Lock()
-    app_instance = current_app._get_current_object() # Get app instance
+    app_instance = current_app._get_current_object()
 
-    # --- Load CV Summary Once ---
-    # Load the summary outside the thread function to avoid redundant reads
     cv_summary_text = None
     try:
         summary_path_main = Path(app_instance.root_path) / 'process_cv/cv-data/processed' / f"{cv_base_name}_summary.txt"
@@ -296,52 +258,37 @@ def generate_multiple_letters():
     except Exception as cv_load_err:
         logger.error(f"Error reading CV summary file {summary_path_main} before starting threads: {cv_load_err}", exc_info=True)
         return jsonify({'error': f'Error reading CV summary: {cv_load_err}'}), 500
-    # --- End Load CV Summary Once ---
 
-
-    def generate_single_letter_task(app, job_url, cv_summary_content): # Pass app instance and loaded summary
+    def generate_single_letter_task(app, job_url, cv_summary_content, cv_name_for_log):
         nonlocal results
-        # Create an app context for this thread
         with app.app_context():
             if not job_url or job_url == 'N/A' or not job_url.startswith('http'):
                 logger.warning(f"Skipping invalid job URL: {job_url}")
-                with lock:
-                    results['errors'].append(job_url)
+                with lock: results['errors'].append(job_url)
                 return
 
             try:
-                logger.info(f"Generating letter for CV '{cv_base_name}' and URL '{job_url}'")
-
-                # 1. Fetch Job Details
+                logger.info(f"Generating letter for CV '{cv_name_for_log}' and URL '{job_url}'")
                 logger.info(f"Fetching job details for URL: {job_url}")
-                job_details = get_job_details(job_url) # Use the main function to get details
+                job_details = get_job_details(job_url)
 
                 if not job_details or not has_sufficient_content(job_details):
                      logger.error(f"Failed to fetch sufficient job details for {job_url} in bulk generation.")
-                     with lock:
-                         results['errors'].append(job_url)
-                     return # Stop processing this job
+                     with lock: results['errors'].append(job_url)
+                     return
 
-                # 2. Call the generation function with loaded summary and fetched details
-                logger.info(f"Calling generate_motivation_letter for CV '{cv_base_name}' and URL '{job_url}'")
-                result = generate_motivation_letter(cv_summary_content, job_details) # Pass summary text and details dict
+                logger.info(f"Calling generate_motivation_letter for CV '{cv_name_for_log}' and URL '{job_url}'")
+                result = generate_motivation_letter(cv_summary_content, job_details)
 
                 if result:
                     logger.info(f"Generator returned result for URL: {job_url}")
-                    with lock:
-                        results['success_count'] += 1
-                    # Generate DOCX if JSON was produced
+                    with lock: results['success_count'] += 1
                     if 'motivation_letter_json' in result and 'json_file_path' in result:
                          try:
-                             # Ensure paths are absolute for docx generation
                              abs_json_path = Path(result['json_file_path'])
                              if not abs_json_path.is_absolute():
                                  abs_json_path = Path(app.root_path) / result['json_file_path']
-
                              abs_docx_path = abs_json_path.with_suffix('.docx')
-                             # TODO: Update json_to_docx in word_template_generator.py to accept and use
-                             # the 'contact_person' field from result['motivation_letter_json']
-                             # Example: docx_path = json_to_docx(result['motivation_letter_json'], output_path=str(abs_docx_path), contact_person=result['motivation_letter_json'].get('contact_person'))
                              docx_path = json_to_docx(result['motivation_letter_json'], output_path=str(abs_docx_path))
                              if docx_path:
                                  logger.info(f"Generated Word document: {docx_path} for URL: {job_url}")
@@ -351,20 +298,16 @@ def generate_multiple_letters():
                              logger.error(f"Exception generating Word document for URL {job_url}: {str(docx_e)}")
                 else:
                     logger.error(f"Failed to generate letter (generate_motivation_letter returned None) for URL: {job_url}")
-                    with lock:
-                        results['errors'].append(job_url)
+                    with lock: results['errors'].append(job_url)
             except Exception as e:
                 logger.error(f"Exception generating letter for URL {job_url}: {str(e)}", exc_info=True)
-                with lock:
-                    results['errors'].append(job_url)
+                with lock: results['errors'].append(job_url)
 
-    # Create and start threads, passing the app instance and the loaded CV summary
     for url in job_urls:
-        thread = threading.Thread(target=generate_single_letter_task, args=(app_instance, url, cv_summary_text))
+        thread = threading.Thread(target=generate_single_letter_task, args=(app_instance, url, cv_summary_text, cv_base_name))
         threads.append(thread)
         thread.start()
 
-    # Wait for all threads to complete
     for thread in threads:
         thread.join()
 
@@ -381,7 +324,7 @@ def generate_multiple_emails():
         return jsonify({'error': 'Invalid request format'}), 400
 
     job_urls = data.get('job_urls')
-    cv_base_name = data.get('cv_filename') # Base name like 'Lebenslauf'
+    cv_base_name = data.get('cv_filename')
 
     if not job_urls or not isinstance(job_urls, list) or not cv_base_name:
         logger.error(f"Missing job_urls or cv_filename in request: {data}")
@@ -389,7 +332,6 @@ def generate_multiple_emails():
 
     logger.info(f"Received request to generate {len(job_urls)} email texts for CV: {cv_base_name}")
 
-    # --- Load CV Summary ---
     cv_summary = None
     try:
         summary_path = Path(current_app.root_path) / 'process_cv/cv-data/processed' / f"{cv_base_name}_summary.txt"
@@ -405,26 +347,22 @@ def generate_multiple_emails():
     if not cv_summary:
          return jsonify({'error': 'CV summary could not be loaded.'}), 500
 
-    # --- Use threading with app context for generation and file updates ---
     results = {'success_count': 0, 'errors': [], 'not_found': []}
     threads = []
     lock = threading.Lock()
-    app_instance = current_app._get_current_object() # Get app instance
+    app_instance = current_app._get_current_object()
 
-    # Import the new function using absolute import from project root
     from letter_generation_utils import generate_email_text_only
 
-    def generate_and_update_task(app, job_url): # Pass app instance
+    def generate_and_update_task(app, job_url):
         nonlocal results
-        with app.app_context(): # Establish app context for this thread
+        with app.app_context():
             if not job_url or job_url == 'N/A' or not job_url.startswith('http'):
                 logger.warning(f"Skipping invalid job URL for email generation: {job_url}")
                 with lock: results['errors'].append({'url': job_url, 'reason': 'Invalid URL'})
                 return
 
             try:
-                # 1. Get Job Details (needed for title and context)
-                # Use the app's shared function
                 job_details = get_job_details_for_url(job_url)
                 if not job_details or not job_details.get('Job Title'):
                     logger.warning(f"Could not get sufficient job details for URL: {job_url}")
@@ -432,11 +370,10 @@ def generate_multiple_emails():
                     return
 
                 job_title = job_details['Job Title']
-                sanitized_job_title = sanitize_filename(job_title) # Use helper
+                sanitized_job_title = sanitize_filename(job_title)
                 letters_dir = Path(app.root_path) / 'motivation_letters'
                 json_file_path = letters_dir / f"motivation_letter_{sanitized_job_title}.json"
 
-                # 2. Generate Email Text
                 logger.info(f"Generating email text for CV '{cv_base_name}' and Job '{job_title}' (URL: {job_url})")
                 email_text = generate_email_text_only(cv_summary, job_details)
 
@@ -445,7 +382,6 @@ def generate_multiple_emails():
                     with lock: results['errors'].append({'url': job_url, 'reason': 'Email text generation failed'})
                     return
 
-                # 3. Load existing JSON or create new dict
                 letter_data = {}
                 if json_file_path.is_file():
                     try:
@@ -454,39 +390,32 @@ def generate_multiple_emails():
                         logger.info(f"Loaded existing JSON: {json_file_path}")
                     except Exception as load_e:
                         logger.error(f"Error loading existing JSON {json_file_path}: {load_e}. Will overwrite.")
-                        letter_data = {} # Reset if loading failed
+                        letter_data = {}
                 else:
                     logger.info(f"JSON file not found ({json_file_path}), will create new.")
-                    # Optionally populate with minimal data if needed, or just add email_text
-                    letter_data['job_title_source'] = job_title # Add source title for reference
+                    letter_data['job_title_source'] = job_title
 
-                # 4. Update email_text field
                 letter_data['email_text'] = email_text
 
-                # 5. Save JSON back
                 try:
-                    letters_dir.mkdir(parents=True, exist_ok=True) # Ensure directory exists
+                    letters_dir.mkdir(parents=True, exist_ok=True)
                     with open(json_file_path, 'w', encoding='utf-8') as f:
                         json.dump(letter_data, f, ensure_ascii=False, indent=2)
                     logger.info(f"Successfully updated/created JSON with email text: {json_file_path}")
-                    with lock:
-                        results['success_count'] += 1
+                    with lock: results['success_count'] += 1
                 except Exception as save_e:
                     logger.error(f"Error saving updated JSON {json_file_path}: {save_e}", exc_info=True)
                     with lock: results['errors'].append({'url': job_url, 'reason': f'Failed to save JSON: {save_e}'})
 
             except Exception as e:
                 logger.error(f"Exception generating/updating email text for URL {job_url}: {str(e)}", exc_info=True)
-                with lock:
-                    results['errors'].append({'url': job_url, 'reason': f'Unexpected error: {e}'})
+                with lock: results['errors'].append({'url': job_url, 'reason': f'Unexpected error: {e}'})
 
-    # Create and start threads
     for url in job_urls:
         thread = threading.Thread(target=generate_and_update_task, args=(app_instance, url,))
         threads.append(thread)
         thread.start()
 
-    # Wait for all threads
     for thread in threads:
         thread.join()
 
@@ -498,7 +427,6 @@ def generate_multiple_emails():
 def view_motivation_letter(operation_id):
     """View a generated motivation letter (newly generated or existing)"""
     try:
-        # --- Handle viewing existing letters passed via query params ---
         if operation_id == 'existing':
             html_path_rel = request.args.get('html_path')
             docx_path_rel = request.args.get('docx_path')
@@ -527,7 +455,6 @@ def view_motivation_letter(operation_id):
                                   job_details=job_details,
                                   report_file=report_file)
 
-        # --- Handle viewing newly generated letters via operation ID ---
         operation_status = current_app.extensions.get('operation_status', {})
         if operation_id not in operation_status or 'result' not in operation_status[operation_id]:
             flash('Motivation letter generation result not found or not ready.')
@@ -539,6 +466,8 @@ def view_motivation_letter(operation_id):
                  return redirect(url_for('index'))
 
         result = operation_status[operation_id]['result']
+        # Retrieve report_file from the stored result to pass to the template
+        report_file = result.get('report_file')
 
         return render_template('motivation_letter.html',
                               motivation_letter=result.get('motivation_letter_content', 'Error: Content not found.'),
@@ -640,7 +569,6 @@ def view_scraped_data(scraped_data_filename):
     """Display the contents of a specific scraped job data JSON file."""
     try:
         # Use the filename directly as passed from the URL (it was determined safely before)
-        # Do NOT use secure_filename here as it can alter valid characters like umlauts.
         filename = scraped_data_filename
         file_path = Path(current_app.root_path) / 'motivation_letters' / filename
 
@@ -717,3 +645,47 @@ def view_email_text():
              return redirect(url_for('job_matching.view_results', report_file=report_file))
         else:
              return redirect(url_for('index'))
+
+
+@motivation_letter_bp.route('/delete/<json_filename>')
+def delete_letter_set(json_filename):
+    """Delete a generated letter JSON and its associated HTML, DOCX, and scraped data files."""
+    try:
+        # Do NOT use secure_filename here as it might alter valid chars like umlauts
+        filename_base = json_filename.replace('motivation_letter_', '').replace('.json', '')
+        letters_dir = Path(current_app.root_path) / 'motivation_letters'
+
+        # Define paths for all potential files
+        json_path = letters_dir / f"motivation_letter_{filename_base}.json"
+        html_path = letters_dir / f"motivation_letter_{filename_base}.html"
+        docx_path = letters_dir / f"motivation_letter_{filename_base}.docx"
+        scraped_path = letters_dir / f"motivation_letter_{filename_base}_scraped_data.json"
+
+        deleted_files = []
+        not_found_files = []
+
+        # Attempt to delete each file if it exists
+        for file_path in [json_path, html_path, docx_path, scraped_path]:
+            if file_path.is_file():
+                try:
+                    os.remove(file_path)
+                    deleted_files.append(file_path.name)
+                    logger.info(f"Deleted file: {file_path}")
+                except Exception as e:
+                    logger.error(f"Error deleting file {file_path}: {e}")
+                    flash(f"Error deleting file {file_path.name}: {e}", "danger")
+            else:
+                not_found_files.append(file_path.name)
+                logger.debug(f"File not found for deletion (this is okay): {file_path}")
+
+        if deleted_files:
+            flash(f"Successfully deleted files related to: {filename_base.replace('_', ' ')}", "success")
+        else:
+            flash(f"No files found to delete for: {filename_base.replace('_', ' ')}", "warning")
+
+    except Exception as e:
+        flash(f"An unexpected error occurred during deletion: {str(e)}", "danger")
+        logger.error(f"Error deleting letter set for {json_filename}: {str(e)}", exc_info=True)
+
+    # Redirect back to the main dashboard index
+    return redirect(url_for('index'))

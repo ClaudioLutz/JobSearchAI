@@ -85,7 +85,7 @@
                                     {% set path = match.application_url.split('/', 3)[3] if match.application_url.startswith('http://127.0.0.1:5000/') and match.application_url.count('/') >= 3 else (match.application_url.split('/', 1)[1] if match.application_url.startswith('127.0.0.1:5000/') and match.application_url.count('/') >= 1 else match.application_url) %}
                                     {# Strip leading slash from path before joining to prevent double slashes #}
                                     {% set full_job_url = "https://www.ostjob.ch/" + path.lstrip('/') if path else 'N/A' %}
-                                    <tr>
+                                    <tr {% if match.has_motivation_letter %}class="table-info"{% endif %}> {# Add conditional class for highlighting #}
                                         <td><input type="checkbox" class="form-check-input job-select-checkbox" value="{{ full_job_url }}" data-job-title="{{ match.job_title }}"></td>
                                         <td>{{ loop.index }}</td>
                                         <td>{{ match.job_title }}</td>
