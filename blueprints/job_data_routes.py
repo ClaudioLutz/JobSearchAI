@@ -147,7 +147,8 @@ def view_job_data(filename):
     try:
         # Secure the filename and construct the path relative to app root
         secure_name = secure_filename(filename)
-        file_path = Path(current_app.root_path) / 'job-data-acquisition/job-data-acquisition/data' / secure_name
+        # Corrected path: removed extra 'job-data-acquisition' segment
+        file_path = Path(current_app.root_path) / 'job-data-acquisition/data' / secure_name
 
         if not file_path.is_file():
             flash(f'Job data file not found: {secure_name}')
@@ -163,14 +164,29 @@ def view_job_data(filename):
         if isinstance(job_data, list):
             if len(job_data) > 0:
                 if isinstance(job_data[0], list):
+                    logger.info(f"Processing list of lists structure (Total pages/outer lists: {len(job_data)})")
                     # Flatten array of arrays
-                    for job_array in job_data:
-                        job_listings.extend(job_array)
-                    logger.info(f"Loaded array of arrays structure with {len(job_listings)} jobs from {secure_name}")
+                    for i, job_array in enumerate(job_data):
+                        page_job_count = len(job_array) if isinstance(job_array, list) else 0
+                        logger.debug(f"Page {i+1}: Found {page_job_count} jobs in this inner list.")
+                        if isinstance(job_array, list):
+                             job_listings.extend(job_array)
+                             logger.debug(f"After extending page {i+1}, total job_listings count: {len(job_listings)}")
+                        else:
+                             logger.warning(f"Page {i+1}: Expected a list but found {type(job_array)}. Skipping extend.")
+                    logger.info(f"Finished processing list of lists. Final job_listings count: {len(job_listings)} for file {secure_name}")
                 elif isinstance(job_data[0], dict) and 'content' in job_data[0]:
-                    # Old structure with 'content' property
-                    job_listings = job_data[0]['content']
-                    logger.info(f"Loaded old structure with {len(job_listings)} jobs from {secure_name}")
+                    # Structure: List of Dictionaries, each with a 'content' key containing a list of jobs
+                    logger.info(f"Processing list of dicts with 'content' key structure (Total pages/outer dicts: {len(job_data)})")
+                    for i, page_dict in enumerate(job_data):
+                        if isinstance(page_dict, dict) and 'content' in page_dict and isinstance(page_dict['content'], list):
+                            page_job_count = len(page_dict['content'])
+                            logger.debug(f"Page {i+1}: Found {page_job_count} jobs in 'content' list.")
+                            job_listings.extend(page_dict['content'])
+                            logger.debug(f"After extending page {i+1}, total job_listings count: {len(job_listings)}")
+                        else:
+                            logger.warning(f"Page {i+1}: Expected a dict with a 'content' list but found {type(page_dict)}. Skipping.")
+                    logger.info(f"Finished processing list of dicts structure. Final job_listings count: {len(job_listings)} for file {secure_name}")
                 else:
                     # Assume flat array of job listings
                     job_listings = job_data
