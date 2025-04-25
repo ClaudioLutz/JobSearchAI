@@ -396,6 +396,125 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     // --- End Handle Generate Letter Link Clicks ---
 
+    // --- Handle Manual Text Input Modal ---
+    const manualTextModalElement = document.getElementById('manualTextModal');
+    if (manualTextModalElement) {
+        const manualTextModal = new bootstrap.Modal(manualTextModalElement);
+        const manualTextForm = document.getElementById('manualTextForm');
+        const manualJobTextInput = document.getElementById('manualJobTextInput');
+        const submitManualTextBtn = document.getElementById('submitManualTextBtn');
+        const manualTextModalLabel = document.getElementById('manualTextModalLabel');
+
+        // Listener for dropdown links that trigger the modal
+        document.body.addEventListener('click', function(event) {
+            if (event.target.classList.contains('manual-text-trigger')) {
+                event.preventDefault();
+                const link = event.target;
+
+                // Get data from the clicked link
+                const jobUrl = link.dataset.jobUrl;
+                const reportFile = link.dataset.reportFile;
+                const jobTitle = link.dataset.jobTitle;
+
+                // Get selected CV from dropdown
+                const cvSelectElement = document.getElementById('cv-select');
+                if (!cvSelectElement) {
+                    console.error('CV select dropdown (#cv-select) not found.');
+                    alert('Error: CV selection dropdown is missing.');
+                    return;
+                }
+                const cvFilename = cvSelectElement.value;
+
+                if (!jobUrl || !reportFile || !cvFilename || !jobTitle) {
+                    alert('Error: Missing necessary data to open manual input modal.');
+                    return;
+                }
+
+                // Populate hidden fields and modal title
+                document.getElementById('manualTextJobUrl').value = jobUrl;
+                document.getElementById('manualTextReportFile').value = reportFile;
+                document.getElementById('manualTextCvFilename').value = cvFilename;
+                document.getElementById('manualTextJobTitle').value = jobTitle; // Store job title if needed later
+                manualTextModalLabel.textContent = `Manual Job Text Input for: ${jobTitle}`;
+                manualJobTextInput.value = ''; // Clear previous text
+
+                // Show the modal (handled by data-bs-toggle/target, but ensure it's ready)
+                // manualTextModal.show(); // Usually not needed if using data attributes correctly
+            }
+        });
+
+        // Listener for the modal's submit button
+        if (submitManualTextBtn) {
+            submitManualTextBtn.addEventListener('click', function() {
+                const manualText = manualJobTextInput.value.trim();
+                if (!manualText) {
+                    alert('Please paste the job announcement text into the text area.');
+                    manualJobTextInput.focus();
+                    return;
+                }
+
+                // Retrieve data from hidden fields
+                const jobUrl = document.getElementById('manualTextJobUrl').value;
+                const reportFile = document.getElementById('manualTextReportFile').value;
+                const cvFilename = document.getElementById('manualTextCvFilename').value;
+                const jobTitle = document.getElementById('manualTextJobTitle').value; // Retrieve job title
+
+                // Create FormData
+                const formData = new FormData();
+                formData.append('cv_filename', cvFilename);
+                formData.append('job_url', jobUrl);
+                formData.append('report_file', reportFile);
+                formData.append('job_title', jobTitle); // Include job title if needed by backend
+                formData.append('manual_job_text', manualText); // Add the manual text
+
+                // Close the modal
+                manualTextModal.hide();
+
+                // Show loading state (optional, maybe use the global progress modal)
+                console.log("Submitting manual text for letter generation...");
+
+                // Submit using fetch to the standard generate endpoint
+                fetch('/motivation_letter/generate', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => { // Expect JSON response now
+                    if (!response.ok) {
+                        // Try to parse error from JSON, otherwise use status text
+                        return response.json().then(errData => {
+                            throw new Error(errData.error || `Server error: ${response.statusText}`);
+                        }).catch(() => {
+                            throw new Error(`Server error: ${response.statusText}`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success && data.operation_id) {
+                        // Start checking the operation status using the existing function
+                        checkOperationStatus(data.operation_id, (status) => {
+                            // Existing completion logic from checkOperationStatus will handle modal updates
+                            if (status.status === 'completed') {
+                                console.log(`Manual text letter generation completed for ${jobTitle}`);
+                            } else if (status.status === 'failed') {
+                                console.error(`Manual text letter generation failed for ${jobTitle}`);
+                                // The error message from the backend should be displayed by checkOperationStatus
+                            }
+                        });
+                    } else {
+                        console.error('Could not find operation_id in response for manual text generation');
+                        alert('Error starting letter generation process from manual text. Please check logs.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error submitting manual text generate request:', error);
+                    alert(`Error generating letter from manual text: ${error.message}`);
+                });
+            });
+        }
+    }
+    // --- End Handle Manual Text Input Modal ---
+
     // --- Bulk Delete Functionality ---
     const fileSections = [
         { listId: 'cv-list', checkboxClass: 'cv-checkbox', buttonSelector: '.bulk-delete-btn[data-file-type="cv"]', fileType: 'cv' },

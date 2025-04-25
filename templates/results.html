@@ -128,8 +128,15 @@
                                                                    data-job-url="{{ full_job_url }}" {# Uses corrected full_job_url #}
                                                                    data-report-file="{{ report_file }}"
                                                                    data-job-title="{{ match.job_title|escape }}"
-                                                                   {% if not available_cvs %}disabled title="No CVs available for selection."{% endif %}>Generate Letter</a></li>
+                                                                    {% if not available_cvs %}disabled title="No CVs available for selection."{% endif %}>Generate Letter</a></li>
                                                         {% endif %}
+                                                        {# Manual Text Input Trigger #}
+                                                        <li><a class="dropdown-item manual-text-trigger" href="#" role="button"
+                                                               data-bs-toggle="modal" data-bs-target="#manualTextModal"
+                                                               data-job-url="{{ full_job_url }}"
+                                                               data-report-file="{{ report_file }}"
+                                                               data-job-title="{{ match.job_title|escape }}"
+                                                               {% if not available_cvs %}disabled title="No CVs available for selection."{% endif %}>Generate Letter (Manual Text)</a></li>
 
                                                         <!-- Download Word (conditional) -->
                                                         {% if match.motivation_letter_docx_path %}
@@ -261,5 +268,37 @@
         });
     </script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script> <!-- Add this line -->
+
+    <!-- Manual Text Input Modal -->
+    <div class="modal fade" id="manualTextModal" tabindex="-1" aria-labelledby="manualTextModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="manualTextModalLabel">Manual Job Text Input</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Paste the full job description text below. The system will attempt to structure this text and then generate the motivation letter.</p>
+                    <form id="manualTextForm">
+                        {# Hidden fields to store context - values set by JS #}
+                        <input type="hidden" id="manualTextJobUrl" name="job_url">
+                        <input type="hidden" id="manualTextReportFile" name="report_file">
+                        <input type="hidden" id="manualTextCvFilename" name="cv_filename">
+                        <input type="hidden" id="manualTextJobTitle" name="job_title">
+
+                        <div class="mb-3">
+                            <label for="manualJobTextInput" class="form-label">Job Announcement Text:</label>
+                            <textarea class="form-control" id="manualJobTextInput" name="manual_job_text" rows="15" required placeholder="Paste the job description here..."></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="submitManualTextBtn">Generate from Text</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>
