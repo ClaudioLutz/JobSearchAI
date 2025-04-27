@@ -4,6 +4,8 @@
 
 JobsearchAI is a system that matches job listings with candidate CVs using AI-powered semantic matching. It scrapes job data, processes CVs, finds suitable matches, generates personalized motivation letters and email texts, and converts them to Word documents. A web dashboard provides an interface for managing the system.
 
+The codebase has been optimized with a centralized configuration module and utility packages that improve error handling, reduce code duplication, and enhance API usage without introducing breaking changes.
+
 ## System Components
 
 The system consists of the following main components:
@@ -14,16 +16,47 @@ The system consists of the following main components:
 4.  **Motivation Letter Generator**: Creates personalized motivation letters and email texts.
 5.  **Word Template Generator**: Converts letters to Word documents.
 6.  **Dashboard**: Web interface for system interaction.
+7.  **Centralized Configuration**: (`config.py`) Provides a single source of truth for configuration settings.
+8.  **Utility Modules**: (`utils/`) Collection of utility modules for common operations with improved error handling.
 
 For detailed information on each component, please refer to the files in the `documentation/` directory:
 
 -   [Job Data Acquisition](./documentation/Job_Data_Acquisition.md)
 -   [CV Processor](./documentation/CV_Processor.md)
--   [Job Matcher](./documentation/Job_Matcher.md)
--   [Motivation Letter Generator](./documentation/Motivation_Letter_Generator.md)
+-   [Job Matcher](./documentation/Job_Matcher.md) - Fully optimized
+-   [Motivation Letter Generator](./documentation/Motivation_Letter_Generator.md) - Fully optimized
 -   [Word Template Generator](./documentation/Word_Template_Generator.md)
 -   [Dashboard](./documentation/Dashboard.md)
 -   [System Overview](./documentation/System.md)
+
+For details on the code optimization, refer to:
+-   [Code Optimization](./README_OPTIMIZATION.md)
+
+## Code Optimization
+
+The codebase has been optimized with several new modules:
+
+1. **Centralized Configuration** (`config.py`): Provides a single source of truth for all configuration settings including paths, environment variables, and default parameters.
+
+2. **Utility Modules** in the `utils/` package:
+   - `utils/decorators.py`: Decorators for error handling, retries, caching, and execution timing.
+   - `utils/file_utils.py`: Functions for common file operations with improved error handling.
+   - `utils/api_utils.py`: Wrappers for OpenAI API operations with retries and caching.
+
+Key benefits of these optimizations:
+- No breaking changes - maintains full compatibility with existing code
+- Improved error handling with consistent patterns across modules
+- Reduced code duplication through centralized and reusable functionality
+- Better API usage with caching, retries, and error handling
+- Centralized configuration management
+- Type hints for better IDE support and code quality
+
+Currently optimized components:
+- `job_matcher.py`: Fully optimized
+- `job_details_utils.py`: Fully optimized
+- `letter_generation_utils.py`: Fully optimized
+
+See [README_OPTIMIZATION.md](./README_OPTIMIZATION.md) for detailed examples and usage.
 
 ## Basic Usage
 
@@ -93,6 +126,16 @@ Key directories and their purposes:
 -   `static/`: Dashboard static files (CSS, JS)
 -   `templates/`: Dashboard HTML templates
 -   `logs/`: Component-specific log files
+-   `utils/`: Utility modules for common operations
+    - `__init__.py`: Package initialization
+    - `decorators.py`: Error handling and performance decorators
+    - `file_utils.py`: File operation utilities
+    - `api_utils.py`: OpenAI API wrappers
+-   `config.py`: Centralized configuration module
+-   Testing modules:
+    - `test_config.py`: Tests for configuration module
+    - `test_optimized_code.py`: Integration tests for optimized modules
+    - `test_letter_generation_utils.py`, `test_job_details_utils.py`: Component tests
 
 ## Logging
 

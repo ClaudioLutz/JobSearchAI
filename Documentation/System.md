@@ -59,10 +59,15 @@ The system operates through a series of interconnected components, primarily man
 
 *   **CV Processor (`process_cv/`)**: Extracts text from PDF CVs and uses AI to generate structured summaries focusing on career aspects. Requires OpenAI API key.
 *   **Job Data Acquisition (`job-data-acquisition/`)**: Scrapes job listings from web pages using ScrapeGraph AI and saves structured data to JSON files. Configured via `settings.json`. Requires OpenAI API key (or other LLM config).
-*   **Job Matcher (`job_matcher.py`)**: Compares CV summaries against scraped job listings using AI evaluation to score and rank potential matches. Outputs JSON and Markdown reports. Requires OpenAI API key.
-*   **Motivation Letter Generator (`motivation_letter_generator.py`, `letter_generation_utils.py`)**: Creates personalized motivation letters and/or short email texts using AI, combining CV summary and job details. Outputs/updates JSON files and generates HTML letters. Requires OpenAI API key.
+*   **Job Matcher (`job_matcher.py`)**: Compares CV summaries against scraped job listings using AI evaluation to score and rank potential matches. Outputs JSON and Markdown reports. Requires OpenAI API key. Uses the centralized configuration and utility modules for improved error handling and code reusability.
+*   **Motivation Letter Generator (`motivation_letter_generator.py`, `letter_generation_utils.py`, `job_details_utils.py`)**: Creates personalized motivation letters and/or short email texts using AI, combining CV summary and job details. Outputs/updates JSON files and generates HTML letters. Requires OpenAI API key. Uses the centralized configuration and utility modules for improved error handling and code reusability.
 *   **Word Template Generator (`word_template_generator.py`)**: Converts structured JSON motivation letters into formatted Word documents using a template and `docxtpl`.
 *   **Dashboard (`dashboard.py`, `blueprints/`)**: Flask web application providing the user interface to manage files, run processes (including bulk letter and email generation), view results, and track progress. Orchestrates the interaction between components.
+*   **Centralized Configuration (`config.py`)**: Provides a single source of truth for all configuration settings, including file paths, environment variables, and default parameters.
+*   **Utility Modules (`utils/`)**: A collection of utility modules that provide reusable functionality:
+    * `utils/decorators.py`: Decorators for error handling, retries, caching, and execution timing.
+    * `utils/file_utils.py`: Functions for common file operations with improved error handling.
+    * `utils/api_utils.py`: Wrappers for OpenAI API operations with retries and caching.
 
 ## Key Technologies
 
@@ -74,14 +79,17 @@ The system operates through a series of interconnected components, primarily man
 *   **Frontend**: HTML, CSS, JavaScript, Bootstrap 5 (assumed)
 *   **Data Format**: JSON
 *   **Concurrency**: Python `threading` (for background tasks in dashboard)
-*   **Configuration**: `.env` files, JSON (`settings.json`)
+*   **Configuration**: Centralized configuration (`config.py`), `.env` files, JSON (`settings.json`)
+*   **Error Handling**: Decorators for consistent error handling, retries, and caching (`utils/decorators.py`)
+*   **Type Hints**: All optimized code includes type hints for better IDE support and code quality
 
 ## Setup & Configuration
 
-*   **API Keys**: An OpenAI API key is required for the CV Processor, Job Matcher, and Motivation Letter Generator. It's typically loaded from `process_cv/.env`.
+*   **API Keys**: An OpenAI API key is required for the CV Processor, Job Matcher, and Motivation Letter Generator. It's typically loaded from `process_cv/.env` or through the centralized `config.py` module.
 *   **Job Scraper Settings**: The `job-data-acquisition/settings.json` file configures target URLs, LLM details for scraping, logging, output directories, and scraping parameters like `max_pages`.
 *   **Word Template**: The `motivation_letters/template/motivation_letter_template.docx` file serves as the base for generated Word documents.
 *   **Dependencies**: Python dependencies are listed in `requirements.txt`. Key libraries include `Flask`, `openai`, `python-dotenv`, `requests`, `beautifulsoup4`, `pymupdf`, `docxtpl`, and potentially `scrapegraphai`, `easyocr`, `Pillow`, `numpy`.
+*   **Centralized Configuration**: The `config.py` module provides a centralized way to access paths, environment variables, and default parameters across the codebase.
 
 ## Running the System
 
@@ -95,7 +103,7 @@ The primary way to interact with the system is through the Flask dashboard:
 
 ## Component Dependency Graph
 
-This diagram illustrates the primary code dependencies between the system's components and key external libraries/services. The Dashboard acts as the central orchestrator, calling functions from the other modules.
+This diagram illustrates the primary code dependencies between the system's components and key external libraries/services. The Dashboard acts as the central orchestrator, calling functions from the other modules. The optimized components use the centralized configuration and utility modules.
 
 ```mermaid
 graph TD 
@@ -106,6 +114,8 @@ graph TD
     JM[Job Matcher - job_matcher.py]
     MLG[Motivation Letter Generator - motivation_letter_generator.py]
     WTG[Word Template Generator - word_template_generator.py]
+    CONFIG[Centralized Configuration - config.py]
+    UTILS[Utility Modules - utils/]
   end
 
   subgraph External Services/Libraries
@@ -127,15 +137,21 @@ graph TD
   DASH --> WTG
 
   JM --> CVPROC
+  JM --> CONFIG
+  JM --> UTILS
 
   %% Fallback data source
   MLG --> JDA
+  MLG --> CONFIG
+  MLG --> UTILS
 
   CVPROC --> PYMUPDF
   CVPROC --> OPENAI
   JDA --> SCRAPEGRAPH
   JDA --> OPENAI
-  JM --> OPENAI
+  
+  %% OpenAI API utilities
+  UTILS --> OPENAI
 
   %% For structuring extracted text & generation
   MLG --> OPENAI
