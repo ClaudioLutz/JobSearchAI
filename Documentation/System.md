@@ -28,15 +28,18 @@ The system operates through a series of interconnected components, primarily man
 4.  **Motivation Letter Generation**:
     *   User selects one or more matched jobs from the results page on the dashboard, potentially selecting a specific CV via a dropdown.
     *   The `Motivation Letter Generator` (`motivation_letter_generator.py`) retrieves the relevant CV summary.
-    *   It attempts to get up-to-date job details using a **multi-step process**:
-        *   Tries extracting content from a specific iframe on the job page.
-        *   If no iframe, searches the page's HTML for direct PDF links and processes the first one found.
-        *   If no PDF link, checks if the job URL itself points directly to a PDF.
-        *   If a PDF is found (via link or direct URL), it extracts text using PyMuPDF, falling back to OCR (`easyocr`, if installed) for image-based PDFs. Extracted text is structured using OpenAI.
-        *   If direct methods fail, it falls back to searching the latest pre-scraped data file.
-    *   It uses OpenAI (`gpt-4.1`) with a detailed prompt (including CV summary and the obtained job details) to generate a personalized motivation letter, requesting a specific JSON structure.
-    *   The generated letter is saved as both JSON and HTML files in the `motivation_letters/` directory.
-    *   The raw scraped job details used for generation are also saved to a separate JSON file (`_scraped_data.json`) in the same directory.
+    *   It attempts to get up-to-date job details using a **multi-step process** (`job_details_utils.py`):
+        *   Primary Method: Uses ScrapeGraphAI (`graph_scraper_utils.py`) with a structured German prompt to extract job details directly into JSON format.
+        *   Fallback Method: If live scraping fails or yields insufficient content, searches the latest pre-scraped data file.
+        *   Manual Input: Supports manual text input for job details if automatic methods are insufficient.
+    *   It uses OpenAI (`gpt-4.1`) with a detailed prompt (including CV summary and job details) to:
+        *   Generate a personalized motivation letter in JSON format (`letter_generation_utils.generate_motivation_letter`)
+        *   Optionally generate short email texts for bulk operations (`letter_generation_utils.generate_email_text_only`)
+    *   The generated content is saved in multiple formats:
+        *   JSON letter structure (including optional email text)
+        *   HTML formatted letter
+        *   Raw scraped job details in a separate JSON file
+        *   Word document (generated on demand)
 
 5.  **Word Document Generation**:
     *   User requests a Word version of a generated motivation letter via the dashboard.

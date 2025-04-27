@@ -1,10 +1,7 @@
 import json
-import os
 import logging
 from datetime import datetime
 from pathlib import Path
-import openai
-from dotenv import load_dotenv
 
 # Add the current directory to the Python path to find modules
 import sys
@@ -12,6 +9,19 @@ sys.path.append('.')
 
 # Import from existing modules
 from process_cv.cv_processor import extract_cv_text, summarize_cv
+
+# Import from centralized configuration and utilities
+from config import config, get_job_matcher_defaults
+from utils.file_utils import (
+    get_latest_file, 
+    load_json_file, 
+    save_json_file, 
+    flatten_nested_job_data, 
+    ensure_output_directory,
+    create_timestamped_filename
+)
+from utils.api_utils import openai_client, generate_json_from_prompt
+from utils.decorators import handle_exceptions, retry, log_execution_time
 
 # Set up logging
 logging.basicConfig(
@@ -24,13 +34,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("job_matcher")
 
-# Load environment variables
-env_path = Path("process_cv/.env")
-load_dotenv(dotenv_path=env_path)
+# OpenAI client is imported from api_utils and already initialized
 
-# Initialize the OpenAI client
-client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-
+@handle_exceptions(default_return=[])
+@log_execution_time()
 def load_latest_job_data(max_jobs=50):
     """
     Load the most recent job data file
@@ -38,114 +45,87 @@ def load_latest_job_data(max_jobs=50):
     Args:
         max_jobs (int): Maximum number of job listings to return (default: 50)
     """
-    # Corrected path: removed extra 'job-data-acquisition' segment
-    job_data_dir = Path("job-data-acquisition/data")
-    logger.info(f"Looking for job data files in: {job_data_dir.absolute()}")
+    # Get the latest job data file
+    job_data_dir = config.get_path("job_data")
+    logger.info(f"Looking for job data files in: {job_data_dir}")
     
-    if not job_data_dir.exists():
-        logger.error(f"Job data directory does not exist: {job_data_dir.absolute()}")
-        return None
-        
-    job_files = list(job_data_dir.glob("job_data_*.json"))
-    logger.info(f"Found {len(job_files)} job data files")
-    
-    if not job_files:
+    latest_file = get_latest_file(job_data_dir, "job_data_*.json")
+    if latest_file is None:
         logger.error("No job data files found")
-        return None
+        return sample_job_data()
     
-    # Sort by modification time (newest first)
-    latest_file = max(job_files, key=lambda x: x.stat().st_mtime)
     logger.info(f"Loading job data from {latest_file}")
     
-    try:
-        with open(latest_file, 'r', encoding='utf-8') as f:
-            job_data = json.load(f)
-
-        # Check if the data has a nested structure with one or more "content" arrays
-        # First, check if the data is an array of arrays
-        if isinstance(job_data, list) and len(job_data) > 0 and isinstance(job_data[0], list):
-            # Flatten the array of arrays
-            flattened_jobs = []
-            for job_array in job_data:
-                flattened_jobs.extend(job_array)
-            job_listings = flattened_jobs
-            logger.info(f"Found nested array structure with {len(job_listings)} total job listings")
-        elif isinstance(job_data, dict) and "content" in job_data:
-            # The content field contains an array of job listings
-            job_listings = job_data["content"]
-            logger.info(f"Found nested structure with {len(job_listings)} job listings in 'content' array")
-        elif isinstance(job_data, list):
-            # Initialize an empty list to gather all job listings
-            job_listings = []
-            for item in job_data:
-                if isinstance(item, dict) and "content" in item:
-                    job_listings.extend(item["content"])
-                else:
-                    # If the item isn't in a nested structure, assume it is a job listing
-                    job_listings.append(item)
-            logger.info(f"Found nested structure with {len(job_listings)} total job listings across all items")
-        else:
-            # Assume the data is a flat array of job listings
-            job_listings = job_data
-            logger.info("Using flat job data structure")
-
-        # Limit the number of job listings to process
-        limited_data = job_listings[:max_jobs] if max_jobs > 0 else job_listings
-
-        # Print the first job listing to see its structure
-        if limited_data:
-            logger.info(f"First job listing structure: {json.dumps(limited_data[0], indent=2)}")
-
-        logger.info(f"Successfully loaded {len(job_listings)} job listings from {latest_file}")
+    # Load the file with error handling
+    job_data = load_json_file(latest_file)
+    if job_data is None:
+        logger.error(f"Error loading job data from {latest_file}")
+        return sample_job_data()
+    
+    # Flatten the nested structure
+    job_listings = flatten_nested_job_data(job_data)
+    
+    # Limit the number of job listings to process
+    limited_data = job_listings[:max_jobs] if max_jobs > 0 else job_listings
+    
+    # Print the first job listing to see its structure
+    if limited_data:
         logger.info(f"Processing {len(limited_data)} job listings (limited by max_jobs={max_jobs})")
-        return limited_data
-    except Exception as e:
-        logger.error(f"Error loading job data from {latest_file}: {str(e)}")
-        logger.warning("Falling back to sample job data for testing")
-        
-        # Fallback to sample data if loading fails
-        sample_jobs = [
-            {
-                "Job Title": "Data Analyst",
-                "Company Name": "Tech Solutions AG",
-                "Job Description": "Analyzing data and creating reports using SQL and Python. Working with Power BI dashboards.",
-                "Required Skills": "SQL, Python, Power BI, Excel",
-                "Location": "St. Gallen",
-                "Salary Range": "80,000 - 95,000 CHF",
-                "Posting Date": "01.04.2025",
-                "Application URL": "https://example.com/jobs/data-analyst"
-            },
-            {
-                "Job Title": "Product Manager",
-                "Company Name": "Innovative Systems GmbH",
-                "Job Description": "Managing product lifecycle and working with development teams to create new features.",
-                "Required Skills": "Product Management, Agile, JIRA",
-                "Location": "Zürich",
-                "Salary Range": "110,000 - 130,000 CHF",
-                "Posting Date": "02.04.2025",
-                "Application URL": "https://example.com/jobs/product-manager"
-            },
-            {
-                "Job Title": "Financial Analyst",
-                "Company Name": "Swiss Banking AG",
-                "Job Description": "Preparing financial reports and analyzing financial data for decision making.",
-                "Required Skills": "Financial Analysis, Excel, SAP",
-                "Location": "Basel",
-                "Salary Range": "90,000 - 105,000 CHF",
-                "Posting Date": "03.04.2025",
-                "Application URL": "https://example.com/jobs/financial-analyst"
-            }
-        ]
-        
-        logger.info("Using sample job data for testing")
-        return sample_jobs
+    
+    return limited_data
+
+def sample_job_data():
+    """
+    Return sample job data for testing when no real data is available
+    
+    Returns:
+        list: Sample job listings
+    """
+    logger.warning("Falling back to sample job data for testing")
+    
+    # Fallback to sample data if loading fails
+    sample_jobs = [
+        {
+            "Job Title": "Data Analyst",
+            "Company Name": "Tech Solutions AG",
+            "Job Description": "Analyzing data and creating reports using SQL and Python. Working with Power BI dashboards.",
+            "Required Skills": "SQL, Python, Power BI, Excel",
+            "Location": "St. Gallen",
+            "Salary Range": "80,000 - 95,000 CHF",
+            "Posting Date": "01.04.2025",
+            "Application URL": "https://example.com/jobs/data-analyst"
+        },
+        {
+            "Job Title": "Product Manager",
+            "Company Name": "Innovative Systems GmbH",
+            "Job Description": "Managing product lifecycle and working with development teams to create new features.",
+            "Required Skills": "Product Management, Agile, JIRA",
+            "Location": "Zürich",
+            "Salary Range": "110,000 - 130,000 CHF",
+            "Posting Date": "02.04.2025",
+            "Application URL": "https://example.com/jobs/product-manager"
+        },
+        {
+            "Job Title": "Financial Analyst",
+            "Company Name": "Swiss Banking AG",
+            "Job Description": "Preparing financial reports and analyzing financial data for decision making.",
+            "Required Skills": "Financial Analysis, Excel, SAP",
+            "Location": "Basel",
+            "Salary Range": "90,000 - 105,000 CHF",
+            "Posting Date": "03.04.2025",
+            "Application URL": "https://example.com/jobs/financial-analyst"
+        }
+    ]
+    
+    logger.info("Using sample job data for testing")
+    return sample_jobs
 
 def evaluate_job_match(cv_summary, job_listing):
     """
     Use ChatGPT to evaluate how well a job matches the candidate's profile
     and if the candidate would like the job based on their career trajectory
     """
-    # Create the prompt without using f-string for the JSON structure part
+    # Create the prompt with the JSON structure explicitly defined
     profile_part = f"""
     Given this candidate profile:
     {cv_summary}
@@ -169,11 +149,9 @@ def evaluate_job_match(cv_summary, job_listing):
     # 7. Potenzielle Zufriedenheit (1-10): Wie wahrscheinlich ist es, dass der Kandidat in dieser Position zufrieden wäre?
     # 8. Gesamtübereinstimmung (1-10): Wie geeignet ist der Kandidat insgesamt, unter Berücksichtigung aller Faktoren?
     # 9. Begründung: Erklären Sie kurz Ihre Bewertung.
-    """
 
-    json_part = """
-    Geben Sie Ihre Bewertung im JSON-Format mit folgender Struktur zurück:
-    {
+    Provide your evaluation as a JSON object with the following exact keys:
+    {{
         "skills_match": 8,
         "experience_match": 7,
         "location_compatibility": "Yes",
@@ -183,39 +161,35 @@ def evaluate_job_match(cv_summary, job_listing):
         "potential_satisfaction": 8,
         "overall_match": 8,
         "reasoning": "Ihre Begründung hier"
-    }
+    }}
     """
+
+    # System prompt for the job evaluation (including the word 'json' to make response_format work)
+    system_prompt = "You are an AI assistant that evaluates job matches for candidates based on their CV and job listings. Return your assessment as a JSON object."
     
-    prompt = profile_part + json_part
+    # Default values if generation fails
+    default_result = {
+        "skills_match": 0,
+        "experience_match": 0,
+        "location_compatibility": "No",
+        "education_fit": 0,
+        "career_trajectory_alignment": 0,
+        "preference_match": 0,
+        "potential_satisfaction": 0,
+        "overall_match": 0,
+        "reasoning": "Error evaluating match"
+    }
+    
+    # Use the utility function to generate JSON with built-in retries and error handling
+    result = generate_json_from_prompt(
+        prompt=profile_part,
+        system_prompt=system_prompt,
+        default=default_result
+    )
+    
+    return result
 
-    try:
-        response = client.chat.completions.create(
-            model='gpt-4.1',
-            messages=[
-                {"role": "system", "content": "You are an AI assistant that evaluates job matches for candidates based on their CV and job listings."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2,
-            response_format={"type": "json_object"},
-            max_tokens=800,
-        )
-        
-        result = json.loads(response.choices[0].message.content.strip())
-        return result
-    except Exception as e:
-        logger.error(f"Error evaluating job match: {e}")
-        return {
-            "skills_match": 0,
-            "experience_match": 0,
-            "location_compatibility": "No",
-            "education_fit": 0,
-            "career_trajectory_alignment": 0,
-            "preference_match": 0,
-            "potential_satisfaction": 0,
-            "overall_match": 0,
-            "reasoning": f"Error evaluating match: {str(e)}"
-        }
-
+@log_execution_time()
 def match_jobs_with_cv(cv_path, min_score=6, max_jobs=50, max_results=10):
     """
     Match jobs with a CV and return the top matches
@@ -273,7 +247,8 @@ def match_jobs_with_cv(cv_path, min_score=6, max_jobs=50, max_results=10):
     # Return top matches
     return sorted_matches[:max_results]
 
-def ensure_output_directory(output_dir="job_matches"):
+# Renamed to avoid conflict with the imported function
+def ensure_output_dir(output_dir="job_matches"):
     """
     Ensure the output directory exists
     
@@ -283,11 +258,13 @@ def ensure_output_directory(output_dir="job_matches"):
     Returns:
         Path: Path object for the output directory
     """
-    output_path = Path(output_dir)
+    # Use the path from config if it exists, otherwise use the provided path
+    output_path = config.get_path(output_dir) or Path(output_dir)
     output_path.mkdir(exist_ok=True, parents=True)
     logger.info(f"Ensuring output directory exists: {output_path.absolute()}")
     return output_path
 
+@handle_exceptions(default_return=None)
 def generate_report(matches, output_file=None, output_dir="job_matches"):
     """
     Generate a report with the top job matches
@@ -301,18 +278,17 @@ def generate_report(matches, output_file=None, output_dir="job_matches"):
         str: Path to the generated report file
     """
     # Ensure output directory exists
-    output_path = ensure_output_directory(output_dir)
+    output_path = ensure_output_dir(output_dir)
     
+    # Create a timestamped filename if none is provided
     if not output_file:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = f"job_matches_{timestamp}.json"
+        output_file = create_timestamped_filename("job_matches", "json")
     
     # Create full path for output files
     json_file_path = output_path / output_file
     
-    # Save detailed results to JSON
-    with open(json_file_path, "w", encoding="utf-8") as f:
-        json.dump(matches, f, indent=2, ensure_ascii=False)
+    # Save detailed results to JSON using utility function
+    save_json_file(matches, json_file_path, indent=2, ensure_ascii=False)
     
     # Generate a human-readable report
     report = "# Top Job Matches\n\n"
@@ -351,13 +327,16 @@ def generate_report(matches, output_file=None, output_dir="job_matches"):
     return report_file
 
 if __name__ == "__main__":
-    # Path to the CV
-    cv_path = "process_cv/cv-data/Lebenslauf_Claudio Lutz.pdf"
+    # Path to the CV using centralized configuration
+    cv_path = str(config.get_path("cv_data_input") / "Lebenslauf_Claudio Lutz.pdf")
+    
+    # Get default parameters from centralized configuration
+    job_matcher_defaults = get_job_matcher_defaults()
     
     # Set parameters for job matching
-    max_jobs = 50     # Maximum number of job listings to process
-    max_results = 10  # Maximum number of results to return
-    min_score = 3     # Minimum match score threshold
+    max_jobs = job_matcher_defaults.get("max_jobs", 50)
+    max_results = job_matcher_defaults.get("max_results", 10)
+    min_score = job_matcher_defaults.get("cli_min_score", 3)  # Use CLI min score for command-line usage
     
     # Match jobs with CV
     matches = match_jobs_with_cv(cv_path, min_score=min_score, max_jobs=max_jobs, max_results=max_results)

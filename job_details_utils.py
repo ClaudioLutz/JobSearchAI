@@ -1,4 +1,3 @@
-import os
 import logging
 import json
 import openai
@@ -6,6 +5,20 @@ from pathlib import Path
 from datetime import datetime
 import traceback
 from urllib.parse import urljoin
+
+# Import from centralized configuration
+from config import config, get_openai_api_key, get_openai_defaults, get_latest_job_data_file
+
+# Import utilities
+from utils.file_utils import load_json_file, flatten_nested_job_data
+from utils.api_utils import openai_client, generate_json_from_prompt
+from utils.decorators import handle_exceptions, log_execution_time, retry
+
+# Set up logger for this module
+logger = logging.getLogger("job_details_utils")
+# Configure logging basic setup if needed when run standalone
+if not logger.hasHandlers():
+     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 # Import the graph scraper utility
 # Assuming the function is now get_job_details_with_graphscrapeai based on previous steps
@@ -19,15 +32,8 @@ except ImportError:
     except ImportError:
          # If neither exists, log an error, but allow the rest of the file to load
          # The get_job_details function will fail later if it's actually called without this import
-         logging.getLogger("job_details_utils").error("Failed to import function from graph_scraper_utils.", exc_info=True)
+         logger.error("Failed to import function from graph_scraper_utils.", exc_info=True)
          get_job_details_with_graphscrapeai = None
-
-
-# Set up logger for this module
-logger = logging.getLogger("job_details_utils")
-# Configure logging basic setup if needed when run standalone
-if not logger.hasHandlers():
-     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 
 # Helper function to check quality of extracted details
@@ -51,29 +57,22 @@ def has_sufficient_content(details_dict):
     # This ensures we have *some* content to base the motivation letter on.
     return has_desc or has_resp or has_skills
 
+@handle_exceptions(default_return=None)
+@log_execution_time()
 def structure_text_with_openai(text_content, source_url, source_type="HTML"):
-    """Uses OpenAI to structure extracted text from HTML or PDF."""
+    """
+    Uses OpenAI to structure extracted text from HTML or PDF.
+    
+    Args:
+        text_content (str): The raw text content from the job posting
+        source_url (str): The URL of the job posting
+        source_type (str): The type of source (HTML, PDF, etc.)
+        
+    Returns:
+        dict: Structured job details or None if extraction fails
+    """
     logger.info(f"Structuring text from {source_type} using OpenAI...")
-    openai_api_key = os.getenv('OPENAI_API_KEY')
-    if not openai_api_key:
-        # Assuming .env is in 'process_cv' relative to project root
-        env_path = Path(__file__).parent / 'process_cv' / '.env'
-        if env_path.exists():
-            from dotenv import load_dotenv # Load only if needed
-            load_dotenv(dotenv_path=env_path)
-            openai_api_key = os.getenv('OPENAI_API_KEY')
-
-    if not openai_api_key:
-        logger.error(f"OpenAI API key not found for structuring {source_type} text.")
-        return None
-
-    try:
-        client = openai.OpenAI(api_key=openai_api_key)
-    except ImportError:
-        logger.error("OpenAI library not found. Please install it: pip install openai")
-        return None
-
-
+    
     structuring_prompt = f"""
     Extrahiere die folgenden Informationen aus dem untenstehenden Text eines Stellenangebots und gib sie als JSON-Objekt zurück. Der Text wurde aus {source_type} extrahiert.
     Beachte, dass es sich um einen "Arbeitsvermittler" handeln könnte, was nicht das direkte Unternehmen wäre, bei dem man sich bewirbt.
@@ -103,135 +102,99 @@ def structure_text_with_openai(text_content, source_url, source_type="HTML"):
     **Ausgabe** muss ein **JSON-Objekt** sein.
     """
 
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4.1", # Or your preferred model
-            messages=[
-                {"role": "system", "content": f"Du bist ein Experte für die Extraktion strukturierter Daten aus Stellenanzeigen ({source_type}). Gib deine Antwort als valides JSON-Objekt zurück."},
-                {"role": "user", "content": structuring_prompt}
-            ],
-            temperature=0.2,
-            max_tokens=1500, # Increased slightly for potentially more detailed extraction
-            response_format={"type": "json_object"}
-        )
-
-        job_details_str = response.choices[0].message.content
-        job_details = json.loads(job_details_str)
-
-        # Ensure essential fields have fallbacks and add original URL
-        if not job_details.get('Job Title'):
-            job_details['Job Title'] = 'Unknown_Job' # Keep fallback
-        if not job_details.get('Company Name'):
-            job_details['Company Name'] = 'Unknown_Company' # Keep fallback
-        # Add other fallbacks if needed
-        job_details['Application URL'] = source_url # Ensure original URL is present
-
-        logger.info(f"Successfully structured job details from {source_type} via OpenAI.")
-        logger.info(f"Job Title: {job_details.get('Job Title')}")
-        logger.info(f"Company Name: {job_details.get('Company Name')}")
-        # Log all extracted fields for debugging
-        logger.info(f"--- Extracted Job Details ({source_type} Method) ---")
-        for key, value in job_details.items():
-            log_value = value
-            if isinstance(log_value, str) and len(log_value) > 100:
-                log_value = log_value[:100] + "... [truncated]"
-            logger.info(f"{key}: {log_value}")
-        logger.info("---------------------------------------------")
-
-        return job_details
-
-    except openai.OpenAIError as e:
-        logger.error(f"OpenAI API error during structuring for {source_url}: {e}")
+    # Set up system prompt for job details extraction
+    system_prompt = f"Du bist ein Experte für die Extraktion strukturierter Daten aus Stellenanzeigen ({source_type}). Gib deine Antwort als valides JSON-Objekt zurück."
+    
+    # Use the utility function to generate JSON with built-in retries and error handling
+    job_details = generate_json_from_prompt(
+        prompt=structuring_prompt,
+        system_prompt=system_prompt,
+        default=None
+    )
+    
+    if not job_details:
+        logger.error(f"Failed to extract job details from {source_url}")
         return None
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON Parsing error after OpenAI structuring for {source_url}: {e}")
-        logger.error(f"Raw OpenAI response: {job_details_str}")
-        return None
-    except Exception as e:
-        logger.error(f"Unexpected error structuring text for {source_url}: {e}")
-        logger.error(traceback.format_exc())
-        return None
+    
+    # Ensure essential fields have fallbacks and add original URL
+    if not job_details.get('Job Title'):
+        job_details['Job Title'] = 'Unknown_Job'
+    if not job_details.get('Company Name'):
+        job_details['Company Name'] = 'Unknown_Company'
+    # Add other fallbacks if needed
+    job_details['Application URL'] = source_url  # Ensure original URL is present
 
+    # Log the results
+    logger.info(f"Successfully structured job details from {source_type} via OpenAI.")
+    logger.info(f"Job Title: {job_details.get('Job Title')}")
+    logger.info(f"Company Name: {job_details.get('Company Name')}")
+    
+    return job_details
+
+@handle_exceptions(default_return=None)
+@log_execution_time()
 def get_job_details_from_scraped_data(job_url):
     """Get job details from pre-scraped data"""
-    try:
-        logger.info(f"Getting job details from pre-scraped data for URL: {job_url}")
-        # Extract a unique identifier from the URL, often the last part
-        # Handle potential trailing slashes
-        url_parts = job_url.strip('/').split('/')
-        job_id = url_parts[-1] if url_parts else None
-        if not job_id:
-             logger.warning(f"Could not extract job ID from URL: {job_url}")
-             return None # Return None if job_id cannot be extracted
+    logger.info(f"Getting job details from pre-scraped data for URL: {job_url}")
+    # Extract a unique identifier from the URL, often the last part
+    url_parts = job_url.strip('/').split('/')
+    job_id = url_parts[-1] if url_parts else None
+    if not job_id:
+        logger.warning(f"Could not extract job ID from URL: {job_url}")
+        return None
 
-        # Construct path relative to this script's directory or project root
-        base_path = Path(__file__).parent
-        job_data_dir = base_path / 'job-data-acquisition/job-data-acquisition/data'
-        if not job_data_dir.exists():
-             # Try path relative to project root as fallback
-             job_data_dir = Path('job-data-acquisition/job-data-acquisition/data')
-             if not job_data_dir.exists():
-                  logger.error(f"Job data directory not found in standard locations: {job_data_dir}")
-                  return None
+    # Get job data directory from config
+    job_data_dir = config.get_path("job_data")
+    if not job_data_dir:
+        logger.error("Job data directory not found in configuration.")
+        return None
 
-        job_data_files = list(job_data_dir.glob('job_data_*.json'))
-        if not job_data_files:
-            logger.error("No job data files found in pre-scraped data directory.")
-            return None
+    # Get latest job data file using utility function
+    latest_job_data_file = get_latest_job_data_file()
+    if not latest_job_data_file:
+        logger.error("No job data files found.")
+        return None
 
-        latest_job_data_file = max(job_data_files, key=lambda p: p.stat().st_mtime)
-        logger.info(f"Using latest pre-scraped data file: {latest_job_data_file}")
+    logger.info(f"Using latest pre-scraped data file: {latest_job_data_file}")
 
-        with open(latest_job_data_file, 'r', encoding='utf-8') as f:
-            job_data_pages = json.load(f)
+    # Load job data using utility function
+    job_data_pages = load_json_file(latest_job_data_file)
+    if not job_data_pages:
+        logger.error(f"Failed to load job data from {latest_job_data_file}")
+        return None
 
-        all_jobs = []
-        if isinstance(job_data_pages, list):
-            for page_list in job_data_pages:
-                if isinstance(page_list, list):
-                    all_jobs.extend(page_list)
-                elif isinstance(page_list, dict):
-                    all_jobs.append(page_list)
-            logger.info(f"Loaded and flattened job data with {len(all_jobs)} total jobs from {len(job_data_pages)} pages.")
-        else:
-            logger.error(f"Unexpected data structure in {latest_job_data_file}. Expected list of lists.")
-            return None
+    # Flatten job data structure
+    all_jobs = flatten_nested_job_data(job_data_pages)
+    if not all_jobs:
+        logger.error("Failed to flatten job data, or data is empty.")
+        return None
 
-        found_job = None
-        for i, job in enumerate(all_jobs):
-            if not isinstance(job, dict):
-                logger.warning(f"Skipping non-dictionary item at index {i} in flattened job list.")
-                continue
-            # Match based on the extracted job_id being present in the stored URL
-            job_application_url = job.get('Application URL', '')
-            # Ensure comparison is robust against missing/non-string URLs
-            if isinstance(job_application_url, str) and job_id in job_application_url.split('/')[-1]:
-                logger.info(f"Found matching job in pre-scraped data: {job.get('Job Title', 'N/A')} at {job.get('Company Name', 'N/A')}")
-                found_job = job
-                logger.info("--- Extracted Job Details from Pre-scraped Data ---")
-                for key, value in found_job.items():
-                    log_value = value
-                    if isinstance(log_value, str) and len(log_value) > 100:
-                        log_value = log_value[:100] + "... [truncated]"
-                    logger.info(f"{key}: {log_value}")
-                logger.info("------------------------------------------")
-                break
+    logger.info(f"Loaded and flattened job data with {len(all_jobs)} total jobs.")
 
-        if found_job:
-            # Ensure Application URL is absolute if it's relative
-            if isinstance(found_job.get('Application URL'), str) and found_job['Application URL'].startswith('/'):
-                 base_url = "https://www.ostjob.ch/" # Assuming base URL
-                 found_job['Application URL'] = urljoin(base_url, found_job['Application URL']) # Use urljoin
-            return found_job # Return data dictionary
+    # Search for matching job
+    found_job = None
+    for i, job in enumerate(all_jobs):
+        if not isinstance(job, dict):
+            logger.warning(f"Skipping non-dictionary item at index {i} in flattened job list.")
+            continue
+        job_application_url = job.get('Application URL', '')
+        if isinstance(job_application_url, str) and job_id in job_application_url.split('/')[-1]:
+            logger.info(f"Found matching job: {job.get('Job Title', 'N/A')} at {job.get('Company Name', 'N/A')}")
+            found_job = job
+            break
 
-        logger.warning(f"Job with ID '{job_id}' not found in latest pre-scraped data file: {latest_job_data_file}")
-        return None # Indicate not found
+    if found_job:
+        # Make URL absolute if needed
+        if isinstance(found_job.get('Application URL'), str) and found_job['Application URL'].startswith('/'):
+            base_url = "https://www.ostjob.ch/"
+            found_job['Application URL'] = urljoin(base_url, found_job['Application URL'])
+        return found_job
 
-    except Exception as e:
-        logger.error(f"Error getting job details from pre-scraped data: {str(e)}", exc_info=True)
-        return None # Return None on error
+    logger.warning(f"Job with ID '{job_id}' not found in latest pre-scraped data file: {latest_job_data_file}")
+    return None
 
-
+@handle_exceptions(default_return=None)
+@log_execution_time()
 def get_job_details(job_url):
     """
     Get job details for a given URL using the simplified ScrapeGraphAI-first approach.
@@ -239,6 +202,12 @@ def get_job_details(job_url):
     Order of operations:
     1. Attempt live fetch: GraphScrapeAI Structured Extraction (headless=False).
     2. Fallback to pre-scraped data.
+    
+    Args:
+        job_url (str): URL of the job posting
+        
+    Returns:
+        dict: Job details dictionary or None if all methods fail
     """
     # --- Attempt 1: GraphScrapeAI Structured Extraction (headless=False) ---
     logger.info(f"Attempt 1: Trying GraphScrapeAI structured extraction (headless=False) for URL: {job_url}")

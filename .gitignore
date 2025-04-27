@@ -46,12 +46,21 @@ ENV/
 *.swp
 *.swo
 
+# Test files
+test.py
+test_*.py
+test_*.log
+test_config.py
+test_optimized_code.py
+test_job_details_utils.py
+
 # Original entries
 job-data-acquisition/configs/settings.json
 job-data-acquisition/venv
 job-data-acquisition/job-data-acquisition
 job-data-acquisition/settings.json
 job-data-acquisition/job-data-acquisition/data/
+job-data-acquisition/data/*.json
 job-data-acquisition/logs/
 logs/
 

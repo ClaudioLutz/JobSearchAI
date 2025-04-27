@@ -4,52 +4,109 @@
 
 **Key Files**:
 - `job_matcher.py`: Main script for matching jobs with CVs. Imports functions from `process_cv.cv_processor`.
+- `job_matcher.log`: Log file containing detailed operation logs.
 
 **Technologies**:
 - OpenAI GPT models (`gpt-4.1`) for semantic matching and evaluation.
 - JSON for data storage (both input job data and output match details).
 - Markdown for human-readable reports.
 - `python-dotenv` for loading API keys.
+- Python's logging module for comprehensive logging.
 
 **Process**:
 1. Loads environment variables (including OpenAI API key) from `process_cv/.env`.
 2. Processes a given CV file using `extract_cv_text` and `summarize_cv` from `process_cv.cv_processor`.
-3. Loads the most recent `job_data_*.json` file from the `job-data-acquisition/job-data-acquisition/data/` directory, handling various potential nested structures within the JSON. Limits the number of jobs processed based on `max_jobs` parameter (default 50). Includes fallback to sample data if loading fails.
-4. For each loaded job listing (up to `max_jobs`), uses OpenAI's `gpt-4.1` model (forcing JSON output) to evaluate the match based on the CV summary and job details. The evaluation includes:
-   - Skills Match (1-10)
-   - Experience Match (1-10)
-   - Location Compatibility (Yes/No)
-   - Education Fit (1-10)
-   - **Career Trajectory Alignment (1-10)**
-   - **Preference Match (1-10)**
-   - **Potential Satisfaction (1-10)**
-   - Overall Match Score (1-10)
-   - Reasoning for the match
-5. Filters the evaluated jobs based on a minimum `overall_match` score (`min_score`, default 6 in function signature, 3 in `if __name__ == "__main__"`).
+3. Loads the most recent `job_data_*.json` file from the `job-data-acquisition/data/` directory, handling various potential nested structures:
+   - Array of arrays (flattened)
+   - Dictionary with "content" key
+   - List of dictionaries with "content" keys
+   - Flat array of job listings
+4. For each loaded job listing (up to `max_jobs`), uses OpenAI's `gpt-4.1` model with a detailed German prompt to evaluate the match based on:
+   ```
+   1. Fähigkeiten-Übereinstimmung (1-10): Wie gut passen die Fähigkeiten des Kandidaten zu den Anforderungen der Stelle?
+   2. Erfahrungspassung (1-10): Ist das Erfahrungsniveau des Kandidaten angemessen?
+   3. Standortkompatibilität (Yes/No): Entspricht der Arbeitsort den Präferenzen des Kandidaten?
+   4. Ausbildungsübereinstimmung (1-10): Wie gut passt die Ausbildung des Kandidaten zu den Anforderungen?
+   5. Karriereverlauf-Übereinstimmung (1-10): Wie gut passt die Stelle zur bisherigen Karriereentwicklung des Kandidaten?
+   6. Präferenzen-Übereinstimmung (1-10): Wie gut entspricht die Stelle den beruflichen Präferenzen des Kandidaten?
+   7. Potenzielle Zufriedenheit (1-10): Wie wahrscheinlich ist es, dass der Kandidat in dieser Position zufrieden wäre?
+   8. Gesamtübereinstimmung (1-10): Wie geeignet ist der Kandidat insgesamt, unter Berücksichtigung aller Faktoren?
+   9. Begründung: Erklären Sie kurz Ihre Bewertung.
+   ```
+5. Filters the evaluated jobs based on a minimum `overall_match` score (default 6 in function signature, but 3 when run directly via `__main__`).
 6. Sorts the filtered jobs by `overall_match` score in descending order.
-7. Generates two output files in the `job_matches` directory (by default):
-   - A JSON file (`job_matches_YYYYMMDD_HHMMSS.json`) containing the detailed evaluation results for the top matches (up to `max_results`, default 10).
-   - A Markdown report (`job_matches_YYYYMMDD_HHMMSS.md`) summarizing the top matches, including the evaluation scores and reasoning. Attempts to reconstruct `ostjob.ch` URLs.
+7. Generates two output files in the `job_matches` directory:
+   - A JSON file (`job_matches_YYYYMMDD_HHMMSS.json`) containing the detailed evaluation results.
+   - A Markdown report (`job_matches_YYYYMMDD_HHMMSS.md`) summarizing the matches.
 
 **Functions**:
-- `load_latest_job_data(max_jobs=50)`: Loads the most recent job data file from `job-data-acquisition/job-data-acquisition/data/`, handling potential structures and limiting jobs processed. Includes fallback sample data.
-- `evaluate_job_match(cv_summary, job_listing)`: Uses OpenAI (`gpt-4.1`, forced JSON output) to evaluate how well a job matches the candidate's profile based on multiple criteria (including career trajectory, preferences, satisfaction).
-- `match_jobs_with_cv(cv_path, min_score=6, max_jobs=50, max_results=10)`: Orchestrates the process: processes CV, loads job data, evaluates matches, filters, sorts, and returns the top results.
-- `generate_report(matches, output_file=None, output_dir="job_matches")`: Generates JSON and Markdown reports in the specified output directory. Attempts to reconstruct `ostjob.ch` URLs in the Markdown report.
-- `ensure_output_directory(output_dir="job_matches")`: Helper to create the output directory.
+- `load_latest_job_data(max_jobs=50)`: 
+  - Loads the most recent job data file
+  - Handles various nested JSON structures
+  - Includes fallback to sample data if loading fails
+  - Logs detailed information about the loading process
+- `evaluate_job_match(cv_summary, job_listing)`:
+  - Uses OpenAI (`gpt-4.1`) with forced JSON output
+  - Uses a detailed German prompt for evaluation
+  - Returns structured evaluation with scores and reasoning
+  - Includes error handling with default scores
+- `match_jobs_with_cv(cv_path, min_score=6, max_jobs=50, max_results=10)`:
+  - Processes CV and loads job data
+  - Evaluates matches and filters by minimum score
+  - Returns top matches sorted by overall score
+  - Includes comprehensive error handling
+- `ensure_output_directory(output_dir="job_matches")`:
+  - Creates output directory if it doesn't exist
+  - Returns Path object for the directory
+- `generate_report(matches, output_file=None, output_dir="job_matches")`:
+  - Generates both JSON and Markdown reports
+  - Reconstructs ostjob.ch URLs from local paths
+  - Formats matches in a readable structure
+
+**Error Handling & Logging**:
+- Comprehensive logging to both file and console:
+  - File: `job_matcher.log`
+  - Format: timestamp, logger name, level, message
+  - Level: INFO for normal operations, ERROR for issues
+- Fallback mechanisms:
+  - Sample job data if loading fails
+  - Default scores (0) if evaluation fails
+  - Empty list return if CV processing fails
+- Detailed error messages and stack traces
+- Progress logging for each major operation
 
 **Output Format**:
-- **JSON File**: Saved to `job_matches/job_matches_YYYYMMDD_HHMMSS.json` (by default). Contains a list of dictionaries, each representing a matched job with its full evaluation details (all scores, reasoning, job info).
-- **Markdown Report**: Saved to `job_matches/job_matches_YYYYMMDD_HHMMSS.md` (by default). Provides a human-readable summary of the top matches, including:
-  - Job title and company
-  - Overall match score
-  - Location
-  - Skills match score
-  - Experience match score
-  - Education fit score
-  - Location compatibility
-  - **Career Trajectory Alignment score**
-  - **Preference Match score**
-  - **Potential Satisfaction score**
-  - Reasoning for the match
-  - Application URL (potentially reconstructed to point to `ostjob.ch`)
+- **JSON File** (`job_matches_YYYYMMDD_HHMMSS.json`):
+  ```json
+  [
+    {
+      "skills_match": 8,
+      "experience_match": 7,
+      "location_compatibility": "Yes",
+      "education_fit": 9,
+      "career_trajectory_alignment": 7,
+      "preference_match": 8,
+      "potential_satisfaction": 8,
+      "overall_match": 8,
+      "reasoning": "Detailed reasoning here",
+      "job_title": "Position Title",
+      "company_name": "Company Name",
+      "job_description": "Full description",
+      "location": "Location",
+      "application_url": "URL"
+    }
+  ]
+  ```
+- **Markdown Report** (`job_matches_YYYYMMDD_HHMMSS.md`):
+  - Formatted sections for each match
+  - All evaluation scores and reasoning
+  - Reconstructed ostjob.ch URLs:
+    - Converts `http://127.0.0.1:5000/path` to `https://www.ostjob.ch/path`
+    - Converts `127.0.0.1:5000/path` to `https://www.ostjob.ch/path`
+  - Ordered by match score (descending)
+
+**URL Reconstruction**:
+The system automatically converts local development URLs to production ostjob.ch URLs in the Markdown report:
+- Input: `http://127.0.0.1:5000/jobs/12345` or `127.0.0.1:5000/jobs/12345`
+- Output: `https://www.ostjob.ch/jobs/12345`
+This ensures the report contains valid, clickable links to the actual job postings.

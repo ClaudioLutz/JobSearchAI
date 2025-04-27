@@ -7,8 +7,13 @@ g# 6. Dashboard
 - `blueprints/`: Directory containing blueprint modules.
     - `cv_routes.py`: Blueprint (`cv_bp`) handling CV upload, deletion, and summary viewing.
     - `job_data_routes.py`: Blueprint (`job_data_bp`) handling job scraper execution, job data viewing, and deletion.
-    - `job_matching_routes.py`: Blueprint (`job_matching_bp`) handling job matcher execution, combined process execution, results viewing, report downloading, and report deletion.
-    - `motivation_letter_routes.py`: Blueprint (`motivation_letter_bp`) handling single/multiple motivation letter generation, bulk email text generation, letter/email viewing, downloading (HTML/DOCX), and viewing scraped data associated with letters.
+    - `job_matching_routes.py`: Blueprint (`job_matching_bp`) handling job matcher execution, combined process execution (scraping + matching), results viewing with CV selection for letter generation, report downloading, and report deletion.
+    - `motivation_letter_routes.py`: Blueprint (`motivation_letter_bp`) handling:
+        * Single/multiple motivation letter generation with manual text input support
+        * Bulk email text generation and viewing
+        * Letter viewing and downloading (HTML/DOCX)
+        * Viewing scraped data associated with letters
+        * Letter set deletion (JSON, HTML, DOCX, scraped data)
 - `templates/index.html`: Main dashboard page template.
 - `templates/results.html`: Job match results page template.
 - `templates/motivation_letter.html`: Motivation letter display template.
@@ -61,18 +66,31 @@ g# 6. Dashboard
     *   Delete individual or multiple reports (MD and associated JSON) (single via link (`/job_matching/delete_report/...`), bulk via AJAX to `/delete_files`).
 5.  **Motivation Letter Generation (from Results Page)**:
     *   **CV Selection**: A dropdown menu on the results page allows the user to select which CV summary to use for letter generation. It defaults to the CV used for the report (if found) or the first available CV.
-    *   Generate personalized motivation letters for specific job postings using the selected CV (background task via `/motivation_letter/generate`).
-    *   View generated letters (renders `motivation_letter.html` via `/motivation_letter/view/<operation_id>` or `/motivation_letter/view/existing?...`).
-    *   Download motivation letters in HTML format (via `/motivation_letter/download_html?...`).
-    *   Download motivation letters in Word format (via `/motivation_letter/download_docx?...` or `/motivation_letter/download_docx_from_json?...`).
-    *   View the raw scraped data used for a specific letter via the "View Scraped Data" option in the Actions dropdown on the results page (renders `scraped_data_view.html` via `/motivation_letter/view_scraped_data/...`).
-    *   Select multiple job matches on the results page and generate letters for all selected jobs using the currently selected CV with a single click (AJAX call to `/motivation_letter/generate_multiple`).
-    *   Select multiple job matches on the results page and generate email texts for all selected jobs using the currently selected CV with a single click (AJAX call to `/motivation_letter/generate_multiple_emails`). The generated email text is stored within the corresponding `motivation_letter_{job_title}.json` file.
-    *   View generated email text (if available) via the "View Email Text" option in the Actions dropdown on the results page (renders `email_text_view.html` via `/motivation_letter/view_email_text/existing?...`).
+    *   **Single Letter Generation**:
+        - Generate personalized motivation letters for specific job postings using the selected CV (background task via `/motivation_letter/generate`)
+        - Supports manual text input for job details if automatic scraping is insufficient
+        - Checks for existing letters to prevent duplicates (unless using manual input)
+    *   **Bulk Operations**:
+        - Select multiple job matches to generate letters for all selected jobs using the currently selected CV (AJAX call to `/motivation_letter/generate_multiple`)
+        - Generate email texts for multiple selected jobs (AJAX call to `/motivation_letter/generate_multiple_emails`)
+    *   **File Management**:
+        - View generated letters (renders `motivation_letter.html` via `/motivation_letter/view/<operation_id>` or `/motivation_letter/view/existing?...`)
+        - Download letters in HTML format (via `/motivation_letter/download_html?...`)
+        - Download letters in Word format (via `/motivation_letter/download_docx?...` or `/motivation_letter/download_docx_from_json?...`)
+        - View raw scraped data via "View Scraped Data" option (renders `scraped_data_view.html` via `/motivation_letter/view_scraped_data/...`)
+        - View generated email text via "View Email Text" option (renders `email_text_view.html` via `/motivation_letter/view_email_text/existing?...`)
+        - Delete letter sets including all associated files (JSON, HTML, DOCX, scraped data)
 6.  **File Linking & Display (Results Page)**:
-    *   Logic reliably links job matches displayed on the results page to their corresponding generated files (`.html`, `.docx`, `_scraped_data.json`, `.json` letter structure, including checking for `email_text` within the JSON).
-    *   Matching is done by comparing Application URLs between the report and scraped data files.
-    *   Filenames for checking existence are constructed using the Job Title found *within* the matched `_scraped_data.json` file.
+    *   Logic reliably links job matches displayed on the results page to their corresponding generated files:
+        - HTML letter (`.html`)
+        - Word document (`.docx`)
+        - Scraped data (`_scraped_data.json`)
+        - Letter structure (`.json`, including `email_text` check)
+    *   Matching uses normalized URL comparison between report and scraped data files:
+        - Handles both absolute and relative URLs
+        - Normalizes paths for consistent comparison
+        - Falls back to partial matching if needed
+    *   Filenames are constructed using sanitized job titles from matched `_scraped_data.json` files
 7.  **User Feedback and Progress Tracking**:
     *   Visual feedback via Flask `flash` messages and JS-driven button states/modals.
     *   Background processing for long operations (scraping, matching, letter generation) using `threading` with proper application context handling (`app.app_context()`).
