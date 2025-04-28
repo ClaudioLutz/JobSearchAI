@@ -39,7 +39,7 @@ CONFIG = load_config()
 
 # Define the structured extraction prompt (in German) - Reverted
 SINGLE_JOB_EXTRACTION_PROMPT = """
-Extrahiere die Details des Stellenangebots von dieser Seite. Gib ein JSON-Objekt mit den folgenden Feldern zurück:
+Extrahiere die Details des Stellenangebots von dieser Seite IN DER GLEICHEN SPRACHE WIE DIE JOB-AUSSCHREIBUNG. Gib ein JSON-Objekt mit den folgenden Feldern zurück:
 1. Job Title (Stellentitel)
 2. Company Name (Firmenname)
 3. Job Description (Stellenbeschreibung - Erstelle eine umfassende Zusammenfassung, falls möglich)
@@ -56,6 +56,8 @@ Extrahiere die Details des Stellenangebots von dieser Seite. Gib ein JSON-Objekt
 
 Die Ausgabe muss ein einzelnes JSON-Objekt sein. Wenn ein Feld nicht gefunden wird, verwende null oder einen leeren String.
 Priorisiere die Extraktion aussagekräftiger Inhalte für 'Job Description', 'Required Skills' und 'Responsibilities'.
+
+AUSGABE IN DER GLEICHEN SPRACHE WIE DER TEXT DES STELLENANGEBOTES!
 """
 
 # Removed get_openai_api_key function

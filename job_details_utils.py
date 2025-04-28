@@ -74,7 +74,7 @@ def structure_text_with_openai(text_content, source_url, source_type="HTML"):
     logger.info(f"Structuring text from {source_type} using OpenAI...")
     
     structuring_prompt = f"""
-    Extrahiere die folgenden Informationen aus dem untenstehenden Text eines Stellenangebots und gib sie als JSON-Objekt zurück. Der Text wurde aus {source_type} extrahiert.
+    Extrahiere die folgenden Informationen aus dem untenstehenden Text eines Stellenangebots und gib sie als JSON-Objekt IN DER GLEICHEN SPRACHE WIE DER TEXT DES STELLENANGEBOTES zurück. Der Text wurde aus {source_type} extrahiert.
     Beachte, dass es sich um einen "Arbeitsvermittler" handeln könnte, was nicht das direkte Unternehmen wäre, bei dem man sich bewirbt.
 
     Felder zum Extrahieren:
@@ -99,7 +99,7 @@ def structure_text_with_openai(text_content, source_url, source_type="HTML"):
     {text_content}
     ---
 
-    **Ausgabe** muss ein **JSON-Objekt** sein.
+    **Ausgabe** muss ein **JSON-Objekt** sein UND IN DER GLEICHEN SPRACHE WIE DER TEXT DES STELLENANGEBOTES.
     """
 
     # Set up system prompt for job details extraction
