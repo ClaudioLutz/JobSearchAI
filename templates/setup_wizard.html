@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JobsearchAI Setup</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <!-- Link to your static CSS if needed, adjust path if necessary -->
+    <!-- <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}"> -->
+    <style>
+        body { background-color: #f8f9fa; }
+        .card { max-width: 600px; margin: 50px auto; }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-10 col-lg-8">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-primary text-white">
+                        <h2 class="h4 mb-0 text-center">JobsearchAI Setup Wizard</h2>
+                    </div>
+                    <div class="card-body p-4">
+                        <p class="mb-4 text-center">Welcome to JobsearchAI! Please complete this initial setup to get started.</p>
+
+                        <!-- Flash Messages -->
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                            {% if messages %}
+                                {% for category, message in messages %}
+                                    <div class="alert alert-{{ category if category != 'message' else 'info' }} alert-dismissible fade show" role="alert">
+                                        {{ message }}
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                    </div>
+                                {% endfor %}
+                            {% endif %}
+                        {% endwith %}
+
+                        <form action="{{ url_for('setup.setup_wizard') }}" method="post">
+                            {{ form.csrf_token if form and form.csrf_token }} {# Add CSRF token if using Flask-WTF #}
+                            <div class="mb-3">
+                                <label for="openai_api_key" class="form-label fw-bold">OpenAI API Key <span class="text-danger">*</span></label>
+                                <input type="password" class="form-control" id="openai_api_key" name="openai_api_key" required aria-describedby="apiKeyHelp">
+                                <div id="apiKeyHelp" class="form-text">
+                                    <strong>You must provide your own OpenAI API key to use this application.</strong><br>
+                                    You can get an API key from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">https://platform.openai.com/api-keys</a>.<br>
+                                    Your key is stored securely on your local machine (using your OS's credential manager if possible) and is only used for API calls to OpenAI.
+                                </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="data_dir" class="form-label fw-bold">Data Directory (Optional)</label>
+                                <input type="text" class="form-control" id="data_dir" name="data_dir" value="{{ data_dir }}" aria-describedby="dataDirHelp">
+                                <div id="dataDirHelp" class="form-text">
+                                    Leave blank to use the default location: <code>{{ data_dir }}</code>.<br>
+                                    This is where your CVs, job data, and generated files will be stored. Ensure the path is writable.
+                                </div>
+                            </div>
+
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary btn-lg">Complete Setup</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="card-footer text-muted text-center small">
+                        JobsearchAI needs this setup to function correctly.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

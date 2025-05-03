@@ -2,9 +2,11 @@
 
 ## Overview
 
-JobsearchAI is a system that matches job listings with candidate CVs using AI-powered semantic matching. It scrapes job data, processes CVs, finds suitable matches, generates personalized motivation letters and email texts, and converts them to Word documents. A web dashboard provides an interface for managing the system.
+JobsearchAI is a system that matches job listings with candidate CVs using AI-powered semantic matching. It scrapes job data, processes CVs, finds suitable matches, generates personalized motivation letters and email texts, and converts them to Word documents.
 
-The codebase has been optimized with a centralized configuration module and utility packages that improve error handling, reduce code duplication, and enhance API usage without introducing breaking changes.
+**This project is currently being adapted for easy local deployment**, allowing users to run it as a standalone desktop application. It features a web dashboard interface for managing the system.
+
+The codebase includes a centralized configuration module and utility packages that improve error handling, reduce code duplication, and enhance API usage.
 
 ## System Components
 
@@ -58,17 +60,23 @@ Currently optimized components:
 
 See [README_OPTIMIZATION.md](./README_OPTIMIZATION.md) for detailed examples and usage.
 
-## Basic Usage
+## Basic Usage (Local Deployment)
 
-### Running the Dashboard
+For instructions on installing and running the packaged local application, please see:
 
-The primary way to interact with the system is through the web dashboard:
+**[User Guide](./README_for_users.md)**
 
-```bash
-python dashboard.py
-```
+### Development Usage
 
-Navigate to `http://localhost:5000` in your web browser. The dashboard allows you to:
+If you are running the application from source code for development:
+
+1.  Ensure Python 3.8+ is installed.
+2.  Install dependencies: `pip install -r requirements.txt`
+3.  Configure your OpenAI API key (see Configuration below).
+4.  Run the dashboard: `python dashboard.py`
+5.  Access the dashboard at `http://localhost:5000`.
+
+The dashboard allows you to:
 
 -   Upload and manage CVs
 -   Run the job scraper with configurable parameters
@@ -100,12 +108,16 @@ API keys are required:
 - OpenAI API key for AI features (CV processing, job matching, letter generation)
 - ScrapeGraphAI configuration for job scraping
 
-Set the OpenAI key in `process_cv/.env`:
-```
-OPENAI_API_KEY=your_api_key_here
-```
+### Configuration (Development)
 
-Configure ScrapeGraphAI in `job-data-acquisition/settings.json`.
+During development, the application uses the following configuration methods:
+
+1.  **OpenAI API Key**:
+    *   Ideally, store your key in your system's keychain/credential manager. The application will attempt to retrieve it using the `keyring` library.
+    *   Alternatively, create a `.env` file in the project root (`c:/Codes/JobsearchAI`) or in the `process_cv` directory with the line: `OPENAI_API_KEY=your_api_key_here`.
+    *   The application will load the key from these sources. **Do not commit `.env` files containing your key to Git.**
+2.  **User Settings**: User-specific settings (like API key fallback or custom data directory) are stored in `settings.json` in the OS-specific user config directory (e.g., `AppData/Local/JobsearchAI/JobsearchAI` on Windows). This file is created automatically on first run via the setup wizard.
+3.  **Scraper Settings**: Default scraper settings are in `job-data-acquisition/settings.json`.
 
 ## File Structure
 

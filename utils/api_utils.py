@@ -39,12 +39,17 @@ class OpenAIClient:
         """Initialize the OpenAI client (only once)"""
         if self._initialized:
             return
-        
-        # Get API key from configuration
-        self.api_key = get_openai_api_key()
-        
-        # Get default parameters
-        self.defaults = get_openai_defaults()
+
+        # Get API key using the secure method from the config instance
+        # No need to call the old get_openai_api_key() convenience function
+        self.api_key = config.get_api_key("openai")
+
+        # Get default parameters using the config instance's get_default method
+        self.defaults = {
+            "model": config.get_default("openai", "model"),
+            "temperature": config.get_default("openai", "temperature"),
+            "max_tokens": config.get_default("openai", "max_tokens")
+        }
         
         # Initialize client
         if self.api_key:
@@ -55,11 +60,11 @@ class OpenAIClient:
                 logger.error(f"Error initializing OpenAI client: {e}")
                 self.client = None
         else:
-            logger.warning("OpenAI API key not found, client not initialized")
+            logger.warning("OpenAI API key not found or failed to initialize client.")
             self.client = None
-        
+
         self._initialized = True
-    
+
     @property
     def is_initialized(self) -> bool:
         """Check if the client is initialized with a valid API key"""

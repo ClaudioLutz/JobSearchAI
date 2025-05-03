@@ -35,6 +35,9 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="view-files-tab" data-bs-toggle="tab" data-bs-target="#view-files" type="button" role="tab" aria-controls="view-files" aria-selected="false">View Files</button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="configuration-tab" data-bs-toggle="tab" data-bs-target="#configuration" type="button" role="tab" aria-controls="configuration" aria-selected="false">Configuration</button>
+            </li>
         </ul>
 
         <!-- Tab Content -->
@@ -344,6 +347,66 @@
                 </div> <!-- End Accordion -->
             </div>
         </div> <!-- End Tab Content -->
+
+        <!-- Configuration Tab -->
+        <div class="tab-pane fade" id="configuration" role="tabpanel" aria-labelledby="configuration-tab">
+            <h2 class="mb-3">Application Configuration</h2>
+            <div class="row">
+                <div class="col-md-6">
+                    <!-- API Key Management -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h3 class="h5 mb-0">API Key Management</h3>
+                        </div>
+                        <div class="card-body">
+                            <form action="{{ url_for('setup.update_api_key') }}" method="post">
+                                <div class="mb-3">
+                                    <label for="config_openai_api_key" class="form-label">OpenAI API Key</label>
+                                    <input type="password" class="form-control" id="config_openai_api_key" name="openai_api_key" placeholder="Enter new API key to update">
+                                    <div class="form-text">
+                                        Your key is stored securely using your OS's credential manager if possible. Leave blank to keep the current key.
+                                        Get key: <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">OpenAI API Keys</a>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Update API Key</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <!-- Data Directory Management -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h3 class="h5 mb-0">Data Directory Settings</h3>
+                        </div>
+                        <div class="card-body">
+                            <form action="{{ url_for('setup.update_data_dir') }}" method="post">
+                                <div class="mb-3">
+                                    <label for="config_data_dir" class="form-label">Data Directory Path</label>
+                                    {# Use config object passed from backend if available, otherwise guess default #}
+                                    {% set current_data_dir = config.USER_SETTINGS.get('custom_data_dir', config.USER_DATA_DIR) %}
+                                    <input type="text" class="form-control" id="config_data_dir" name="data_dir" value="{{ current_data_dir }}" aria-describedby="configDataDirHelp">
+                                    <div id="configDataDirHelp" class="form-text">
+                                        Current location for CVs, job data, reports, letters, and logs.
+                                    </div>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="use_default_data_dir" name="use_default">
+                                    <label class="form-check-label" for="use_default_data_dir">
+                                        Reset to default location (<code>{{ config.USER_DATA_DIR }}</code>)
+                                    </label>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Update Data Directory</button>
+                                <div class="alert alert-warning mt-3 p-2 small">
+                                    <i class="bi bi-exclamation-triangle-fill"></i>
+                                    Changing the data directory requires an application restart to take full effect. This action does <strong>not</strong> move existing files; you must manually move them if desired.
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div> <!-- End Configuration Tab -->
 
     </div> <!-- End Container -->
 

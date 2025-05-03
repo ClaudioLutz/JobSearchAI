@@ -63,7 +63,7 @@ The system operates through a series of interconnected components, primarily man
 *   **Motivation Letter Generator (`motivation_letter_generator.py`, `letter_generation_utils.py`, `job_details_utils.py`)**: Creates personalized motivation letters and/or short email texts using AI, combining CV summary and job details. Outputs/updates JSON files and generates HTML letters. Requires OpenAI API key. Uses the centralized configuration and utility modules for improved error handling and code reusability.
 *   **Word Template Generator (`word_template_generator.py`)**: Converts structured JSON motivation letters into formatted Word documents using a template and `docxtpl`.
 *   **Dashboard (`dashboard.py`, `blueprints/`)**: Flask web application providing the user interface to manage files, run processes (including bulk letter and email generation), view results, and track progress. Orchestrates the interaction between components.
-*   **Centralized Configuration (`config.py`)**: Provides a single source of truth for all configuration settings, including file paths, environment variables, and default parameters.
+*   **Centralized Configuration (`config.py`)**: Manages application settings. **Enhanced** to handle user-specific configurations (API keys, data paths) stored in OS-appropriate locations (`appdirs`) and secure API key storage (`keyring`). Differentiates between development and packaged modes for path resolution.
 *   **Utility Modules (`utils/`)**: A collection of utility modules that provide reusable functionality:
     * `utils/decorators.py`: Decorators for error handling, retries, caching, and execution timing.
     * `utils/file_utils.py`: Functions for common file operations with improved error handling.
@@ -85,21 +85,23 @@ The system operates through a series of interconnected components, primarily man
 
 ## Setup & Configuration
 
-*   **API Keys**: An OpenAI API key is required for the CV Processor, Job Matcher, and Motivation Letter Generator. It's typically loaded from `process_cv/.env` or through the centralized `config.py` module.
-*   **Job Scraper Settings**: The `job-data-acquisition/settings.json` file configures target URLs, LLM details for scraping, logging, output directories, and scraping parameters like `max_pages`.
-*   **Word Template**: The `motivation_letters/template/motivation_letter_template.docx` file serves as the base for generated Word documents.
-*   **Dependencies**: Python dependencies are listed in `requirements.txt`. Key libraries include `Flask`, `openai`, `python-dotenv`, `requests`, `beautifulsoup4`, `pymupdf`, `docxtpl`, and potentially `scrapegraphai`, `easyocr`, `Pillow`, `numpy`.
-*   **Centralized Configuration**: The `config.py` module provides a centralized way to access paths, environment variables, and default parameters across the codebase.
+*   **API Keys**: An OpenAI API key is **required** by the end-user. The application prompts for this key during a **first-run setup wizard** and stores it securely using the `keyring` library (OS credential manager) or in the user's configuration file as a fallback. The developer's key is **not** distributed.
+*   **User Configuration**: User-specific settings (API key fallback, custom data directory path) are stored in `settings.json` within the user's configuration directory (e.g., `AppData/Local/JobsearchAI/JobsearchAI` on Windows), managed by `config.py` using `appdirs`.
+*   **Job Scraper Settings**: Default scraper settings remain in `job-data-acquisition/settings.json` bundled with the application, but could potentially be overridden by user settings in the future.
+*   **Data Storage**: User data (CVs, job data, reports, letters, logs) is stored by default in the user's data directory (e.g., `AppData/Local/JobsearchAI/JobsearchAI` on Windows), determined by `appdirs`. Users can configure a custom data directory during setup or via the dashboard.
+*   **Word Template**: The `motivation_letters/template/motivation_letter_template.docx` file is bundled with the application.
+*   **Dependencies**: Python dependencies are listed in `requirements.txt` and `setup.py`. Key libraries include `Flask`, `openai`, `python-dotenv`, `requests`, `beautifulsoup4`, `pymupdf`, `docxtpl`, `keyring`, `appdirs`, and potentially `scrapegraphai`, `easyocr`, `Pillow`, `numpy`.
+*   **Centralized Configuration**: The `config.py` module provides a centralized way to access bundled settings, user settings, API keys, and dynamically determined paths across the codebase.
 
 ## Running the System
 
 The primary way to interact with the system is through the Flask dashboard:
 
-1.  Ensure all dependencies are installed (`pip install -r requirements.txt`).
-2.  Make sure the necessary configuration files (`.env`, `settings.json`) are present and correctly configured.
-3.  Run the dashboard application: `python dashboard.py`
-4.  Access the dashboard in your web browser (typically at `http://127.0.0.1:5000`).
-5.  Use the dashboard interface to upload CVs, run the scraper, run the matcher, and generate letters.
+1.  **Installation**: Install using the provided installer (Windows) or by placing the application bundle (macOS/Linux) in the desired location (See `README_for_users.md`).
+2.  **First Run**: Launch the application executable (`JobsearchAI.exe` or similar). A setup wizard will appear.
+3.  **Setup Wizard**: Enter your OpenAI API key when prompted. Optionally, specify a custom directory for storing application data.
+4.  **Run Application**: After setup, the main dashboard will load in your default web browser (typically at `http://127.0.0.1:5000`).
+5.  **Usage**: Use the dashboard interface to upload CVs, run the scraper, run the matcher, generate letters, and manage configuration via the "Configuration" tab.
 
 ## Component Dependency Graph
 

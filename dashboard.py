@@ -13,6 +13,9 @@ import urllib.parse
 import sys
 sys.path.append('.')
 
+# Import the updated config object FIRST
+from config import config
+
 # Import necessary functions used only in this file or passed to blueprints
 # from job_matcher import load_latest_job_data # Keep if used in index or get_job_details
 
@@ -189,11 +192,13 @@ def create_app():
     from blueprints.job_data_routes import job_data_bp
     from blueprints.job_matching_routes import job_matching_bp
     from blueprints.motivation_letter_routes import motivation_letter_bp
+    from blueprints.setup_routes import setup_bp # Import the new setup blueprint
 
     app.register_blueprint(cv_bp)
     app.register_blueprint(job_data_bp)
     app.register_blueprint(job_matching_bp)
     app.register_blueprint(motivation_letter_bp)
+    app.register_blueprint(setup_bp) # Register the setup blueprint
 
     # --- Core Routes (kept in this file) ---
     @app.route('/operation_status/<operation_id>')
@@ -213,9 +218,17 @@ def create_app():
 
     @app.route('/')
     def index():
-        """Render the main dashboard page"""
+        """Render the main dashboard page, redirecting to setup if needed."""
+        # --- First Run Check ---
+        # Use the config object imported at the top
+        if config.is_first_run():
+            logger.info("First run detected, redirecting to setup wizard.")
+            return redirect(url_for('setup.setup_wizard'))
+        # --- End First Run Check ---
+
         # Get list of available CVs with timestamps
-        cv_dir = Path('process_cv/cv-data')
+        # Use config to get the correct data path
+        cv_dir = config.get_path('cv_data') # Use config path
         cv_files_data = []
         # Define patterns to search for CVs
         cv_patterns = ['input/*.pdf', 'input/*.docx', '*.pdf', '*.docx']
@@ -245,11 +258,10 @@ def create_app():
         cv_files_data.sort(key=lambda x: x.get('timestamp', '0'), reverse=True) # Sort by timestamp descending
 
         # Get list of available job data files with timestamps
-        # Use absolute path based on app root for consistency
-        # Corrected path to match settings.json output_directory
-        job_data_dir = Path(app.root_path) / 'job-data-acquisition/data'
+        # Use config to get the correct data path
+        job_data_dir = config.get_path('job_data') # Use config path
         job_data_files_data = []
-        logger.info(f"Checking for job data files in: {job_data_dir}") # Add logging
+        logger.info(f"Checking for job data files in: {job_data_dir}")
         if job_data_dir.exists():
             job_data_paths = list(job_data_dir.glob('job_data_*.json'))
             logger.info(f"Found {len(job_data_paths)} job data files.") # Add logging
@@ -264,7 +276,7 @@ def create_app():
         job_data_files_data.sort(key=lambda x: x.get('timestamp', '0'), reverse=True) # Sort by timestamp descending
 
         # Get list of available job match reports with timestamps
-        report_dir = Path('job_matches')
+        report_dir = config.get_path('job_matches') # Use config path
         report_files_data = []
         if report_dir.exists():
             report_paths = list(report_dir.glob('job_matches_*.md'))
@@ -280,8 +292,8 @@ def create_app():
 
         # --- Get list of generated motivation letters ---
         generated_letters_data = []
-        letters_dir = Path(app.root_path) / 'motivation_letters'
-        if letters_dir.exists():
+        letters_dir = config.get_path('motivation_letters') # Use config path
+        if letters_dir and letters_dir.exists(): # Check if path exists
             # Helper to get relative path safely
             def get_relative_path(file_path, base_path):
                 try:
@@ -328,15 +340,18 @@ def create_app():
                     mtime = os.path.getmtime(json_path)
                     timestamp = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
 
+                    # Use config.get_path('data_root') as the base for relative paths
+                    data_root_path = config.get_path('data_root')
+
                     generated_letters_data.append({
                         'job_title': job_title,
                         'company_name': company_name,
                         'timestamp': timestamp,
                         'json_filename': json_path.name, # Filename for delete action
-                        'json_path': get_relative_path(json_path, app.root_path),
-                        'html_path': get_relative_path(html_path, app.root_path) if has_html else None,
-                        'docx_path': get_relative_path(docx_path, app.root_path) if has_docx else None,
-                        'scraped_path': get_relative_path(scraped_path, app.root_path) if has_scraped else None,
+                        'json_path': get_relative_path(json_path, data_root_path),
+                        'html_path': get_relative_path(html_path, data_root_path) if has_html else None,
+                        'docx_path': get_relative_path(docx_path, data_root_path) if has_docx else None,
+                        'scraped_path': get_relative_path(scraped_path, data_root_path) if has_scraped else None,
                         'scraped_filename': scraped_path.name if has_scraped else None,
                         'has_html': has_html,
                         'has_docx': has_docx,
@@ -351,11 +366,13 @@ def create_app():
         generated_letters_data.sort(key=lambda x: x.get('timestamp', '0'), reverse=True)
         # --- End Get list of generated motivation letters ---
 
+        # Pass our custom config object to the template context
         return render_template('index.html',
-                              cv_files=cv_files_data,
-                              job_data_files=job_data_files_data,
-                              report_files=report_files_data,
-                              generated_letters=generated_letters_data) # Pass new list
+                               cv_files=cv_files_data,
+                               job_data_files=job_data_files_data,
+                               report_files=report_files_data,
+                               generated_letters=generated_letters_data,
+                               config=config) # Pass our ConfigManager instance
 
     @app.route('/delete_files', methods=['POST'])
     def delete_files_route():
@@ -373,12 +390,11 @@ def create_app():
         deleted_count = 0
         failed_count = 0
         failed_files = []
-        base_dir = Path(app.root_path) # Use app root path for consistency
+        base_dir = config.get_path('data_root') # Use config path for data root
 
         try:
             if file_type == 'job_data':
-                # Corrected path
-                target_dir = base_dir / 'job-data-acquisition/data'
+                target_dir = config.get_path('job_data') # Use config path
                 for filename in filenames:
                     # Secure filename before joining path
                     file_path = target_dir / secure_filename(filename)
@@ -396,7 +412,7 @@ def create_app():
                         failed_files.append(filename)
 
             elif file_type == 'report':
-                target_dir = base_dir / 'job_matches'
+                target_dir = config.get_path('job_matches') # Use config path
                 for filename in filenames:
                     # Secure filename before joining path
                     secure_name = secure_filename(filename)
@@ -427,9 +443,9 @@ def create_app():
 
             elif file_type == 'cv':
                 # Base directory for CV related files
-                cv_base_dir = base_dir / 'process_cv/cv-data'
-                processed_dir = cv_base_dir / 'processed'
-                # input_dir = cv_base_dir / 'input' # Not needed directly
+                cv_base_dir = config.get_path('cv_data') # Use config path
+                processed_dir = config.get_path('cv_data_processed') # Use config path
+                # input_dir = config.get_path('cv_data_input') # Use config path
 
                 for filename in filenames:
                     # Filename is expected to be the relative path from process_cv/cv-data
