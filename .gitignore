@@ -35,6 +35,8 @@ job_matches/
 motivation_letters/*.html
 motivation_letters/*.docx
 motivation_letters/*.json
+deprecated_20250427_211727
+
 
 # Virtual environments
 venv/
@@ -96,3 +98,6 @@ htmlcov/
 .env.test.local
 .env.production.local
 last_session.md
+
+# Production Planning
+production_planning/

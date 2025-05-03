@@ -145,15 +145,15 @@ class ConfigManager:
             "job_matcher": {
                 "min_score": 6,
                 "cli_min_score": 3,  # When run from CLI
-                "max_jobs": 50,
-                "max_results": 10
+                "max_jobs": 500,
+                "max_results": 500
             },
             
             # OpenAI API defaults (from various files)
             "openai": {
                 "model": "gpt-4.1",
-                "temperature": 0.2,
-                "max_tokens": 800
+                "temperature": 0.1,
+                "max_tokens": 1600
             },
             
             # ScrapeGraphAI defaults (from settings.json if available)
