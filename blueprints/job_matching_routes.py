@@ -4,13 +4,16 @@ import logging
 import threading
 import urllib.parse
 import importlib.util
+import sqlite3 # Added
 from pathlib import Path
+from datetime import datetime # Added
 from flask import (
     Blueprint, request, redirect, url_for, flash, render_template,
     send_file, jsonify, current_app
 )
 from werkzeug.utils import secure_filename
 from config import config # Import config object
+from utils.database_utils import database_connection # Added
 
 # Add project root to path to find modules
 import sys
@@ -84,9 +87,15 @@ def run_job_matcher():
         return redirect(url_for('index'))
 
     # Construct the full path to the CV relative to the app root
-    full_cv_path = os.path.join(current_app.root_path, 'process_cv/cv-data', cv_path_rel)
+    # Use config to get the base CV data directory
+    cv_base_dir = config.get_path('cv_data')
+    if not cv_base_dir:
+        flash('Configuration error: CV data directory not found.', 'error')
+        logger.error("Configuration error: 'cv_data' path not found in config for job matching.")
+        return redirect(url_for('index'))
+    full_cv_path = cv_base_dir / cv_path_rel # Use Path object joining
 
-    if not os.path.exists(full_cv_path):
+    if not full_cv_path.is_file(): # Use Path object check
          flash(f'CV file not found at expected location: {full_cv_path}')
          logger.error(f"CV file not found for matching: {full_cv_path} (relative path was {cv_path_rel})")
          return redirect(url_for('index'))
@@ -109,10 +118,11 @@ def run_job_matcher():
                     update_operation_progress(op_id, 10, 'processing', 'Loading job data...')
 
                     # Match jobs with CV - pass both max_jobs and max_results
-                    matches = match_jobs_with_cv(cv_full_path_task, min_score=min_score_task, max_jobs=max_jobs_task, max_results=max_results_task)
+                    # Pass the absolute path as a string
+                    matches = match_jobs_with_cv(str(cv_full_path_task), min_score=min_score_task, max_jobs=max_jobs_task, max_results=max_results_task)
 
                     if not matches:
-                        update_operation_progress(op_id, 100, 'completed', 'No job matches found')
+                        complete_operation(op_id, 'completed', 'No job matches found') # Use complete_operation
                         return
 
                     # Update status
@@ -124,15 +134,74 @@ def run_job_matcher():
 
                     # Generate report (which now includes cv_path in the saved JSON)
                     report_file_path = generate_report(matches) # Returns full path
-                    report_filename = os.path.basename(report_file_path)
+                    report_filename = os.path.basename(report_file_path) # report_file_path is absolute
 
-                    # Complete the operation
-                    complete_operation(op_id, 'completed', f'Job matching completed. Results saved to: {report_filename}')
+                    # --- Database Insertion ---
+                    try:
+                        report_timestamp = datetime.now().isoformat()
+                        data_root = config.get_path('data_root')
+                        if not data_root:
+                            raise ValueError("Configuration error: 'data_root' path not found in config.")
+
+                        report_path_md_abs = Path(report_file_path)
+                        report_path_json_abs = report_path_md_abs.with_suffix('.json')
+
+                        report_filepath_md_rel = str(report_path_md_abs.relative_to(data_root)).replace('\\', '/')
+                        report_filepath_json_rel = str(report_path_json_abs.relative_to(data_root)).replace('\\', '/')
+
+                        parameters_used = json.dumps({
+                            'min_score': min_score_task,
+                            'max_jobs': max_jobs_task,
+                            'max_results': max_results_task
+                        })
+                        match_count = len(matches)
+
+                        cv_id = None
+                        job_data_batch_id = None
+
+                        with database_connection() as conn:
+                            cursor = conn.cursor()
+                            # Get CV ID
+                            cursor.execute("SELECT id FROM CVS WHERE original_filepath = ?", (cv_path_rel_task,))
+                            cv_row = cursor.fetchone()
+                            if cv_row:
+                                cv_id = cv_row['id']
+                            else:
+                                logger.warning(f"Could not find CV ID for path: {cv_path_rel_task}")
+
+                            # Get latest Job Data Batch ID (assuming matcher uses latest)
+                            cursor.execute("SELECT id FROM JOB_DATA_BATCHES ORDER BY batch_timestamp DESC LIMIT 1")
+                            batch_row = cursor.fetchone()
+                            if batch_row:
+                                job_data_batch_id = batch_row['id']
+                            else:
+                                logger.warning("Could not find any job data batch ID.")
+
+                            # Insert report record
+                            cursor.execute("""
+                                INSERT INTO JOB_MATCH_REPORTS (
+                                    report_timestamp, report_filepath_json, report_filepath_md,
+                                    cv_id, job_data_batch_id, parameters_used, match_count
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                report_timestamp, report_filepath_json_rel, report_filepath_md_rel,
+                                cv_id, job_data_batch_id, parameters_used, match_count
+                            ))
+                        logger.info(f"Successfully added job match report record to database: {report_filepath_md_rel}")
+                        complete_operation(op_id, 'completed', f'Job matching completed and recorded. Report: {report_filename}')
+
+                    except Exception as db_err:
+                        logger.error(f"Database error adding job match report record for {report_filename}: {db_err}", exc_info=True)
+                        # Still report completion, but mention DB error
+                        complete_operation(op_id, 'completed_with_errors', f'Job matching completed, but failed to record in database. Report: {report_filename}. Error: {db_err}')
+                    # --- End Database Insertion ---
+
                 except Exception as e:
                     logger.error(f'Error in job matcher task: {str(e)}', exc_info=True)
                     complete_operation(op_id, 'failed', f'Error running job matcher: {str(e)}')
 
         # Start the background thread, passing app instance and args
+        # Pass the absolute path as a Path object
         thread_args = (app_instance, operation_id, full_cv_path, cv_path_rel, min_score, max_jobs, max_results)
         thread = threading.Thread(target=run_job_matcher_task, args=thread_args)
         thread.daemon = True
@@ -161,10 +230,15 @@ def run_combined_process():
             flash('No CV selected')
             return redirect(url_for('index'))
 
-        # Construct the full path to the CV
-        full_cv_path = os.path.join(current_app.root_path, 'process_cv/cv-data', cv_path_rel)
+        # Construct the full path to the CV using config
+        cv_base_dir = config.get_path('cv_data')
+        if not cv_base_dir:
+            flash('Configuration error: CV data directory not found.', 'error')
+            logger.error("Configuration error: 'cv_data' path not found in config for combined process.")
+            return redirect(url_for('index'))
+        full_cv_path = cv_base_dir / cv_path_rel # Use Path object joining
 
-        if not os.path.exists(full_cv_path):
+        if not full_cv_path.is_file(): # Use Path object check
              flash(f'CV file not found at expected location: {full_cv_path}')
              logger.error(f"CV file not found for combined process: {full_cv_path} (relative path was {cv_path_rel})")
              return redirect(url_for('index'))
@@ -173,7 +247,6 @@ def run_combined_process():
         start_operation = current_app.extensions['start_operation']
         update_operation_progress = current_app.extensions['update_operation_progress']
         complete_operation = current_app.extensions['complete_operation']
-        # operation_status = current_app.extensions['operation_status'] # Access via app.extensions inside task
         app_instance = current_app._get_current_object() # Get app instance for context
 
         # Start tracking the operation
@@ -191,7 +264,12 @@ def run_combined_process():
                     update_operation_progress(op_id, 5, 'processing', 'Updating settings...')
 
                     # Step 1: Update the settings.json file with the max_pages parameter
-                    settings_path = os.path.join(app.root_path, 'job-data-acquisition', 'settings.json') # Use app.root_path
+                    # Use config to get settings path
+                    settings_path = config.get_path('settings_json')
+                    if not settings_path:
+                        logger.error("Configuration error: 'settings_json' path not found in config.")
+                        complete_operation(op_id, 'failed', 'Scraper settings file path not configured.')
+                        return
                     try:
                         with open(settings_path, 'r', encoding='utf-8') as f: settings = json.load(f)
                         settings['scraper']['max_pages'] = max_pages_task # Use passed variable
@@ -207,10 +285,16 @@ def run_combined_process():
                     # Step 2: Run the job scraper
                     output_file = None
                     try:
-                        app_path = os.path.join(app.root_path, 'job-data-acquisition', 'app.py') # Use app.root_path
-                        if not os.path.exists(app_path):
+                        # Use config to get job data acquisition path
+                        job_data_acq_path = config.get_path('job_data_acquisition')
+                        if not job_data_acq_path:
+                             logger.error("Configuration error: 'job_data_acquisition' path not found in config.")
+                             raise FileNotFoundError("Job data acquisition path not configured.")
+                        app_path = job_data_acq_path / 'app.py' # Use Path object joining
+
+                        if not app_path.is_file(): # Use Path object check
                              raise FileNotFoundError(f"Scraper app.py not found at {app_path}")
-                        spec = importlib.util.spec_from_file_location("app_module", app_path)
+                        spec = importlib.util.spec_from_file_location("app_module", str(app_path)) # Pass path as string
                         app_module = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(app_module)
                         run_scraper = getattr(app_module, 'run_scraper', None)
@@ -227,11 +311,54 @@ def run_combined_process():
                         complete_operation(op_id, 'failed', 'Job data acquisition failed (no output file). Check logs.')
                         return
 
+                    # --- Insert Job Data Batch Record ---
+                    job_data_batch_id = None # Initialize batch ID
+                    try:
+                        data_root = config.get_path('data_root')
+                        if not data_root:
+                            raise ValueError("Configuration error: 'data_root' path not found in config.")
+
+                        absolute_output_path = Path(output_file)
+                        # Ensure output_file path is absolute relative to data_root if needed
+                        # Assuming run_scraper returns path relative to job-data-acquisition dir
+                        if not absolute_output_path.is_absolute():
+                            job_data_acq_path = config.get_path('job_data_acquisition')
+                            if job_data_acq_path:
+                                absolute_output_path = (job_data_acq_path / output_file).resolve()
+                            else: # Fallback if job_data_acquisition path is missing
+                                absolute_output_path = (Path(app.root_path) / 'job-data-acquisition' / output_file).resolve()
+
+
+                        relative_data_filepath = str(absolute_output_path.relative_to(data_root)).replace('\\', '/')
+                        batch_timestamp = datetime.now().isoformat() # Use current time
+
+                        # Re-read settings to ensure we capture the state used for the run
+                        with open(settings_path, 'r', encoding='utf-8') as f:
+                            settings_for_run = json.load(f)
+
+                        source_urls_json = json.dumps(settings_for_run.get('target_urls', []))
+                        settings_used_json = json.dumps(settings_for_run.get('scraper', {}))
+
+                        with database_connection() as conn:
+                            cursor = conn.cursor()
+                            cursor.execute("""
+                                INSERT INTO JOB_DATA_BATCHES (batch_timestamp, source_urls, data_filepath, settings_used)
+                                VALUES (?, ?, ?, ?)
+                            """, (batch_timestamp, source_urls_json, relative_data_filepath, settings_used_json))
+                            job_data_batch_id = cursor.lastrowid # Get the ID of the inserted row
+                            logger.info(f"Successfully added job data batch record (ID: {job_data_batch_id}) to database from combined run: {relative_data_filepath}")
+
+                    except Exception as db_batch_err:
+                        logger.error(f"Database error adding job data batch record from combined run for {output_file}: {db_batch_err}", exc_info=True)
+                        # Log the error but proceed to matching if possible, the report won't be linked though.
+                        update_operation_progress(op_id, 55, 'warning', 'Scraping done, but failed to record batch in DB.')
+
                     # Update status
                     update_operation_progress(op_id, 60, 'processing', 'Job data acquisition completed. Starting job matcher...')
 
                     # Step 3: Run the job matcher with the newly acquired data
-                    matches = match_jobs_with_cv(cv_full_path_task, min_score=min_score_task, max_jobs=max_jobs_task, max_results=max_results_task) # Use passed variables
+                    # Pass absolute path as string
+                    matches = match_jobs_with_cv(str(cv_full_path_task), min_score=min_score_task, max_jobs=max_jobs_task, max_results=max_results_task) # Use passed variables
 
                     if not matches:
                         complete_operation(op_id, 'completed', 'No job matches found after scraping')
@@ -246,20 +373,75 @@ def run_combined_process():
 
                     # Step 4: Generate report
                     report_file_path = generate_report(matches)
-                    report_filename = os.path.basename(report_file_path)
+                    report_filename = os.path.basename(report_file_path) # report_file_path is absolute
 
-                    # Complete the operation
-                    complete_operation(op_id, 'completed', f'Combined process completed. Results saved to: {report_filename}')
+                    # --- Database Insertion for Report ---
+                    try:
+                        report_timestamp = datetime.now().isoformat()
+                        data_root = config.get_path('data_root') # Re-get data_root just in case
+                        if not data_root:
+                            raise ValueError("Configuration error: 'data_root' path not found in config.")
 
-                    # Store the report file in the operation status for retrieval (if needed elsewhere)
-                    if op_id in operation_status_ctx:
-                        operation_status_ctx[op_id]['report_file'] = report_filename
+                        report_path_md_abs = Path(report_file_path)
+                        report_path_json_abs = report_path_md_abs.with_suffix('.json')
+
+                        report_filepath_md_rel = str(report_path_md_abs.relative_to(data_root)).replace('\\', '/')
+                        report_filepath_json_rel = str(report_path_json_abs.relative_to(data_root)).replace('\\', '/')
+
+                        parameters_used = json.dumps({
+                            'max_pages': max_pages_task, # Include scraper param for combined run
+                            'min_score': min_score_task,
+                            'max_jobs': max_jobs_task,
+                            'max_results': max_results_task
+                        })
+                        match_count = len(matches)
+
+                        cv_id = None
+                        # job_data_batch_id is already captured above after inserting the batch record
+
+                        with database_connection() as conn:
+                            cursor = conn.cursor()
+                            # Get CV ID
+                            cursor.execute("SELECT id FROM CVS WHERE original_filepath = ?", (cv_path_rel_task,))
+                            cv_row = cursor.fetchone()
+                            if cv_row:
+                                cv_id = cv_row['id']
+                            else:
+                                logger.warning(f"Could not find CV ID for path: {cv_path_rel_task}")
+
+                            # Use the captured job_data_batch_id
+                            if not job_data_batch_id:
+                                logger.warning("Job data batch ID was not captured successfully earlier in the combined run.")
+
+                            # Insert report record
+                            cursor.execute("""
+                                INSERT INTO JOB_MATCH_REPORTS (
+                                    report_timestamp, report_filepath_json, report_filepath_md,
+                                    cv_id, job_data_batch_id, parameters_used, match_count
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                report_timestamp, report_filepath_json_rel, report_filepath_md_rel,
+                                cv_id, job_data_batch_id, parameters_used, match_count
+                            ))
+                        logger.info(f"Successfully added job match report record to database: {report_filepath_md_rel}")
+                        complete_operation(op_id, 'completed', f'Combined process completed and recorded. Report: {report_filename}')
+
+                        # Store the report file in the operation status for retrieval (if needed elsewhere)
+                        if op_id in operation_status_ctx:
+                             operation_status_ctx[op_id]['report_file'] = report_filename # Use filename
+
+                    except Exception as db_err:
+                        logger.error(f"Database error adding job match report record for {report_filename}: {db_err}", exc_info=True)
+                        # Still report completion, but mention DB error
+                        complete_operation(op_id, 'completed_with_errors', f'Combined process completed, but failed to record in database. Report: {report_filename}. Error: {db_err}')
+                    # --- End Database Insertion for Report ---
 
                 except Exception as e:
                     logger.error(f'Error in combined process task: {str(e)}', exc_info=True)
                     complete_operation(op_id, 'failed', f'Error running combined process: {str(e)}')
 
         # Start the background thread, passing necessary arguments including app instance
+        # Pass absolute path as Path object
         thread_args = (app_instance, operation_id, full_cv_path, cv_path_rel, max_pages, min_score, max_jobs, max_results)
         thread = threading.Thread(target=run_combined_process_task, args=thread_args)
         thread.daemon = True
@@ -279,23 +461,30 @@ def view_results(report_file):
     """View job match results"""
     # Secure the report filename
     secure_report_file = secure_filename(report_file)
-    report_dir = Path(current_app.root_path) / 'job_matches'
+    # Use config to get paths
+    report_dir = config.get_path('job_matches')
+    if not report_dir:
+        flash("Configuration error: Job matches directory not found.", "error")
+        logger.error("Configuration error: 'job_matches' path not found in config.")
+        return redirect(url_for('index'))
+
     json_file = secure_report_file.replace('.md', '.json')
-    json_path = report_dir / json_file
+    json_path = report_dir / json_file # Use Path object joining
 
     try:
-        # Get list of available CV summary base names
-        processed_cv_dir = Path(current_app.root_path) / 'process_cv/cv-data/processed'
-        available_cvs = []
-        if processed_cv_dir.exists():
-            available_cvs = sorted(
-                p.stem.replace('_summary', '')
-                for p in processed_cv_dir.glob('*_summary.txt')
-            )
-        logger.info(f"Available CVs for dropdown: {available_cvs}")
+        # Get list of available CVs from DB
+        available_cvs_data = []
+        try:
+            with database_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, original_filename, original_filepath FROM CVS ORDER BY original_filename")
+                available_cvs_data = cursor.fetchall()
+        except Exception as db_err:
+            logger.error(f"Error fetching CVs for dropdown: {db_err}", exc_info=True)
+            # Continue without CV list if DB fails
 
         # Load the job matches from the JSON file
-        if not json_path.is_file():
+        if not json_path.is_file(): # Use Path object check
             flash(f"Report JSON file not found: {json_file}")
             logger.error(f"Report JSON file not found: {json_path}")
             return redirect(url_for('index'))
@@ -304,32 +493,31 @@ def view_results(report_file):
             matches = json.load(f)
 
         # Determine associated CV filename from the 'cv_path' stored in matches
+        associated_cv_rel_path = None
         associated_cv_filename = None
-        if matches and isinstance(matches, list) and matches[0] and 'cv_path' in matches[0]:
-            try:
-                # Extract the base name from the stored relative path
-                potential = Path(matches[0]['cv_path']).stem
-                if potential in available_cvs:
-                    associated_cv_filename = potential
-                    logger.info(f"Associated CV '{potential}' for report {json_file}")
-                else:
-                    logger.warning(f"CV base name '{potential}' from report {json_file} not found in available summaries {available_cvs}")
-            except Exception as path_e:
-                logger.error(f"Error extracting cv_path base name from report {json_file}: {path_e}")
+        if matches and isinstance(matches, list) and len(matches) > 0 and isinstance(matches[0], dict) and 'cv_path' in matches[0]:
+            associated_cv_rel_path = matches[0]['cv_path']
+            # Find the corresponding original filename from the DB data
+            for cv_data in available_cvs_data:
+                if cv_data['original_filepath'] == associated_cv_rel_path:
+                    associated_cv_filename = cv_data['original_filename']
+                    logger.info(f"Associated CV '{associated_cv_filename}' ({associated_cv_rel_path}) for report {json_file}")
+                    break
+            if not associated_cv_filename:
+                 logger.warning(f"Could not find original filename for CV path '{associated_cv_rel_path}' in report {json_file}")
+                 # Fallback to using the path itself if filename not found
+                 associated_cv_filename = associated_cv_rel_path
 
-        if not associated_cv_filename:
-            logger.warning(f"Could not determine associated CV for report {json_file}")
 
         # --- Check for generated files for each match ---
-        letters_dir = Path(current_app.root_path) / 'motivation_letters'
-        existing_scraped = list(letters_dir.glob('*_scraped_data.json'))
+        letters_dir = config.get_path('motivation_letters')
+        if not letters_dir:
+            logger.error("Configuration error: 'motivation_letters' path not found. Cannot check generated files.")
+            letters_dir = Path() # Assign empty path to prevent errors below, but checks will fail
 
-        # Get all motivation letter HTML, JSON, and DOCX files for direct checking
-        all_html_files = list(letters_dir.glob('motivation_letter_*.html'))
-        all_json_files = list(letters_dir.glob('motivation_letter_*.json'))
-        all_docx_files = list(letters_dir.glob('motivation_letter_*.docx'))
+        existing_scraped = list(letters_dir.glob('*_scraped_data.json')) if letters_dir.exists() else []
 
-        logger.info(f"Checking for generated files: {len(existing_scraped)} scraped, {len(all_html_files)} HTML, {len(all_json_files)} JSON, {len(all_docx_files)} DOCX")
+        logger.info(f"Checking for generated files in {letters_dir}: {len(existing_scraped)} scraped files found.")
 
         for match in matches:
             # Normalize match_app_url (assuming 'application_url' is the key)
@@ -396,7 +584,7 @@ def view_results(report_file):
                         if stored_url.startswith('/'):
                              base_url = "https://www.ostjob.ch/" # Configurable?
                              stored_url = urllib.parse.urljoin(base_url, stored_url.lstrip('/'))
-                        
+
                         norm_stored_url = normalize_url(stored_url)
                         logger.debug(f"Comparing normalized URLs: Report='{norm_match_url}', ScrapedFile='{norm_stored_url}' (from {scraped_path.name})")
 
@@ -470,8 +658,9 @@ def view_results(report_file):
             'results.html',
             matches=matches,
             report_file=secure_report_file, # Pass the secured filename
-            available_cvs=available_cvs,
-            associated_cv_filename=associated_cv_filename
+            available_cvs=available_cvs_data, # Pass full CV data for dropdown
+            associated_cv_filename=associated_cv_filename, # Pass original filename
+            associated_cv_rel_path=associated_cv_rel_path # Pass relative path
         )
 
     except json.JSONDecodeError as json_err:
@@ -492,10 +681,16 @@ def view_results(report_file):
 def download_report(report_file):
     """Download a job match report (Markdown file)"""
     secure_report_file = secure_filename(report_file)
-    report_path = Path(current_app.root_path) / 'job_matches' / secure_report_file
+    # Use config to get paths
+    report_dir = config.get_path('job_matches')
+    if not report_dir:
+        flash("Configuration error: Job matches directory not found.", "error")
+        logger.error("Configuration error: 'job_matches' path not found in config.")
+        return redirect(url_for('index'))
+    report_path = report_dir / secure_report_file # Use Path object joining
 
     try:
-        if not report_path.is_file():
+        if not report_path.is_file(): # Use Path object check
              flash(f'Report file not found: {secure_report_file}')
              logger.error(f"Report file not found for download: {report_path}")
              return redirect(url_for('index')) # Or maybe back to results?
@@ -510,44 +705,80 @@ def download_report(report_file):
 
 @job_matching_bp.route('/delete_report/<report_file>')
 def delete_report(report_file):
-    """Delete a job match report file (MD and JSON)"""
+    """Delete a job match report (database record and files)"""
     try:
-        secure_report_file = secure_filename(report_file)
-        report_dir = Path(current_app.root_path) / 'job_matches'
-        report_path_md = report_dir / secure_report_file
+        secure_report_file = secure_filename(report_file) # This is the MD filename
+        logger.info(f"Attempting to delete report: {secure_report_file}")
 
-        # Construct JSON filename
-        json_file = secure_report_file.replace('.md', '.json')
-        report_path_json = report_dir / json_file
+        # Construct paths using config
+        data_root = config.get_path('data_root')
+        report_dir = config.get_path('job_matches')
+        if not data_root or not report_dir:
+             raise ValueError("Configuration error: 'data_root' or 'job_matches' path not found.")
 
+        report_path_md_abs = report_dir / secure_report_file
+        report_path_json_abs = report_path_md_abs.with_suffix('.json')
+
+        # Calculate relative path for DB query
+        report_filepath_md_rel = str(report_path_md_abs.relative_to(data_root)).replace('\\', '/')
+
+        # --- Delete from database FIRST ---
+        deleted_from_db = False
+        try:
+            with database_connection() as conn:
+                cursor = conn.cursor()
+                # Delete based on the relative MD path
+                cursor.execute("DELETE FROM JOB_MATCH_REPORTS WHERE report_filepath_md = ?", (report_filepath_md_rel,))
+                if cursor.rowcount > 0:
+                    logger.info(f"Deleted job match report record from database: {report_filepath_md_rel}")
+                    deleted_from_db = True
+                else:
+                    logger.warning(f"Job match report record not found in database for deletion: {report_filepath_md_rel}")
+        except Exception as db_err:
+            logger.error(f"Database error deleting job match report record {report_filepath_md_rel}: {db_err}", exc_info=True)
+            flash(f'Database error deleting report record: {str(db_err)}', 'error')
+            # Proceed to check files, but deletion is already problematic
+
+        # --- Delete the files ---
         deleted_md = False
         deleted_json = False
 
-        # Check and delete the markdown file
-        if report_path_md.is_file():
-            os.remove(report_path_md)
-            logger.info(f"Deleted report file: {report_path_md}")
-            deleted_md = True
+        if report_path_md_abs.is_file():
+            try:
+                os.remove(report_path_md_abs)
+                logger.info(f"Deleted report MD file: {report_path_md_abs}")
+                deleted_md = True
+            except OSError as file_err:
+                logger.error(f"Error deleting report MD file {report_path_md_abs}: {file_err}", exc_info=True)
+                flash(f'Error deleting report MD file: {str(file_err)}', 'error')
         else:
-             logger.warning(f"Report MD file not found for deletion: {report_path_md}")
+            logger.warning(f"Report MD file not found for deletion: {report_path_md_abs}")
 
-
-        # Check and delete the corresponding JSON file
-        if report_path_json.is_file():
-            os.remove(report_path_json)
-            logger.info(f"Deleted corresponding JSON report file: {report_path_json}")
-            deleted_json = True
+        if report_path_json_abs.is_file():
+            try:
+                os.remove(report_path_json_abs)
+                logger.info(f"Deleted report JSON file: {report_path_json_abs}")
+                deleted_json = True
+            except OSError as file_err:
+                logger.error(f"Error deleting report JSON file {report_path_json_abs}: {file_err}", exc_info=True)
+                flash(f'Error deleting report JSON file: {str(file_err)}', 'error')
         else:
-             logger.warning(f"Report JSON file not found for deletion: {report_path_json}")
+            logger.warning(f"Report JSON file not found for deletion: {report_path_json_abs}")
 
-        if deleted_md or deleted_json:
-             flash(f'Report files deleted: {secure_report_file}')
-        else:
-             flash(f'Report files not found: {secure_report_file}')
+        # Final flash message
+        if deleted_from_db and (deleted_md or deleted_json):
+            flash(f'Report deleted successfully: {secure_report_file}')
+        elif deleted_from_db:
+             flash(f'Report record deleted from DB, but associated file(s) were not found or could not be deleted: {secure_report_file}', 'warning')
+        elif deleted_md or deleted_json:
+             flash(f'Report file(s) deleted, but DB record was not found: {secure_report_file}', 'warning')
+        elif not report_path_md_abs.exists() and not report_path_json_abs.exists():
+             flash(f'Report not found: {secure_report_file}', 'error')
+        # If DB error occurred, it was already flashed.
 
     except Exception as e:
-        flash(f'Error deleting report file: {str(e)}')
-        logger.error(f'Error deleting report file {report_file}: {str(e)}', exc_info=True)
+        flash(f'An unexpected error occurred during report deletion: {str(e)}')
+        logger.error(f'Error deleting report {report_file}: {str(e)}', exc_info=True)
 
     # Redirect back to the main dashboard after deletion
     return redirect(url_for('index'))

@@ -42,9 +42,11 @@
                         <div class="me-3">
                             <label for="cv-select" class="form-label me-2">CV for Letter Generation:</label>
                             <select id="cv-select" class="form-select d-inline-block w-auto">
-                                {% set default_cv = associated_cv_filename if associated_cv_filename else (available_cvs[0] if available_cvs else '') %}
-                                {% for cv_name in available_cvs %}
-                                    <option value="{{ cv_name }}" {% if cv_name == default_cv %}selected{% endif %}>{{ cv_name }}</option>
+                                {# Use associated_cv_rel_path for default selection logic #}
+                                {% set default_cv_path = associated_cv_rel_path if associated_cv_rel_path else (available_cvs[0].original_filepath if available_cvs else '') %}
+                                {% for cv_data in available_cvs %} {# Use cv_data as loop variable #}
+                                    {# Value should be the relative path, Display should be the filename #}
+                                    <option value="{{ cv_data.original_filepath }}" {% if cv_data.original_filepath == default_cv_path %}selected{% endif %}>{{ cv_data.original_filename }}</option>
                                 {% endfor %}
                                 {% if not available_cvs %}
                                     <option value="" disabled selected>No CVs found</option>

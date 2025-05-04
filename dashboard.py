@@ -16,7 +16,8 @@ sys.path.append('.')
 import sqlite3 # Import sqlite3 for error handling
 # Import the updated config object FIRST
 from config import config
-from utils.database_utils import initialize_database, database_connection # Import the database initializer and connection
+# Import the database initializer and connection (database_connection already imported)
+from utils.database_utils import initialize_database, database_connection
 
 # Import necessary functions used only in this file or passed to blueprints
 # from job_matcher import load_latest_job_data # Keep if used in index or get_job_details
@@ -275,38 +276,47 @@ def create_app():
             flash("An unexpected error occurred while fetching the CV list.", "error")
         # --- End Get list of available CVs from Database ---
 
-        # Get list of available job data files with timestamps
-        # Use config to get the correct data path
-        job_data_dir = config.get_path('job_data') # Use config path
-        job_data_files_data = []
-        logger.info(f"Checking for job data files in: {job_data_dir}")
-        if job_data_dir.exists():
-            job_data_paths = list(job_data_dir.glob('job_data_*.json'))
-            logger.info(f"Found {len(job_data_paths)} job data files.") # Add logging
-            for f_path in job_data_paths:
-                try:
-                    mtime = os.path.getmtime(f_path)
-                    timestamp = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
-                    job_data_files_data.append({'name': f_path.name, 'timestamp': timestamp})
-                except Exception as e:
-                    logger.error(f"Error getting timestamp for job data file {f_path.name}: {e}")
-                    job_data_files_data.append({'name': f_path.name, 'timestamp': 'N/A'})
-        job_data_files_data.sort(key=lambda x: x.get('timestamp', '0'), reverse=True) # Sort by timestamp descending
+        # --- Get list of available Job Data Batches from Database ---
+        job_batches = []
+        try:
+            with database_connection() as conn:
+                cursor = conn.cursor()
+                # Fetch necessary columns, including the relative data_filepath
+                cursor.execute("""
+                    SELECT id, batch_timestamp, data_filepath
+                    FROM JOB_DATA_BATCHES
+                    ORDER BY batch_timestamp DESC
+                """)
+                job_batches = cursor.fetchall() # Fetchall returns list of Row objects
+            logger.info(f"Fetched {len(job_batches)} job data batch records from database.")
+        except sqlite3.Error as db_err:
+            logger.error(f"Database error fetching job data batches: {db_err}", exc_info=True)
+            flash("Error fetching job data batches from database.", "error")
+        except Exception as e:
+            logger.error(f"Unexpected error fetching job data batches: {e}", exc_info=True)
+            flash("An unexpected error occurred while fetching the job data batches.", "error")
+        # --- End Get list of available Job Data Batches from Database ---
 
-        # Get list of available job match reports with timestamps
-        report_dir = config.get_path('job_matches') # Use config path
-        report_files_data = []
-        if report_dir.exists():
-            report_paths = list(report_dir.glob('job_matches_*.md'))
-            for f_path in report_paths:
-                try:
-                    mtime = os.path.getmtime(f_path)
-                    timestamp = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
-                    report_files_data.append({'name': f_path.name, 'timestamp': timestamp})
-                except Exception as e:
-                    logger.error(f"Error getting timestamp for report file {f_path.name}: {e}")
-                    report_files_data.append({'name': f_path.name, 'timestamp': 'N/A'})
-        report_files_data.sort(key=lambda x: x.get('timestamp', '0'), reverse=True) # Sort by timestamp
+        # --- Get list of available Job Match Reports from Database ---
+        job_match_reports = []
+        try:
+            with database_connection() as conn:
+                cursor = conn.cursor()
+                # Fetch necessary columns for display and links
+                cursor.execute("""
+                    SELECT id, report_timestamp, report_filepath_md, report_filepath_json
+                    FROM JOB_MATCH_REPORTS
+                    ORDER BY report_timestamp DESC
+                """)
+                job_match_reports = cursor.fetchall() # Fetchall returns list of Row objects
+            logger.info(f"Fetched {len(job_match_reports)} job match report records from database.")
+        except sqlite3.Error as db_err:
+            logger.error(f"Database error fetching job match reports: {db_err}", exc_info=True)
+            flash("Error fetching job match reports from database.", "error")
+        except Exception as e:
+            logger.error(f"Unexpected error fetching job match reports: {e}", exc_info=True)
+            flash("An unexpected error occurred while fetching the job match reports.", "error")
+        # --- End Get list of available Job Match Reports from Database ---
 
         # --- Get list of generated motivation letters ---
         generated_letters_data = []
@@ -382,14 +392,93 @@ def create_app():
                     logger.error(f"Error processing letter file {json_path.name}: {e}", exc_info=True)
 
         generated_letters_data.sort(key=lambda x: x.get('timestamp', '0'), reverse=True)
-        # --- End Get list of generated motivation letters ---
+        # --- End Get list of generated motivation letters --- # THIS SECTION IS NOW REPLACED BY DB QUERY BELOW
 
-        # Pass our custom config object to the template context
+        # --- Get list of generated motivation letters from Database ---
+        motivation_letters = []
+        try:
+            with database_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT id, job_title, company_name, generation_timestamp,
+                           letter_filepath_html, letter_filepath_json, letter_filepath_docx, scraped_data_filepath
+                    FROM MOTIVATION_LETTERS
+                    ORDER BY generation_timestamp DESC
+                """)
+                rows = cursor.fetchall()
+                data_root_path = Path(config.get_path('data_root'))
+                app_root_path = Path(app.root_path)
+
+                for row in rows:
+                    letter_data = {
+                        'id': row['id'],
+                        'job_title': row['job_title'],
+                        'company_name': row['company_name'],
+                        'timestamp': row['generation_timestamp'], # Assuming stored as formatted string or datetime object
+                        'html_path': None,
+                        'json_path': None,
+                        'docx_path': None,
+                        'scraped_path': None,
+                        'json_filename': None, # For delete link
+                        'scraped_filename': None, # For view link
+                        'has_html': False,
+                        'has_json': False,
+                        'has_docx': False,
+                        'has_scraped': False,
+                        'has_email': False # Need to check JSON content for this
+                    }
+
+                    # Convert paths relative to data_root (DB) to relative to project root (UI)
+                    # and check file existence
+                    if row['letter_filepath_html']:
+                        abs_path = data_root_path / row['letter_filepath_html']
+                        if abs_path.is_file():
+                            letter_data['html_path'] = str(abs_path.relative_to(app_root_path)).replace('\\', '/')
+                            letter_data['has_html'] = True
+                    if row['letter_filepath_json']:
+                        abs_path = data_root_path / row['letter_filepath_json']
+                        if abs_path.is_file():
+                            letter_data['json_path'] = str(abs_path.relative_to(app_root_path)).replace('\\', '/')
+                            letter_data['json_filename'] = Path(row['letter_filepath_json']).name # Get filename for delete
+                            letter_data['has_json'] = True
+                            # Check for email text inside JSON
+                            try:
+                                with open(abs_path, 'r', encoding='utf-8') as f_json:
+                                    json_content = json.load(f_json)
+                                    if json_content.get('email_text'):
+                                        letter_data['has_email'] = True
+                            except Exception as json_e:
+                                logger.warning(f"Could not read or parse JSON {abs_path} to check for email: {json_e}")
+                    if row['letter_filepath_docx']:
+                        abs_path = data_root_path / row['letter_filepath_docx']
+                        if abs_path.is_file():
+                            letter_data['docx_path'] = str(abs_path.relative_to(app_root_path)).replace('\\', '/')
+                            letter_data['has_docx'] = True
+                    if row['scraped_data_filepath']:
+                        abs_path = data_root_path / row['scraped_data_filepath']
+                        if abs_path.is_file():
+                            letter_data['scraped_path'] = str(abs_path.relative_to(app_root_path)).replace('\\', '/')
+                            letter_data['scraped_filename'] = Path(row['scraped_data_filepath']).name # Get filename for view link
+                            letter_data['has_scraped'] = True
+
+                    motivation_letters.append(letter_data)
+
+            logger.info(f"Fetched {len(motivation_letters)} motivation letter records from database.")
+        except sqlite3.Error as db_err:
+            logger.error(f"Database error fetching motivation letters: {db_err}", exc_info=True)
+            flash("Error fetching motivation letters from database.", "error")
+        except Exception as e:
+            logger.error(f"Unexpected error fetching motivation letters: {e}", exc_info=True)
+            flash("An unexpected error occurred while fetching the motivation letters.", "error")
+        # --- End Get list of generated motivation letters from Database ---
+
+
+        # Pass our custom config object and fetched data to the template context
         return render_template('index.html',
                                cv_files=cv_files_data,
-                               job_data_files=job_data_files_data,
-                               report_files=report_files_data,
-                               generated_letters=generated_letters_data,
+                               job_batches=job_batches, # Fetched earlier
+                               job_match_reports=job_match_reports, # Fetched earlier
+                               generated_letters=motivation_letters, # Pass letters from DB
                                config=config) # Pass our ConfigManager instance
 
     @app.route('/delete_files', methods=['POST'])

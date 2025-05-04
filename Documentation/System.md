@@ -94,7 +94,11 @@ The system operates through a series of interconnected components, primarily man
 *   **Word Template**: The `motivation_letters/template/motivation_letter_template.docx` file is bundled with the application.
 *   **Dependencies**: Python dependencies are listed in `requirements.txt` and `setup.py`. Key libraries include `Flask`, `openai`, `python-dotenv`, `requests`, `beautifulsoup4`, `pymupdf`, `docxtpl`, `keyring`, `appdirs`, `sqlite3` (built-in), and potentially `scrapegraphai`, `easyocr`, `Pillow`, `numpy`.
 *   **Centralized Configuration**: The `config.py` module provides a centralized way to access bundled settings, user settings, API keys, and dynamically determined paths across the codebase.
-*   **Database**: SQLite (`jobsearchai.db` file stored in the user's configured data directory).
+*   **Database**: SQLite (`jobsearchai.db` file stored in the user's configured data directory). Key tables include:
+    *   `CVS`: Stores information about uploaded CVs (paths, timestamps, summary path). Columns: `id`, `original_filename`, `original_filepath`, `summary_filepath`, `html_filepath`, `processing_timestamp`, `upload_timestamp`.
+    *   `JOB_DATA_BATCHES`: Tracks batches of scraped job data (timestamp, source, filepath). Columns: `id`, `batch_timestamp`, `source_urls`, `data_filepath`, `settings_used`.
+    *   `JOB_MATCH_REPORTS`: Stores results of job matching runs (timestamp, report paths, related CV/batch IDs). Columns: `id`, `report_timestamp`, `report_filepath_json`, `report_filepath_md`, `cv_id`, `job_data_batch_id`, `parameters_used`, `match_count`.
+    *   `MOTIVATION_LETTERS`: Records generated motivation letters (timestamp, job details, related CV/report IDs, filepaths). Columns: `id`, `generation_timestamp`, `job_title`, `company_name`, `job_url`, `cv_id`, `job_match_report_id`, `letter_filepath_json`, `letter_filepath_html`, `letter_filepath_docx`, `scraped_data_filepath`.
 
 ## Running the System
 

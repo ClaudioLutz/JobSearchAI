@@ -1,11 +1,17 @@
 import os
 import json
+import os
+import json
 import logging
 import threading
 import importlib.util
+import urllib.parse # Added
 from pathlib import Path
+from datetime import datetime
 from flask import Blueprint, request, redirect, url_for, flash, render_template, current_app
 from werkzeug.utils import secure_filename
+from config import config
+from utils.database_utils import database_connection
 
 # Assuming operation tracking functions are accessible, e.g., via current_app or a shared module
 # from dashboard import start_operation, update_operation_progress, complete_operation, logger # Example
@@ -93,12 +99,46 @@ def run_job_scraper():
                 if output_file is None:
                     complete_operation(operation_id, 'failed', 'Job data acquisition failed. Check the logs for details.')
                 else:
-                    # Make output_file relative for the message if possible
+                    # --- Database Insertion ---
                     try:
-                        relative_output_file = Path(output_file).relative_to(current_app.root_path)
-                    except ValueError:
-                        relative_output_file = output_file # Keep absolute if not relative
-                    complete_operation(operation_id, 'completed', f'Job data acquisition completed. Data saved to: {relative_output_file}')
+                        data_root = config.get_path('data_root')
+                        if not data_root:
+                            raise ValueError("Configuration error: 'data_root' path not found in config.")
+
+                        absolute_output_path = Path(output_file)
+                        # Ensure the output file path is absolute before making it relative
+                        if not absolute_output_path.is_absolute():
+                             # If run_scraper returns a relative path, make it absolute based on project root
+                             absolute_output_path = Path(current_app.root_path) / output_file
+
+                        relative_data_filepath = str(absolute_output_path.relative_to(data_root)).replace('\\', '/')
+                        batch_timestamp = datetime.now().isoformat()
+
+                        # Read settings used for this run
+                        settings_path = config.get_path('settings_json')
+                        if not settings_path or not settings_path.exists():
+                             raise FileNotFoundError("Scraper settings file not found via config.")
+                        with open(settings_path, 'r', encoding='utf-8') as f:
+                            settings = json.load(f)
+
+                        source_urls_json = json.dumps(settings.get('target_urls', []))
+                        settings_used_json = json.dumps(settings.get('scraper', {}))
+
+                        with database_connection() as conn:
+                            cursor = conn.cursor()
+                            cursor.execute("""
+                                INSERT INTO JOB_DATA_BATCHES (batch_timestamp, source_urls, data_filepath, settings_used)
+                                VALUES (?, ?, ?, ?)
+                            """, (batch_timestamp, source_urls_json, relative_data_filepath, settings_used_json))
+                        logger.info(f"Successfully added job data batch record to database: {relative_data_filepath}")
+                        complete_operation(operation_id, 'completed', f'Job data acquisition completed and recorded. Data saved to: {relative_data_filepath}')
+
+                    except Exception as db_err:
+                        logger.error(f"Database error adding job data batch record for {output_file}: {db_err}", exc_info=True)
+                        # Still report completion, but mention DB error
+                        complete_operation(operation_id, 'completed_with_errors', f'Job data acquisition completed, but failed to record in database. Data saved to: {output_file}. Error: {db_err}')
+                    # --- End Database Insertion ---
+
             except Exception as e:
                 logger.error(f'Error in job scraper task: {str(e)}', exc_info=True)
                 complete_operation(operation_id, 'failed', f'Error running job scraper: {str(e)}')
@@ -116,28 +156,69 @@ def run_job_scraper():
         logger.error(f'Error running job scraper: {str(e)}', exc_info=True)
         return redirect(url_for('index'))
 
-@job_data_bp.route('/delete/<job_data_file>')
-def delete_job_data(job_data_file):
-    """Delete a job data file"""
+@job_data_bp.route('/delete/<path:job_data_file_rel_path>') # Changed route parameter
+def delete_job_data(job_data_file_rel_path): # Changed function signature
+    """Delete a job data batch (database record and file)"""
     try:
-        # Construct the full path to the job data file relative to app root
-        job_data_dir = Path(current_app.root_path) / 'job-data-acquisition/job-data-acquisition/data'
-        # Secure the filename part only
-        job_data_path = job_data_dir / secure_filename(job_data_file)
+        # URL decode the path
+        decoded_rel_path = urllib.parse.unquote(job_data_file_rel_path)
+        logger.info(f"Attempting to delete job data batch with relative path: {decoded_rel_path}")
 
-        # Check if the file exists
-        if not job_data_path.is_file():
-            flash(f'Job data file not found: {job_data_file}')
-            logger.warning(f"Attempted to delete non-existent job data file: {job_data_path}")
-            return redirect(url_for('index'))
+        # Construct absolute path using config
+        data_root = config.get_path('data_root')
+        if not data_root:
+            raise ValueError("Configuration error: 'data_root' path not found in config.")
+        absolute_data_path = data_root / decoded_rel_path
 
-        # Delete the file
-        os.remove(job_data_path)
-        flash(f'Job data file deleted: {job_data_file}')
-        logger.info(f"Deleted job data file: {job_data_path}")
+        # --- Delete from database FIRST ---
+        deleted_from_db = False
+        try:
+            with database_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM JOB_DATA_BATCHES WHERE data_filepath = ?", (decoded_rel_path,))
+                if cursor.rowcount > 0:
+                    logger.info(f"Deleted job data batch record from database: {decoded_rel_path}")
+                    deleted_from_db = True
+                else:
+                    logger.warning(f"Job data batch record not found in database for deletion: {decoded_rel_path}")
+                    # Don't flash error yet, maybe file exists but DB record doesn't
+        except Exception as db_err:
+            logger.error(f"Database error deleting job data batch record {decoded_rel_path}: {db_err}", exc_info=True)
+            flash(f'Database error deleting job data record: {str(db_err)}', 'error')
+            # Proceed to check file, but deletion is already problematic
+
+        # --- Delete the file ---
+        file_deleted = False
+        if absolute_data_path.is_file():
+            try:
+                os.remove(absolute_data_path)
+                logger.info(f"Deleted job data file: {absolute_data_path}")
+                file_deleted = True
+            except OSError as file_err:
+                logger.error(f"Error deleting job data file {absolute_data_path}: {file_err}", exc_info=True)
+                flash(f'Error deleting job data file: {str(file_err)}', 'error')
+        else:
+            logger.warning(f"Job data file not found for deletion at path: {absolute_data_path}")
+            # Only flash if DB record *was* found, otherwise it's just cleanup
+            if deleted_from_db:
+                 flash(f'Job data file not found: {decoded_rel_path}', 'warning')
+
+
+        # Final flash message based on outcomes
+        if deleted_from_db and file_deleted:
+            flash(f'Job data batch deleted successfully: {decoded_rel_path}')
+        elif deleted_from_db and not file_deleted:
+            flash(f'Job data record deleted from DB, but file was not found or could not be deleted: {decoded_rel_path}', 'warning')
+        elif not deleted_from_db and file_deleted:
+             flash(f'Job data file deleted, but DB record was not found: {decoded_rel_path}', 'warning')
+        elif not deleted_from_db and not absolute_data_path.exists():
+             # If neither existed, maybe flash a 'not found' message
+             flash(f'Job data batch not found: {decoded_rel_path}', 'error')
+        # If DB error occurred, it was already flashed.
+
     except Exception as e:
-        flash(f'Error deleting job data file: {str(e)}')
-        logger.error(f'Error deleting job data file {job_data_file}: {str(e)}', exc_info=True)
+        flash(f'An unexpected error occurred during deletion: {str(e)}')
+        logger.error(f'Error deleting job data batch {job_data_file_rel_path}: {str(e)}', exc_info=True)
 
     return redirect(url_for('index'))
 
@@ -145,13 +226,24 @@ def delete_job_data(job_data_file):
 def view_job_data(filename):
     """Display the contents of a specific job data JSON file."""
     try:
-        # Secure the filename and construct the path relative to app root
+        # Secure the filename and construct the path using config
         secure_name = secure_filename(filename)
-        # Corrected path: removed extra 'job-data-acquisition' segment
-        file_path = Path(current_app.root_path) / 'job-data-acquisition/data' / secure_name
+        # Construct path using config's data_root
+        data_root = config.get_path('data_root')
+        if not data_root:
+             raise ValueError("Configuration error: 'data_root' path not found in config.")
+        # Assuming job data files are stored in a subdirectory relative to data_root
+        # Let's use the specific 'job_data' path key from config if available
+        job_data_dir = config.get_path('job_data')
+        if not job_data_dir:
+             # Fallback or construct from data_root if 'job_data' key is missing
+             logger.warning("Config path key 'job_data' not found, constructing from 'data_root'.")
+             job_data_dir = data_root / 'job-data-acquisition' / 'data'
+
+        file_path = job_data_dir / secure_name
 
         if not file_path.is_file():
-            flash(f'Job data file not found: {secure_name}')
+            flash(f'Job data file not found: {secure_name} at {file_path}')
             logger.error(f"Job data file not found: {file_path}")
             return redirect(url_for('index'))
 

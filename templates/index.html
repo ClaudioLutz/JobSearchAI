@@ -226,24 +226,29 @@
                         </h2>
                         <div id="collapseJobData" class="accordion-collapse collapse" aria-labelledby="headingJobData" data-bs-parent="#viewFilesAccordion">
                             <div class="accordion-body">
-                                {% if job_data_files %}
+                                {% if job_batches %} {# Check job_batches from DB #}
                                     <ul class="list-group" id="job-data-list">
-                                        {% for job_data_file in job_data_files %}
+                                        {% for batch in job_batches %} {# Loop through job_batches #}
                                             <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                <div class="d-flex align-items-center flex-grow-1 me-2"> <!-- Added me-2 for spacing -->
-                                                    <input type="checkbox" class="form-check-input me-2 job-data-checkbox" value="{{ job_data_file.name }}" data-file-type="job_data">
+                                                <div class="d-flex align-items-center flex-grow-1 me-2">
+                                                    {# Use relative path for checkbox value #}
+                                                    <input type="checkbox" class="form-check-input me-2 job-data-checkbox" value="{{ batch.data_filepath }}" data-file-type="job_data">
                                                     <div>
-                                                        <!-- Removed filename span -->
-                                                        <small>{{ job_data_file.timestamp }}</small> <!-- Removed text-muted -->
+                                                        {# Display relative path and timestamp #}
+                                                        <span>{{ batch.data_filepath }}</span><br>
+                                                        <small>{{ batch.batch_timestamp }}</small> {# Removed non-existent filter #}
                                                     </div>
                                                 </div>
-                                                <div class="btn-group flex-shrink-0"> <!-- Added flex-shrink-0 -->
-                                                    <a href="{{ url_for('job_data.view_job_data', filename=job_data_file.name) }}" class="btn btn-sm btn-outline-primary me-1">View Data</a>
-                                                    <a href="{{ url_for('job_data.delete_job_data', job_data_file=job_data_file.name) }}"
+                                                <div class="btn-group flex-shrink-0">
+                                                    {# View link uses filename part of the path #}
+                                                    <a href="{{ url_for('job_data.view_job_data', filename=batch.data_filepath.split('/')[-1]) }}" class="btn btn-sm btn-outline-primary me-1">View Data</a>
+                                                    {# Delete link uses full relative path, URL encoded #}
+                                                    <a href="{{ url_for('job_data.delete_job_data', job_data_file_rel_path=batch.data_filepath | urlencode) }}"
                                                        class="btn btn-sm btn-outline-danger delete-job-data-btn single-delete-btn"
-                                                       data-job-data-file="{{ job_data_file.name }}"
-                                                       title="Delete job data file">
-                                                        <i class="bi bi-trash"></i> <!-- Bootstrap Trash Icon -->
+                                                       data-job-data-file="{{ batch.data_filepath }}" {# Keep data attribute for JS if needed #}
+                                                       onclick="return confirm('Are you sure you want to delete this job data batch?');" {# Added confirmation #}
+                                                       title="Delete job data batch">
+                                                        <i class="bi bi-trash"></i>
                                                     </a>
                                                 </div>
                                             </li>
@@ -267,25 +272,31 @@
                         <div id="collapseReports" class="accordion-collapse collapse" aria-labelledby="headingReports" data-bs-parent="#viewFilesAccordion">
                             <div class="accordion-body">
                                 <button class="btn btn-danger mb-2 bulk-delete-btn" data-file-type="report" style="display: none;">Delete Selected Reports</button>
-                                {% if report_files %}
+                                {% if job_match_reports %} {# Check job_match_reports from DB #}
                                     <ul class="list-group" id="report-list">
-                                        {% for report_file in report_files %}
+                                        {% for report in job_match_reports %} {# Loop through job_match_reports #}
+                                            {# Extract filename from the relative path for display/links #}
+                                            {% set report_md_filename = report.report_filepath_md.split('/')[-1] %}
                                             <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                <div class="d-flex align-items-center flex-grow-1 me-2"> <!-- Added me-2 for spacing -->
-                                                    <input type="checkbox" class="form-check-input me-2 report-checkbox" value="{{ report_file.name }}" data-file-type="report">
+                                                <div class="d-flex align-items-center flex-grow-1 me-2">
+                                                    {# Use the MD filename for checkbox value, assuming it's unique enough for bulk delete #}
+                                                    <input type="checkbox" class="form-check-input me-2 report-checkbox" value="{{ report_md_filename }}" data-file-type="report">
                                                     <div>
-                                                        <!-- Removed filename span -->
-                                                        <small>{{ report_file.timestamp }}</small> <!-- Removed text-muted -->
+                                                        <span>{{ report_md_filename }}</span><br>
+                                                        <small>{{ report.report_timestamp }}</small> {# Display timestamp from DB #}
                                                     </div>
                                                 </div>
-                                                <div class="d-flex align-items-center flex-shrink-0"> <!-- Added flex-shrink-0 -->
-                                                    <a href="{{ url_for('job_matching.view_results', report_file=report_file.name) }}" class="btn btn-sm btn-outline-primary me-1">View</a>
-                                                    <a href="{{ url_for('job_matching.download_report', report_file=report_file.name) }}" class="btn btn-sm btn-outline-secondary me-1">Download</a>
-                                                    <a href="{{ url_for('job_matching.delete_report', report_file=report_file.name) }}"
+                                                <div class="d-flex align-items-center flex-shrink-0">
+                                                    {# Links use the MD filename #}
+                                                    <a href="{{ url_for('job_matching.view_results', report_file=report_md_filename) }}" class="btn btn-sm btn-outline-primary me-1">View</a>
+                                                    <a href="{{ url_for('job_matching.download_report', report_file=report_md_filename) }}" class="btn btn-sm btn-outline-secondary me-1">Download</a>
+                                                    {# Delete link needs to pass the MD filename #}
+                                                    <a href="{{ url_for('job_matching.delete_report', report_file=report_md_filename) }}"
                                                        class="btn btn-sm btn-outline-danger delete-report-btn single-delete-btn"
-                                                       data-report-file="{{ report_file.name }}"
+                                                       data-report-file="{{ report_md_filename }}" {# Keep data attribute for JS if needed #}
+                                                       onclick="return confirm('Are you sure you want to delete this report?');" {# Added confirmation #}
                                                        title="Delete report file">
-                                                        <i class="bi bi-trash"></i> <!-- Bootstrap Trash Icon -->
+                                                        <i class="bi bi-trash"></i>
                                                     </a>
                                                 </div>
                                             </li>
@@ -308,35 +319,43 @@
                         <div id="collapseGeneratedLetters" class="accordion-collapse collapse" aria-labelledby="headingGeneratedLetters" data-bs-parent="#viewFilesAccordion">
                             <div class="accordion-body">
                                 {# TODO: Add bulk delete button here if needed #}
-                                {% if generated_letters %}
+                                {% if generated_letters %} {# Check the variable passed from dashboard.py #}
                                     <ul class="list-group" id="generated-letters-list">
-                                        {% for letter in generated_letters %}
+                                        {% for letter in generated_letters %} {# Loop through letters from DB #}
                                             <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                {# Checkbox could use letter.id or letter.json_filename for bulk delete #}
                                                 {# <input type="checkbox" class="form-check-input me-2 generated-letter-checkbox" value="{{ letter.json_filename }}" data-file-type="generated_letter"> #}
                                                 <div class="flex-grow-1 me-2">
                                                     <strong>{{ letter.job_title }}</strong><br>
                                                     <small>{{ letter.company_name }} ({{ letter.timestamp }})</small>
                                                 </div>
                                                 <div class="btn-group flex-shrink-0">
-                                                    {% if letter.has_html %}
+                                                    {# View Letter link uses html_path (relative to project root) #}
+                                                    {% if letter.has_html and letter.html_path %}
                                                         <a href="{{ url_for('motivation_letter.view_motivation_letter', operation_id='existing', html_path=letter.html_path) }}" class="btn btn-sm btn-outline-primary" title="View HTML Letter">View Letter</a>
                                                     {% endif %}
-                                                    {% if letter.has_email %}
+                                                    {# View Email link uses json_path (relative to project root) #}
+                                                    {% if letter.has_email and letter.json_path %}
                                                         <a href="{{ url_for('motivation_letter.view_email_text', json_path=letter.json_path) }}" class="btn btn-sm btn-outline-info" title="View Email Text">View Email</a>
                                                     {% endif %}
-                                                    {% if letter.has_docx %}
+                                                    {# Download DOCX link uses docx_path (relative to project root) #}
+                                                    {% if letter.has_docx and letter.docx_path %}
                                                         <a href="{{ url_for('motivation_letter.download_motivation_letter_docx', file_path=letter.docx_path) }}" class="btn btn-sm btn-outline-success" title="Download DOCX">DOCX</a>
                                                     {% endif %}
-                                                    {% if letter.has_scraped %}
+                                                    {# View Scraped Data link uses scraped_filename #}
+                                                    {% if letter.has_scraped and letter.scraped_filename %}
                                                         <a href="{{ url_for('motivation_letter.view_scraped_data', scraped_data_filename=letter.scraped_filename) }}" class="btn btn-sm btn-outline-secondary" title="View Scraped Data">Scraped</a>
                                                     {% endif %}
-                                                    {# Add Delete Button - Requires new route #}
-                                                    {# <a href="{{ url_for('motivation_letter.delete_letter_set', json_filename=letter.json_filename) }}"
+                                                    {# Delete button uses json_filename #}
+                                                    {% if letter.json_filename %}
+                                                    <a href="{{ url_for('motivation_letter.delete_letter_set', json_filename=letter.json_filename) }}"
                                                        class="btn btn-sm btn-outline-danger delete-letter-btn single-delete-btn"
                                                        data-json-filename="{{ letter.json_filename }}"
+                                                       onclick="return confirm('Are you sure you want to delete this letter and all associated files?');"
                                                        title="Delete All Related Letter Files">
                                                         <i class="bi bi-trash"></i>
-                                                    </a> #}
+                                                    </a>
+                                                    {% endif %}
                                                 </div>
                                             </li>
                                         {% endfor %}
