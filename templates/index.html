@@ -99,8 +99,9 @@
                                         <label for="cv_path" class="form-label">Select CV</label>
                                         <select class="form-select" id="cv_path" name="cv_path" required>
                                             <option value="">Select a CV</option>
-                                            {% for cv_file_data in cv_files %}
-                                                <option value="{{ cv_file_data.name }}">{{ cv_file_data.name }}</option>
+                                            {% for cv_file_data in cv_files %} {# Use DB data here too #}
+                                                {# Use relative path (cv_file_data.name) as value, display original filename (cv_file_data.filename) #}
+                                                <option value="{{ cv_file_data.name }}">{{ cv_file_data.filename }}</option>
                                             {% endfor %}
                                         </select>
                                     </div>
@@ -136,8 +137,9 @@
                                         <label for="combined_cv_path" class="form-label">Select CV</label>
                                         <select class="form-select" id="combined_cv_path" name="cv_path" required>
                                             <option value="">Select a CV</option>
-                                            {% for cv_file_data in cv_files %}
-                                                <option value="{{ cv_file_data.name }}">{{ cv_file_data.name }}</option>
+                                             {% for cv_file_data in cv_files %} {# Use DB data here too #}
+                                                {# Use relative path (cv_file_data.name) as value, display original filename (cv_file_data.filename) #}
+                                                <option value="{{ cv_file_data.name }}">{{ cv_file_data.filename }}</option>
                                             {% endfor %}
                                         </select>
                                     </div>
@@ -182,23 +184,26 @@
                             <div class="accordion-body">
                                 {% if cv_files %}
                                     <ul class="list-group" id="cv-list">
-                                        {% for cv_file in cv_files %}
+                                        {% for cv_file in cv_files %} {# Loop through CV records from DB #}
                                             <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                <div class="d-flex align-items-center flex-grow-1 me-2"> <!-- Added me-2 for spacing -->
+                                                <div class="d-flex align-items-center flex-grow-1 me-2">
+                                                    {# Use cv_file.name (relative path) as the value for deletion #}
                                                     <input type="checkbox" class="form-check-input me-2 cv-checkbox" value="{{ cv_file.name }}" data-file-type="cv">
                                                     <div>
-                                                        <span class="cv-filename">{{ cv_file.name }}</span><br>
-                                                        <small>{{ cv_file.timestamp }}</small> <!-- Removed text-muted -->
+                                                        {# Display original filename for readability #}
+                                                        <span class="cv-filename">{{ cv_file.filename }}</span><br>
+                                                        <small>{{ cv_file.timestamp }}</small>
                                                     </div>
                                                 </div>
-                                                <div class="d-flex align-items-center flex-shrink-0"> <!-- Added flex-shrink-0 -->
+                                                <div class="d-flex align-items-center flex-shrink-0">
+                                                    {# Use cv_file.name (relative path) for view summary data attribute #}
                                                     <button class="btn btn-sm btn-outline-info view-cv-btn me-1" data-cv-file="{{ cv_file.name | urlencode }}">View Summary</button>
-                                                    <!-- Pass the URL-encoded relative path -->
+                                                    {# Use cv_file.name (relative path) for delete URL and data attribute #}
                                                     <a href="{{ url_for('cv.delete_cv', cv_file_rel_path=cv_file.name | urlencode) }}"
                                                        class="btn btn-sm btn-outline-danger delete-cv-btn single-delete-btn"
                                                        data-cv-file="{{ cv_file.name }}"
                                                        title="Delete CV file">
-                                                        <i class="bi bi-trash"></i> <!-- Bootstrap Trash Icon -->
+                                                        <i class="bi bi-trash"></i>
                                                     </a>
                                                 </div>
                                             </li>

@@ -25,6 +25,7 @@
      - Derivable career goals
      - Indicators of satisfaction in previous roles
      - Work values and cultural preferences
+   - **Note:** After the summary is generated and saved by the dashboard (`cv_routes.py`), the dashboard records the CV's metadata (paths, timestamps) into the central SQLite database (`jobsearchai.db`).
 
 2. **HTML Conversion**:
    - Extracts detailed PDF structure including:

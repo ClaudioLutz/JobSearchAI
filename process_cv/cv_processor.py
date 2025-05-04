@@ -16,10 +16,16 @@ def extract_text_from_pdf(pdf_path):
 
 # General extraction function
 def extract_cv_text(file_path):
-    if file_path.lower().endswith('.pdf'):
+    # Ensure file_path is a Path object for consistent handling
+    if not isinstance(file_path, Path):
+        file_path = Path(file_path)
+
+    # Check the suffix of the Path object
+    if file_path.suffix.lower() == '.pdf':
         return extract_text_from_pdf(file_path)
     else:
-        raise ValueError("Unsupported file type. Only PDF allowed.")
+        # Consider supporting other types later if needed
+        raise ValueError(f"Unsupported file type: {file_path.suffix}. Only PDF allowed.")
 
 env_path = Path("c:/Codes/JobsearchAI/process_cv/.env")
 load_dotenv(dotenv_path=env_path)

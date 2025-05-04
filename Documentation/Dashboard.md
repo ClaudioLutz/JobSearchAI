@@ -48,10 +48,10 @@ g# 6. Dashboard
     *   **Run Process**: Run Job Matcher, Run Combined Process.
     *   **View Files**: View available CVs, Job Data, and Reports.
 2.  **CV Management**:
-    *   Upload new CVs (PDF).
-    *   View available CVs with timestamps (handles nested paths).
+    *   Upload new CVs (PDF). Records CV metadata (paths, timestamps) in the SQLite database.
+    *   View available CVs with upload timestamps, fetched from the database.
     *   View CV summaries via modal (AJAX call to `/cv/view_summary/...`, generates summary if it doesn't exist).
-    *   Delete individual or multiple CVs and their associated summaries (single via link (`/cv/delete/...`), bulk via AJAX to `/delete_files`).
+    *   Delete individual or multiple CVs and their associated summaries and database records (single via link (`/cv/delete/...`), bulk via AJAX to `/delete_files`).
 3.  **Job Data Acquisition**:
     *   Run the job scraper (background task via `/job_data/run_scraper`) to get new job listings, updating `max_pages` in `job-data-acquisition/settings.json` first.
     *   View available job data files (identified by timestamp) in an accordion section.
@@ -111,9 +111,9 @@ g# 6. Dashboard
 **Functions (Routes - Grouped by Blueprint)**:
 
 *   **`dashboard.py` (Core)**
-    *   `index()`: Renders `index.html`.
+    *   `index()`: Renders `index.html`, fetching the list of CVs from the database and other file lists from the filesystem.
     *   `get_operation_status_route(operation_id)`: Provides progress updates.
-    *   `delete_files_route()`: Handles bulk file deletion via POST.
+    *   `delete_files_route()`: Handles bulk file deletion via POST, including deleting CV records from the database.
 *   **`cv_routes.py` (`cv_bp`, prefix `/cv`)**
     *   `upload_cv()`: Handles CV upload (POST).
     *   `delete_cv(cv_file_rel_path)`: Deletes a specific CV and summary.

@@ -13,8 +13,10 @@ import urllib.parse
 import sys
 sys.path.append('.')
 
+import sqlite3 # Import sqlite3 for error handling
 # Import the updated config object FIRST
 from config import config
+from utils.database_utils import initialize_database, database_connection # Import the database initializer and connection
 
 # Import necessary functions used only in this file or passed to blueprints
 # from job_matcher import load_latest_job_data # Keep if used in index or get_job_details
@@ -126,6 +128,15 @@ def create_app():
     app = Flask(__name__)
     app.secret_key = os.urandom(24)  # For flash messages
 
+    # --- Initialize Database ---
+    try:
+        initialize_database()
+        logger.info("Database initialized successfully.")
+    except Exception as e:
+        logger.critical(f"CRITICAL: Database initialization failed: {e}", exc_info=True)
+        # Depending on the desired behavior, you might want to exit the app here
+        # or display a critical error page. For now, just log critically.
+
     # --- Configuration ---
     # Configure upload folder (can be overridden by instance config)
     app.config['UPLOAD_FOLDER'] = 'process_cv/cv-data/input'
@@ -226,36 +237,43 @@ def create_app():
             return redirect(url_for('setup.setup_wizard'))
         # --- End First Run Check ---
 
-        # Get list of available CVs with timestamps
-        # Use config to get the correct data path
-        cv_dir = config.get_path('cv_data') # Use config path
+        # --- Get list of available CVs from Database ---
         cv_files_data = []
-        # Define patterns to search for CVs
-        cv_patterns = ['input/*.pdf', 'input/*.docx', '*.pdf', '*.docx']
-        cv_paths = []
-        for pattern in cv_patterns:
-            cv_paths.extend(cv_dir.glob(pattern))
+        try:
+            with database_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT id, original_filename, original_filepath, upload_timestamp
+                    FROM CVS
+                    ORDER BY upload_timestamp DESC
+                """)
+                rows = cursor.fetchall()
+                # Map database rows to the structure expected by the template
+                for row in rows:
+                    # Format timestamp if needed (assuming it's stored as ISO string)
+                    timestamp_str = row['upload_timestamp']
+                    try:
+                        # Attempt to parse and format. Handle potential errors if format is unexpected.
+                        dt_obj = datetime.fromisoformat(timestamp_str)
+                        formatted_timestamp = dt_obj.strftime('%Y-%m-%d %H:%M')
+                    except (ValueError, TypeError):
+                        formatted_timestamp = timestamp_str # Fallback to original string if parsing fails
 
-        # Filter out any paths inside 'processed' or other unwanted subdirs
-        cv_paths = [p for p in cv_paths if 'processed' not in p.parts and p.is_file()]
-
-        for f_path in cv_paths:
-            try:
-                mtime = os.path.getmtime(f_path)
-                timestamp = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
-                # Store relative path from 'process_cv/cv-data' for display and use in URLs
-                relative_path = str(f_path.relative_to(cv_dir)).replace('\\', '/') # Ensure forward slashes
-                cv_files_data.append({'name': relative_path, 'timestamp': timestamp, 'full_path': str(f_path)})
-            except Exception as e:
-                logger.error(f"Error getting timestamp for CV file {f_path}: {e}")
-                try:
-                    relative_path = str(f_path.relative_to(cv_dir)).replace('\\', '/')
-                    cv_files_data.append({'name': relative_path, 'timestamp': 'N/A', 'full_path': str(f_path)})
-                except ValueError: # Handle cases where file might not be relative (shouldn't happen with glob)
-                     logger.error(f"Could not make path relative: {f_path}")
-
-
-        cv_files_data.sort(key=lambda x: x.get('timestamp', '0'), reverse=True) # Sort by timestamp descending
+                    cv_files_data.append({
+                        'id': row['id'], # Pass ID for potential future use
+                        'name': row['original_filepath'], # Use relative path for display/links
+                        'filename': row['original_filename'], # Original filename for display
+                        'timestamp': formatted_timestamp,
+                        # 'full_path' is no longer needed as we use relative path from DB
+                    })
+            logger.info(f"Fetched {len(cv_files_data)} CV records from database.")
+        except sqlite3.Error as db_err:
+            logger.error(f"Database error fetching CV list: {db_err}", exc_info=True)
+            flash("Error fetching CV list from database.", "error")
+        except Exception as e:
+            logger.error(f"Unexpected error fetching CV list: {e}", exc_info=True)
+            flash("An unexpected error occurred while fetching the CV list.", "error")
+        # --- End Get list of available CVs from Database ---
 
         # Get list of available job data files with timestamps
         # Use config to get the correct data path
@@ -466,15 +484,37 @@ def create_app():
                              logger.warning(f"Attempted to delete file inside processed dir via bulk delete: {cv_full_path}")
                     else:
                          logger.warning(f"Bulk delete: CV file not found at expected path: {cv_full_path}")
+                         # If file doesn't exist, still try to delete DB record in case it's orphaned
+                         cv_path_to_delete = None # Ensure it's None if file not found
 
 
                     deleted_cv = False
                     deleted_summary = False
+                    deleted_db_record = False
                     try:
-                        if cv_path_to_delete:
+                        # --- Delete DB Record ---
+                        # Attempt DB deletion regardless of whether file exists, based on relative path
+                        try:
+                            with database_connection() as conn:
+                                cursor = conn.cursor()
+                                cursor.execute("DELETE FROM CVS WHERE original_filepath = ?", (relative_path_str,))
+                                if cursor.rowcount > 0:
+                                    deleted_db_record = True
+                                    logger.info(f"Bulk delete: Deleted CV record from database: {relative_path_str}")
+                                else:
+                                    # Don't log warning if file also didn't exist
+                                    if cv_path_to_delete:
+                                        logger.warning(f"Bulk delete: CV record not found in database for deletion: {relative_path_str}")
+                        except Exception as db_err:
+                             logger.error(f"Bulk delete: Database error deleting CV record {relative_path_str}: {db_err}", exc_info=True)
+                             # Log error but continue to attempt file deletion if possible
+                        # --- End Delete DB Record ---
+
+                        # --- Delete Files ---
+                        if cv_path_to_delete: # Only attempt file deletion if path was valid
                             os.remove(cv_path_to_delete)
                             deleted_cv = True
-                            logger.info(f"Deleted CV file: {cv_path_to_delete}")
+                            logger.info(f"Bulk delete: Deleted CV file: {cv_path_to_delete}")
 
                             # Delete corresponding summary file from processed dir
                             base_filename = cv_path_to_delete.stem # Name without extension
@@ -483,13 +523,17 @@ def create_app():
                             if summary_path.is_file():
                                 os.remove(summary_path)
                                 deleted_summary = True
-                                logger.info(f"Deleted corresponding summary file: {summary_path}")
+                                logger.info(f"Bulk delete: Deleted corresponding summary file: {summary_path}")
+                        # --- End Delete Files ---
 
-                            deleted_count += 1
-                        # else: # Already logged warning if not found
+                        # Increment deleted count if either DB record or file was deleted
+                        if deleted_db_record or deleted_cv or deleted_summary:
+                             deleted_count += 1
+                        # else: # Already logged warning if file not found and DB record not found
 
                     except Exception as e:
-                        logger.error(f"Error deleting CV file {relative_path_str}: {str(e)}")
+                        # This error is now primarily for file deletion errors
+                        logger.error(f"Bulk delete: Error deleting CV files for {relative_path_str}: {str(e)}")
                         failed_count += 1
                         failed_files.append(relative_path_str)
             else:

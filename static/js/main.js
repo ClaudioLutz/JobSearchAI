@@ -337,7 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('job_title', jobTitle); // Send job title too
 
             // Submit using fetch (similar to existing form logic)
-            fetch('/generate_motivation_letter', { // Use the correct endpoint
+            fetch('/motivation_letter/generate', { // CORRECTED ENDPOINT URL
                 method: 'POST',
                 body: formData
             })

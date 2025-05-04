@@ -7,10 +7,11 @@
 The system operates through a series of interconnected components, primarily managed via a Flask web dashboard:
 
 1.  **CV Processing**:
-    *   User uploads a CV (PDF) via the dashboard (`process_cv/cv-data/input/`).
+    *   User uploads a CV (PDF) via the dashboard. The file is saved to the user's configured data directory (e.g., `[data_dir]/process_cv/cv-data/input/`).
     *   The `CV Processor` (`process_cv/cv_processor.py`) extracts text using PyMuPDF.
     *   OpenAI (`gpt-4.1`) summarizes the CV text based on a detailed prompt, focusing on career trajectory, preferences, goals, etc.
-    *   The summary is saved to `process_cv/cv-data/processed/{cv_filename}_summary.txt`.
+    *   The summary is saved to the user's data directory (e.g., `[data_dir]/process_cv/cv-data/processed/{cv_filename}_summary.txt`).
+    *   **Database Update**: Information about the uploaded CV (original filename, relative paths to original and summary files, timestamps) is recorded in the `CVS` table of the local SQLite database (`jobsearchai.db`) located in the user's data directory.
 
 2.  **Job Data Acquisition**:
     *   User initiates scraping via the dashboard.
@@ -68,6 +69,7 @@ The system operates through a series of interconnected components, primarily man
     * `utils/decorators.py`: Decorators for error handling, retries, caching, and execution timing.
     * `utils/file_utils.py`: Functions for common file operations with improved error handling.
     * `utils/api_utils.py`: Wrappers for OpenAI API operations with retries and caching.
+    * `utils/database_utils.py`: Functions for initializing and connecting to the local SQLite database (`jobsearchai.db`). Provides a context manager for safe database transactions.
 
 ## Key Technologies
 
@@ -90,8 +92,9 @@ The system operates through a series of interconnected components, primarily man
 *   **Job Scraper Settings**: Default scraper settings remain in `job-data-acquisition/settings.json` bundled with the application, but could potentially be overridden by user settings in the future.
 *   **Data Storage**: User data (CVs, job data, reports, letters, logs) is stored by default in the user's data directory (e.g., `AppData/Local/JobsearchAI/JobsearchAI` on Windows), determined by `appdirs`. Users can configure a custom data directory during setup or via the dashboard.
 *   **Word Template**: The `motivation_letters/template/motivation_letter_template.docx` file is bundled with the application.
-*   **Dependencies**: Python dependencies are listed in `requirements.txt` and `setup.py`. Key libraries include `Flask`, `openai`, `python-dotenv`, `requests`, `beautifulsoup4`, `pymupdf`, `docxtpl`, `keyring`, `appdirs`, and potentially `scrapegraphai`, `easyocr`, `Pillow`, `numpy`.
+*   **Dependencies**: Python dependencies are listed in `requirements.txt` and `setup.py`. Key libraries include `Flask`, `openai`, `python-dotenv`, `requests`, `beautifulsoup4`, `pymupdf`, `docxtpl`, `keyring`, `appdirs`, `sqlite3` (built-in), and potentially `scrapegraphai`, `easyocr`, `Pillow`, `numpy`.
 *   **Centralized Configuration**: The `config.py` module provides a centralized way to access bundled settings, user settings, API keys, and dynamically determined paths across the codebase.
+*   **Database**: SQLite (`jobsearchai.db` file stored in the user's configured data directory).
 
 ## Running the System
 
@@ -136,27 +139,39 @@ graph TD
   DASH --> JDA
   DASH --> JM
   DASH --> MLG
-  DASH --> WTG
+    DASH --> WTG
+    DASH --> CONFIG # Dashboard uses config for paths, etc.
+    DASH --> UTILS # Dashboard uses utils (implicitly via blueprints)
 
-  JM --> CVPROC
-  JM --> CONFIG
-  JM --> UTILS
+    JM --> CVPROC
+    JM --> CONFIG
+    JM --> UTILS
+    JM --> DBUTILS # Job Matcher will eventually read/write reports to DB
 
   %% Fallback data source
   MLG --> JDA
-  MLG --> CONFIG
-  MLG --> UTILS
+    MLG --> CONFIG
+    MLG --> UTILS
+    MLG --> DBUTILS # Motivation Letter Generator will eventually read/write letters to DB
 
-  CVPROC --> PYMUPDF
-  CVPROC --> OPENAI
-  JDA --> SCRAPEGRAPH
-  JDA --> OPENAI
+    CVPROC --> PYMUPDF
+    CVPROC --> OPENAI
+    CVPROC --> DBUTILS # CV Processor now writes to DB via cv_routes
+
+    JDA --> SCRAPEGRAPH
+    JDA --> OPENAI
+    JDA --> DBUTILS # Job Data Acquisition will eventually write batches to DB
   
   %% OpenAI API utilities
-  UTILS --> OPENAI
+    UTILS --> OPENAI # api_utils uses OpenAI
 
-  %% For structuring extracted text & generation
-  MLG --> OPENAI
+    %% Database Utilities
+    DBUTILS[Database Utils - database_utils.py]
+    DBUTILS --> CONFIG # Uses config for DB path
+    DBUTILS --> SQLITE[SQLite] # Uses sqlite3 module
+
+    %% For structuring extracted text & generation
+    MLG --> OPENAI
 
   %% For HTTP requests (iframe, PDF checks)
   MLG --> REQUESTS
@@ -175,9 +190,10 @@ graph TD
   classDef component fill:#f9f,stroke:#333,stroke-width:2px,color:#000;
   classDef external  fill:#9cf,stroke:#333,stroke-width:1px,color:#000;
   classDef optional  fill:#cff,stroke:#333,stroke-width:1px,color:#000;
+  classDef database  fill:#ffc,stroke:#333,stroke-width:1px,color:#000;
 
-  class DASH,CVPROC,JDA,JM,MLG,WTG component;
-  class OPENAI,DOCXTPL,PYMUPDF,FLASK,REQUESTS,BS4 external;
+  class DASH,CVPROC,JDA,JM,MLG,WTG,CONFIG,UTILS,DBUTILS component;
+  class OPENAI,DOCXTPL,PYMUPDF,FLASK,REQUESTS,BS4,SQLITE external;
   class SCRAPEGRAPH,EASYOCR optional;
 
 ```

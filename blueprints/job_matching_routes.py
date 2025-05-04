@@ -10,6 +10,7 @@ from flask import (
     send_file, jsonify, current_app
 )
 from werkzeug.utils import secure_filename
+from config import config # Import config object
 
 # Add project root to path to find modules
 import sys
@@ -365,18 +366,23 @@ def view_results(report_file):
                 # Limit length
                 return sanitized[:length]
 
-            # Normalize URLs function (consider moving to utils)
+            # Normalize URLs function (Improved)
             def normalize_url(url):
+                """Normalizes URL for comparison: removes scheme, www., trailing slash, query params."""
                 if not url: return ""
                 try:
+                    # Ensure scheme if missing (needed for urlparse)
+                    if not url.startswith(('http://', 'https://')):
+                        url = 'http://' + url # Add default scheme
+
                     parsed = urllib.parse.urlparse(url)
-                    path = parsed.path.rstrip('/').lower()
-                    # Consider removing query params if they cause mismatches
-                    # query = urllib.parse.parse_qs(parsed.query)
-                    # return f"{parsed.netloc}{path}?{urllib.parse.urlencode(query, doseq=True)}"
-                    return f"{parsed.netloc}{path}"
-                except Exception:
-                    return url # Return original if parsing fails
+                    netloc = parsed.netloc.replace('www.', '') # Remove www.
+                    path = parsed.path.rstrip('/').lower() # Lowercase path, remove trailing slash
+                    # Return netloc + path, ignoring scheme and query params for robust matching
+                    return f"{netloc}{path}"
+                except Exception as e:
+                    logger.error(f"Error normalizing URL '{url}': {e}")
+                    return url # Return original on error
 
             norm_match_url = normalize_url(match_app_url)
             found_files_by_url = False
@@ -390,47 +396,67 @@ def view_results(report_file):
                         if stored_url.startswith('/'):
                              base_url = "https://www.ostjob.ch/" # Configurable?
                              stored_url = urllib.parse.urljoin(base_url, stored_url.lstrip('/'))
-
+                        
                         norm_stored_url = normalize_url(stored_url)
-                        logger.debug(f"Comparing normalized URLs: Match='{norm_match_url}', Stored='{norm_stored_url}' (from {scraped_path.name})")
+                        logger.debug(f"Comparing normalized URLs: Report='{norm_match_url}', ScrapedFile='{norm_stored_url}' (from {scraped_path.name})")
 
-                        # More robust comparison: check equality or if one contains the other (handles slight variations)
-                        if norm_match_url == norm_stored_url or \
-                           (norm_match_url and norm_stored_url and norm_match_url in norm_stored_url) or \
-                           (norm_match_url and norm_stored_url and norm_stored_url in norm_match_url):
-
+                        # Strict comparison after normalization
+                        if norm_match_url == norm_stored_url:
                             logger.info(f"Matched normalized URLs for scraped file {scraped_path.name}")
                             match['has_scraped_data'] = True
-                            match['scraped_data_filename'] = scraped_path.name
+                            match['scraped_data_filename'] = scraped_path.name # Keep filename for link
 
-                            # Now check for corresponding motivation letter files based on the scraped data's job title
-                            title_from_scraped = actual.get('Job Title', 'job') # Use title from the matched scraped file
-                            sanitized_scraped_title = sanitize_filename(title_from_scraped)
+                            # --- Find corresponding letter files using the REPORT's job title ---
+                            # Use the job title from the current match in the report JSON
+                            title_from_report = match.get('job_title', 'unknown_job')
+                            sanitized_report_title = sanitize_filename(title_from_report)
+                            logger.debug(f"Looking for letter files based on sanitized report title: {sanitized_report_title}")
 
-                            html_file = letters_dir / f"motivation_letter_{sanitized_scraped_title}.html"
-                            json_file_check = letters_dir / f"motivation_letter_{sanitized_scraped_title}.json"
-                            docx_file = letters_dir / f"motivation_letter_{sanitized_scraped_title}.docx"
+                            # Construct expected filenames
+                            html_file = letters_dir / f"motivation_letter_{sanitized_report_title}.html"
+                            json_file_check = letters_dir / f"motivation_letter_{sanitized_report_title}.json"
+                            docx_file = letters_dir / f"motivation_letter_{sanitized_report_title}.docx"
+                            # Also check for the scraped data file associated with *this* letter generation
+                            # (Note: this assumes scraped data is saved with the same sanitized title as the letter)
+                            letter_scraped_data_file = letters_dir / f"motivation_letter_{sanitized_report_title}_scraped_data.json"
 
-                            has_letter = html_file.is_file() and json_file_check.is_file()
+                            # Use config.get_path('data_root') as the base for relative paths
+                            data_root_path = config.get_path('data_root')
+                            if not data_root_path:
+                                logger.error("Cannot determine data_root path from config for relative paths.")
+                                continue # Skip relative path generation if base is missing
+
+                            # Check file existence
+                            has_json = json_file_check.is_file()
+                            has_html = html_file.is_file()
                             has_docx = docx_file.is_file()
+                            # Check if the scraped data specifically for this letter exists
+                            # This overrides the 'has_scraped_data' found via URL matching if this specific file exists
+                            if letter_scraped_data_file.is_file():
+                                match['has_scraped_data'] = True
+                                match['scraped_data_filename'] = letter_scraped_data_file.name
 
-                            if has_letter:
-                                match['has_motivation_letter'] = True
-                                match['motivation_letter_html_path'] = str(html_file.relative_to(current_app.root_path))
-                                match['motivation_letter_json_path'] = str(json_file_check.relative_to(current_app.root_path)) # Store JSON path
+
+                            if has_json: # Base check on JSON existence
+                                match['has_motivation_letter'] = True # Consider letter existing if JSON exists
+                                match['motivation_letter_json_path'] = str(json_file_check.relative_to(data_root_path)).replace('\\', '/')
                                 # Check for email text in the found JSON
                                 try:
                                     with open(json_file_check, 'r', encoding='utf-8') as f_json:
                                         letter_data = json.load(f_json)
-                                    if letter_data.get('email_text'):
+                                    if letter_data and letter_data.get('email_text'): # Check data exists before get
                                         match['has_email_text'] = True
                                 except Exception as e_json_load:
-                                    logger.warning(f"Could not load or check email_text in {json_file_check}: {e_json_load}")
-                            if has_docx:
-                                match['motivation_letter_docx_path'] = str(docx_file.relative_to(current_app.root_path))
+                                    logger.warning(f"Could not load or check email_text in {json_file_check.name}: {e_json_load}")
 
-                            found_files_by_url = True
-                            break # Found match for this job URL, move to next match in outer loop
+                                # Store relative paths for other existing files
+                                if has_html:
+                                    match['motivation_letter_html_path'] = str(html_file.relative_to(data_root_path)).replace('\\', '/')
+                                if has_docx:
+                                    match['motivation_letter_docx_path'] = str(docx_file.relative_to(data_root_path)).replace('\\', '/')
+
+                            found_files_by_url = True # Mark as found based on URL match leading here
+                            break # Found the corresponding scraped file via URL, assume linkage, move to next report match
                 except Exception as e_load:
                     logger.error(f"Error processing scraped file {scraped_path}: {e_load}")
                     continue # Skip this scraped file
