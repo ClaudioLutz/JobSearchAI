@@ -11,36 +11,39 @@ The system operates through a series of interconnected components, primarily man
     *   The `CV Processor` (`process_cv/cv_processor.py`) extracts text using PyMuPDF.
     *   OpenAI (`gpt-4.1`) summarizes the CV text based on a detailed prompt, focusing on career trajectory, preferences, goals, etc.
     *   The summary is saved to the user's data directory (e.g., `[data_dir]/process_cv/cv-data/processed/{cv_filename}_summary.txt`).
-    *   **Database Update**: Information about the uploaded CV (original filename, relative paths to original and summary files, timestamps) is recorded in the `CVS` table of the local SQLite database (`jobsearchai.db`) located in the user's data directory.
+    *   **Database Update**: Information about the uploaded CV (original filename, relative paths to original and summary files, timestamps) is recorded in the `CVS` table of the local SQLite database (`jobsearchai.db`) located in the user's configured data directory.
 
 2.  **Job Data Acquisition**:
-    *   User initiates scraping via the dashboard.
-    *   The `Job Data Acquisition` component (`job-data-acquisition/app.py`) uses ScrapeGraph AI (configured via `job-data-acquisition/settings.json`) to scrape job listings from specified URLs (e.g., ostjob.ch).
+    *   User initiates scraping via the dashboard (background task with cancellation support).
+    *   The `Job Data Acquisition` component (`job-data-acquisition/app.py`) uses ScrapeGraph AI (configured via `job-data-acquisition/settings.json`) to scrape job listings from specified URLs (e.g., ostjob.ch). **Enhanced error handling** catches specific network exceptions.
     *   It iterates through pages (up to `max_pages` defined in settings) and uses OpenAI (`gpt-4.1` or as configured) to extract structured job details (Title, Company, Description, Skills, etc.).
-    *   Results (potentially a list of lists, one per page) are saved to a timestamped JSON file in `job-data-acquisition/job-data-acquisition/data/`.
+    *   Results (potentially a list of lists, one per page) are saved to a timestamped JSON file in the configured job data directory.
+    *   **Database Update**: Information about the scraped batch (timestamp, source URLs, settings, relative filepath) is recorded in the `JOB_DATA_BATCHES` table.
 
 3.  **Job Matching**:
-    *   User selects a processed CV and initiates matching via the dashboard.
-    *   The `Job Matcher` (`job_matcher.py`) loads the selected CV summary and the latest job data JSON file.
+    *   User selects a processed CV and initiates matching via the dashboard (background task with cancellation support).
+    *   The `Job Matcher` (`job_matcher.py`) loads the selected CV summary (using the cache helper) and the latest job data JSON file.
     *   For each job listing (up to `max_jobs`), it uses OpenAI (`gpt-4.1`) to evaluate the match based on multiple criteria (Skills, Experience, Location, Education, Career Trajectory, Preferences, Satisfaction) defined in a detailed prompt, forcing JSON output.
     *   Matches are filtered by a minimum score (`min_score`) and sorted.
-    *   The top matches (up to `max_results`), including the evaluation details and the path to the CV used, are saved to timestamped JSON and Markdown files in the `job_matches/` directory.
+    *   The top matches (up to `max_results`), including the evaluation details and the path to the CV used, are saved to timestamped JSON and Markdown files in the configured job matches directory.
+    *   **Database Update**: Information about the report (timestamp, relative filepaths, parameters, counts, related CV/batch IDs) is recorded in the `JOB_MATCH_REPORTS` table.
 
 4.  **Motivation Letter Generation**:
     *   User selects one or more matched jobs from the results page on the dashboard, potentially selecting a specific CV via a dropdown.
-    *   The `Motivation Letter Generator` (`motivation_letter_generator.py`) retrieves the relevant CV summary.
-    *   It attempts to get up-to-date job details using a **multi-step process** (`job_details_utils.py`):
+    *   The `Motivation Letter Generator` (`motivation_letter_generator.py`) retrieves the relevant CV summary using the cache helper (`get_cv_summary`). **Fixed**: Checks if the retrieved summary is empty before proceeding.
+    *   It attempts to get up-to-date job details using a **multi-step process** (`job_details_utils.py` with **enhanced network error handling**):
         *   Primary Method: Uses ScrapeGraphAI (`graph_scraper_utils.py`) with a structured German prompt to extract job details directly into JSON format.
         *   Fallback Method: If live scraping fails or yields insufficient content, searches the latest pre-scraped data file.
         *   Manual Input: Supports manual text input for job details if automatic methods are insufficient.
-    *   It uses OpenAI (`gpt-4.1`) with a detailed prompt (including CV summary and job details) to:
-        *   Generate a personalized motivation letter in JSON format (`letter_generation_utils.generate_motivation_letter`)
-        *   Optionally generate short email texts for bulk operations (`letter_generation_utils.generate_email_text_only`)
+    *   It uses OpenAI (`gpt-4.1`) with a detailed prompt (**updated** to better integrate CV summary and job details) to:
+        *   Generate a personalized motivation letter in JSON format (`letter_generation_utils.generate_motivation_letter`, now returns success/error tuple).
+        *   Optionally generate short email texts for bulk operations (`letter_generation_utils.generate_email_text_only`, now returns success/error tuple).
     *   The generated content is saved in multiple formats:
         *   JSON letter structure (including optional email text)
         *   HTML formatted letter
         *   Raw scraped job details in a separate JSON file
         *   Word document (generated on demand)
+    *   **Database Update**: Information about the generated letter (timestamp, job details, relative filepaths, related CV/report IDs) is recorded in the `MOTIVATION_LETTERS` table.
 
 5.  **Word Document Generation**:
     *   User requests a Word version of a generated motivation letter via the dashboard.
@@ -51,39 +54,40 @@ The system operates through a series of interconnected components, primarily man
 
 6.  **Dashboard Interface**:
     *   The Flask application (`dashboard.py`) provides the central user interface.
-    *   It allows users to manage files (upload CVs, view/delete CVs, job data, reports, letters).
-    *   It triggers the execution of the different components (scraping, matching, letter generation, bulk email text generation), often using background threads (`threading`) for long-running tasks.
+    *   It allows users to manage files (upload CVs, view/delete CVs, job data, reports, letters). **Pagination** is implemented for lists on the dashboard and results page. **CV Summary Caching** is used.
+    *   It triggers the execution of the different components (scraping, matching, letter generation, bulk email text generation), using background threads (`threading`) with **cancellation support** and `ThreadPoolExecutor` for bulk tasks.
     *   It displays results (job matches, generated letters, generated email texts, bulk job data contents, specific scraped job data).
     *   It provides progress tracking for background operations via AJAX polling.
 
 ## Core Components Summary
 
-*   **CV Processor (`process_cv/`)**: Extracts text from PDF CVs and uses AI to generate structured summaries focusing on career aspects. Requires OpenAI API key.
-*   **Job Data Acquisition (`job-data-acquisition/`)**: Scrapes job listings from web pages using ScrapeGraph AI and saves structured data to JSON files. Configured via `settings.json`. Requires OpenAI API key (or other LLM config).
+*   **CV Processor (`process_cv/`)**: Extracts text from PDF CVs and uses AI to generate structured summaries focusing on career aspects. Requires OpenAI API key. **Fixed**: Dashboard now correctly passes extracted text to summarizer.
+*   **Job Data Acquisition (`job-data-acquisition/`)**: Scrapes job listings from web pages using ScrapeGraph AI and saves structured data to JSON files. Configured via `settings.json`. Requires OpenAI API key (or other LLM config). **Enhanced** with specific network error handling.
 *   **Job Matcher (`job_matcher.py`)**: Compares CV summaries against scraped job listings using AI evaluation to score and rank potential matches. Outputs JSON and Markdown reports. Requires OpenAI API key. Uses the centralized configuration and utility modules for improved error handling and code reusability.
-*   **Motivation Letter Generator (`motivation_letter_generator.py`, `letter_generation_utils.py`, `job_details_utils.py`)**: Creates personalized motivation letters and/or short email texts using AI, combining CV summary and job details. Outputs/updates JSON files and generates HTML letters. Requires OpenAI API key. Uses the centralized configuration and utility modules for improved error handling and code reusability.
+*   **Motivation Letter Generator (`motivation_letter_generator.py`, `letter_generation_utils.py`, `job_details_utils.py`)**: Creates personalized motivation letters and/or short email texts using AI, combining CV summary and job details. Outputs/updates JSON files and generates HTML letters. Requires OpenAI API key. Uses the centralized configuration and utility modules. **Enhanced** job detail fetching error handling. **Improved** letter generation prompt and checks for empty CV summary.
 *   **Word Template Generator (`word_template_generator.py`)**: Converts structured JSON motivation letters into formatted Word documents using a template and `docxtpl`.
-*   **Dashboard (`dashboard.py`, `blueprints/`)**: Flask web application providing the user interface to manage files, run processes (including bulk letter and email generation), view results, and track progress. Orchestrates the interaction between components.
+*   **Dashboard (`dashboard.py`, `blueprints/`)**: Flask web application providing the user interface to manage files, run processes (including bulk letter and email generation), view results, and track progress. Orchestrates the interaction between components. **Enhanced** with pagination, CV summary caching, and improved background task management (cancellation, ThreadPoolExecutor). **Fixed** template rendering and variable scope bugs.
 *   **Centralized Configuration (`config.py`)**: Manages application settings. **Enhanced** to handle user-specific configurations (API keys, data paths) stored in OS-appropriate locations (`appdirs`) and secure API key storage (`keyring`). Differentiates between development and packaged modes for path resolution.
 *   **Utility Modules (`utils/`)**: A collection of utility modules that provide reusable functionality:
     * `utils/decorators.py`: Decorators for error handling, retries, caching, and execution timing.
     * `utils/file_utils.py`: Functions for common file operations with improved error handling.
     * `utils/api_utils.py`: Wrappers for OpenAI API operations with retries and caching.
-    * `utils/database_utils.py`: Functions for initializing and connecting to the local SQLite database (`jobsearchai.db`). Provides a context manager for safe database transactions.
+    * `utils/database_utils.py`: Functions for initializing and connecting to the local SQLite database (`jobsearchai.db`). Provides a context manager for safe database transactions. **Enhanced** with index creation for performance.
 
 ## Key Technologies
 
 *   **Backend**: Python, Flask
-*   **AI/LLM**: OpenAI GPT models (specifically `gpt-4.1` used in several components), potentially ScrapeGraph AI (used implicitly or explicitly in scraping steps).
-*   **Web Scraping/Parsing**: `requests`, `BeautifulSoup4`, potentially ScrapeGraph AI.
-*   **PDF Processing**: PyMuPDF (`fitz`), `easyocr` (optional, for OCR), `Pillow`, `numpy` (OCR dependencies).
+*   **AI/LLM**: OpenAI GPT models (specifically `gpt-4.1` used in several components), ScrapeGraph AI (used explicitly in scraping steps).
+*   **Web Scraping/Parsing**: `requests`, `BeautifulSoup4`, ScrapeGraph AI (uses Playwright).
+*   **PDF Processing**: PyMuPDF (`fitz`).
 *   **Document Generation**: `docxtpl`, `python-docx`
-*   **Frontend**: HTML, CSS, JavaScript, Bootstrap 5 (assumed)
+*   **Frontend**: HTML, CSS, JavaScript, Bootstrap 5 & Bootstrap Icons (assumed)
 *   **Data Format**: JSON
-*   **Concurrency**: Python `threading` (for background tasks in dashboard)
+*   **Concurrency**: Python `threading` (for background tasks, `threading.Event` for cancellation), `concurrent.futures.ThreadPoolExecutor` (for bulk generation).
 *   **Configuration**: Centralized configuration (`config.py`), `.env` files, JSON (`settings.json`)
-*   **Error Handling**: Decorators for consistent error handling, retries, and caching (`utils/decorators.py`)
-*   **Type Hints**: All optimized code includes type hints for better IDE support and code quality
+*   **Error Handling**: Decorators for consistent error handling, retries, and caching (`utils/decorators.py`), specific exception handling in network-facing code, tuple returns for background task results.
+*   **Database**: SQLite (via built-in `sqlite3` module).
+*   **Type Hints**: All optimized code includes type hints for better IDE support and code quality.
 
 ## Setup & Configuration
 
@@ -95,10 +99,10 @@ The system operates through a series of interconnected components, primarily man
 *   **Dependencies**: Python dependencies are listed in `requirements.txt` and `setup.py`. Key libraries include `Flask`, `openai`, `python-dotenv`, `requests`, `beautifulsoup4`, `pymupdf`, `docxtpl`, `keyring`, `appdirs`, `sqlite3` (built-in), and potentially `scrapegraphai`, `easyocr`, `Pillow`, `numpy`.
 *   **Centralized Configuration**: The `config.py` module provides a centralized way to access bundled settings, user settings, API keys, and dynamically determined paths across the codebase.
 *   **Database**: SQLite (`jobsearchai.db` file stored in the user's configured data directory). Key tables include:
-    *   `CVS`: Stores information about uploaded CVs (paths, timestamps, summary path). Columns: `id`, `original_filename`, `original_filepath`, `summary_filepath`, `html_filepath`, `processing_timestamp`, `upload_timestamp`.
-    *   `JOB_DATA_BATCHES`: Tracks batches of scraped job data (timestamp, source, filepath). Columns: `id`, `batch_timestamp`, `source_urls`, `data_filepath`, `settings_used`.
-    *   `JOB_MATCH_REPORTS`: Stores results of job matching runs (timestamp, report paths, related CV/batch IDs). Columns: `id`, `report_timestamp`, `report_filepath_json`, `report_filepath_md`, `cv_id`, `job_data_batch_id`, `parameters_used`, `match_count`.
-    *   `MOTIVATION_LETTERS`: Records generated motivation letters (timestamp, job details, related CV/report IDs, filepaths). Columns: `id`, `generation_timestamp`, `job_title`, `company_name`, `job_url`, `cv_id`, `job_match_report_id`, `letter_filepath_json`, `letter_filepath_html`, `letter_filepath_docx`, `scraped_data_filepath`.
+    *   `CVS`: Stores information about uploaded CVs (paths, timestamps, summary path). Columns: `id`, `original_filename`, `original_filepath`, `summary_filepath`, `processing_timestamp`, `upload_timestamp`. **Indexed**.
+    *   `JOB_DATA_BATCHES`: Tracks batches of scraped job data (timestamp, source, filepath, settings). Columns: `id`, `batch_timestamp`, `source_urls`, `data_filepath`, `settings_used`. **Indexed**.
+    *   `JOB_MATCH_REPORTS`: Stores results of job matching runs (timestamp, report paths, related CV/batch IDs, parameters). Columns: `id`, `report_timestamp`, `report_filepath_json`, `report_filepath_md`, `cv_id`, `job_data_batch_id`, `parameters_used`, `match_count`. **Indexed**.
+    *   `MOTIVATION_LETTERS`: Records generated motivation letters (timestamp, job details, related CV/report IDs, filepaths). Columns: `id`, `generation_timestamp`, `job_title`, `company_name`, `job_url`, `cv_id`, `job_match_report_id`, `letter_filepath_json`, `letter_filepath_html`, `letter_filepath_docx`, `scraped_data_filepath`. **Indexed**.
 
 ## Running the System
 

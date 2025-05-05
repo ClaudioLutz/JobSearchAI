@@ -90,9 +90,11 @@
   - Falls back to default logging settings
   - Logs error and continues if possible
 - Scraping errors:
-  - Catches and logs exceptions per page
-  - Continues to next page/URL
-  - Maintains partial results
+  - Catches and logs specific network exceptions (e.g., `requests.exceptions.RequestException`) first.
+  - Falls back to catching general `Exception` for other errors.
+  - Logs the type of error encountered.
+  - Continues to next page/URL on error.
+  - Maintains partial results.
 - Directory creation:
   - Creates missing directories as needed
   - Uses exist_ok=True to prevent race conditions

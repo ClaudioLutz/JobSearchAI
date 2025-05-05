@@ -20,14 +20,15 @@
 - Type hints for better IDE support and code quality.
 
 **Process**:
-1. Loads configuration settings through the centralized `config.py` module, including OpenAI API key and file paths.
-2. Processes a given CV file using `extract_cv_text` and `summarize_cv` from `process_cv.cv_processor`.
-3. Uses `file_utils.get_latest_file` and `file_utils.load_json_file` to load the most recent job data with improved error handling, handling various potential nested structures:
+1. **Initiation**: User selects a CV and initiates matching via the dashboard (`job_matching_routes.py`). The process runs as a background task with cancellation support.
+2. **Configuration Loading**: Loads settings through the centralized `config.py` module.
+3. **CV Summary Loading**: Loads the required CV summary using the dashboard's `get_cv_summary` helper function (which utilizes the in-memory cache).
+4. **Job Data Loading**: Uses `file_utils.get_latest_file` and `file_utils.load_json_file` to load the most recent job data with improved error handling, handling various potential nested structures:
    - Array of arrays (flattened)
    - Dictionary with "content" key
    - List of dictionaries with "content" keys
    - Flat array of job listings
-4. For each loaded job listing (up to `max_jobs`), uses the OpenAI client from `api_utils` with improved error handling, retries, and caching to evaluate the match based on:
+5. **Evaluation**: For each loaded job listing (up to `max_jobs`), uses the OpenAI client from `api_utils` with improved error handling, retries, and caching to evaluate the match based on:
    ```
    1. Fähigkeiten-Übereinstimmung (1-10): Wie gut passen die Fähigkeiten des Kandidaten zu den Anforderungen der Stelle?
    2. Erfahrungspassung (1-10): Ist das Erfahrungsniveau des Kandidaten angemessen?
@@ -39,11 +40,11 @@
    8. Gesamtübereinstimmung (1-10): Wie geeignet ist der Kandidat insgesamt, unter Berücksichtigung aller Faktoren?
    9. Begründung: Erklären Sie kurz Ihre Bewertung.
    ```
-5. Filters the evaluated jobs based on a minimum `overall_match` score (default 6 in function signature, but 3 when run directly via `__main__`).
-6. Sorts the filtered jobs by `overall_match` score in descending order.
-7. Uses `file_utils.ensure_output_directory` and `file_utils.save_json_file` to generate two output files in the `job_matches` directory:
-   - A JSON file (`job_matches_YYYYMMDD_HHMMSS.json`) containing the detailed evaluation results.
+6. **Filtering & Sorting**: Filters the evaluated jobs based on a minimum `overall_match` score (passed from dashboard, default 3). Sorts the filtered jobs by `overall_match` score in descending order.
+7. **Report Generation**: Uses `file_utils.ensure_output_directory` and `file_utils.save_json_file` to generate two output files in the configured `job_matches` directory:
+   - A JSON file (`job_matches_YYYYMMDD_HHMMSS.json`) containing the detailed evaluation results (including the `cv_path` used).
    - A Markdown report (`job_matches_YYYYMMDD_HHMMSS.md`) summarizing the matches.
+8. **Database Update**: Records metadata about the generated report (timestamp, paths, parameters, counts, related CV/batch IDs) in the `JOB_MATCH_REPORTS` table.
 
 **Functions**:
 - `load_latest_job_data(max_jobs=50)`: 
@@ -59,21 +60,18 @@
   - Returns structured evaluation with scores and reasoning
   - Uses the `@handle_exceptions` decorator with appropriate default return values
   - Uses the `@retry` decorator for API call stability
-- `match_jobs_with_cv(cv_path, min_score=6, max_jobs=50, max_results=10)`:
-  - Uses `config.get_path()` for consistent file path handling
-  - Processes CV and loads job data with proper error handling
-  - Evaluates matches and filters by minimum score
-  - Returns top matches sorted by overall score
-  - Uses the `@handle_exceptions` decorator for comprehensive error handling
-  - Uses the `@log_execution_time` decorator to track performance
-- `ensure_output_dir(output_dir="job_matches")`:
-  - Renamed from `ensure_output_directory` to avoid recursion issues
-  - Creates output directory if it doesn't exist using Path from pathlib
-  - Returns Path object for the directory
+- `match_jobs_with_cv(cv_path, min_score=3, max_jobs=50, max_results=10)`:
+  - **Note**: This function is now primarily called by the dashboard's background task, which handles CV summary loading. If called directly, it would need modification to use the cache helper.
+  - Uses `config.get_path()` for consistent file path handling.
+  - Loads job data with proper error handling.
+  - Evaluates matches and filters by minimum score.
+  - Returns top matches sorted by overall score.
+  - Uses the `@handle_exceptions` decorator for comprehensive error handling.
+  - Uses the `@log_execution_time` decorator to track performance.
 - `generate_report(matches, output_file=None, output_dir="job_matches")`:
-  - Uses `file_utils.save_json_file` to save JSON with error handling
-  - Generates both JSON and Markdown reports
-  - Reconstructs ostjob.ch URLs from local paths
+  - Uses `file_utils.save_json_file` to save JSON with error handling.
+  - Generates both JSON and Markdown reports.
+  - Reconstructs ostjob.ch URLs from local paths.
   - Formats matches in a readable structure
   - Uses `config.ensure_dir()` for directory management
 

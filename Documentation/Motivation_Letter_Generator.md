@@ -110,14 +110,17 @@
         - JSON to HTML converter with improved error handling
         - Uses the `@handle_exceptions` decorator for consistent error handling
     *   `generate_motivation_letter(cv_summary, job_details)`: 
-        - Main letter generator using `api_utils.openai_client` with retries and caching
-        - Uses proper JSON formatting with double curly braces
-        - Uses the `@retry` decorator for API call stability
-        - Uses the `@handle_exceptions` decorator with appropriate default return values
-        - Uses the `@log_execution_time` decorator to track performance
+        - Main letter generator using `api_utils.openai_client` with retries and caching.
+        - **Prompt updated** to strongly emphasize synthesizing CV summary with job details.
+        - Logs the beginning of the provided `cv_summary` for debugging.
+        - Returns `(False, "CV Summary was empty.")` if the provided summary is empty or None.
+        - Uses proper JSON formatting with double curly braces.
+        - Uses the `@retry` decorator for API call stability.
+        - Returns `(success, result_or_error)` tuple instead of using `@handle_exceptions`.
+        - Uses the `@log_execution_time` decorator to track performance.
     *   `generate_email_text_only(cv_summary, job_details)`: 
-        - Email text generator with the same optimizations as `generate_motivation_letter`
-        - Uses the `@handle_exceptions` decorator with appropriate default return values
+        - Email text generator with similar optimizations.
+        - Returns `(success, result_or_error)` tuple instead of using `@handle_exceptions`.
 
 *   **`graph_scraper_utils.py`**:
     *   `load_config()`: Configuration loader
