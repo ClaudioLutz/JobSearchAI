@@ -414,31 +414,36 @@ def create_app():
                         'id': row['id'],
                         'job_title': row['job_title'],
                         'company_name': row['company_name'],
-                        'timestamp': row['generation_timestamp'], # Assuming stored as formatted string or datetime object
-                        'html_path': None,
-                        'json_path': None,
-                        'docx_path': None,
-                        'scraped_path': None,
-                        'json_filename': None, # For delete link
-                        'scraped_filename': None, # For view link
+                        'timestamp': row['generation_timestamp'],
+                        'html_path_ui': None,       # Path relative to app root for UI links (if needed elsewhere)
+                        'html_path_db': None,       # Path relative to data root for route parameter
+                        'json_path_ui': None,
+                        'json_path_db': None,
+                        'docx_path_ui': None,
+                        'docx_path_db': None,
+                        'scraped_path_ui': None,
+                        'scraped_path_db': None,
+                        'json_filename': None,      # Filename for delete link
+                        'scraped_filename': None,   # Filename for view link
                         'has_html': False,
                         'has_json': False,
                         'has_docx': False,
                         'has_scraped': False,
-                        'has_email': False # Need to check JSON content for this
+                        'has_email': False          # Need to check JSON content for this
                     }
 
-                    # Convert paths relative to data_root (DB) to relative to project root (UI)
-                    # and check file existence
+                    # Process paths and check file existence
                     if row['letter_filepath_html']:
                         abs_path = data_root_path / row['letter_filepath_html']
                         if abs_path.is_file():
-                            letter_data['html_path'] = str(abs_path.relative_to(app_root_path)).replace('\\', '/')
+                            letter_data['html_path_db'] = row['letter_filepath_html'] # Store DB relative path
+                            letter_data['html_path_ui'] = str(abs_path.relative_to(app_root_path)).replace('\\', '/') # Store UI relative path
                             letter_data['has_html'] = True
                     if row['letter_filepath_json']:
                         abs_path = data_root_path / row['letter_filepath_json']
                         if abs_path.is_file():
-                            letter_data['json_path'] = str(abs_path.relative_to(app_root_path)).replace('\\', '/')
+                            letter_data['json_path_db'] = row['letter_filepath_json'] # Store DB relative path
+                            letter_data['json_path_ui'] = str(abs_path.relative_to(app_root_path)).replace('\\', '/') # Store UI relative path
                             letter_data['json_filename'] = Path(row['letter_filepath_json']).name # Get filename for delete
                             letter_data['has_json'] = True
                             # Check for email text inside JSON
@@ -452,12 +457,14 @@ def create_app():
                     if row['letter_filepath_docx']:
                         abs_path = data_root_path / row['letter_filepath_docx']
                         if abs_path.is_file():
-                            letter_data['docx_path'] = str(abs_path.relative_to(app_root_path)).replace('\\', '/')
+                            letter_data['docx_path_db'] = row['letter_filepath_docx'] # Store DB relative path
+                            letter_data['docx_path_ui'] = str(abs_path.relative_to(app_root_path)).replace('\\', '/') # Store UI relative path
                             letter_data['has_docx'] = True
                     if row['scraped_data_filepath']:
                         abs_path = data_root_path / row['scraped_data_filepath']
                         if abs_path.is_file():
-                            letter_data['scraped_path'] = str(abs_path.relative_to(app_root_path)).replace('\\', '/')
+                            letter_data['scraped_path_db'] = row['scraped_data_filepath'] # Store DB relative path
+                            letter_data['scraped_path_ui'] = str(abs_path.relative_to(app_root_path)).replace('\\', '/') # Store UI relative path
                             letter_data['scraped_filename'] = Path(row['scraped_data_filepath']).name # Get filename for view link
                             letter_data['has_scraped'] = True
 

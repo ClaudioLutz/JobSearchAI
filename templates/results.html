@@ -122,8 +122,8 @@
 
                                                     <!-- Generate/View Letter -->
                                                     {% if full_job_url and full_job_url != 'N/A' %}
-                                                        {% if match.has_motivation_letter %}
-                                                            <li><a class="dropdown-item" href="{{ url_for('motivation_letter.view_motivation_letter', operation_id='existing', html_path=match.motivation_letter_html_path, report_file=report_file) }}">View Letter</a></li> {# Updated url_for and parameter name #}
+                                                    {% if match.has_motivation_letter %}
+                                                            <li><a class="dropdown-item" href="{{ url_for('motivation_letter.view_motivation_letter', operation_id='existing', letter_filepath_html=match.motivation_letter_html_path, report_file=report_file) }}">View Letter</a></li> {# Corrected parameter name #}
                                                         {% else %}
                                                             {# Use specific class and data attributes for JS hook - CV filename will be read from dropdown by JS #}
                                                             <li><a class="dropdown-item generate-letter-link" href="#" role="button"
@@ -152,7 +152,7 @@
 
                                                         <!-- View Email Text (conditional on has_email_text flag and JSON path) -->
                                                         {% if match.has_email_text and match.motivation_letter_json_path %}
-                                                            <li><a class="dropdown-item" href="{{ url_for('motivation_letter.view_email_text', json_path=match.motivation_letter_json_path, report_file=report_file) }}">View Email Text</a></li>
+                                                            <li><a class="dropdown-item" href="{{ url_for('motivation_letter.view_email_text', letter_filepath_json=match.motivation_letter_json_path, report_file=report_file) }}">View Email Text</a></li> {# Corrected parameter name #}
                                                         {% endif %}
                                                     {% else %}
                                                          <li><span class="dropdown-item disabled">Letter Actions N/A</span></li>
@@ -202,13 +202,13 @@
                                 <p>{{ match.reasoning }}</p>
                             </div>
                         </div>
-                        <div class="card-footer">
-                            {% if full_job_url and full_job_url != 'N/A' %} {# Use the corrected full_job_url here too #}
-                                <a href="{{ full_job_url }}" target="_blank" class="btn btn-primary">Link zum Inserat</a>
-                                {% if match.has_motivation_letter %}
-                                    <a href="{{ url_for('motivation_letter.view_motivation_letter', operation_id='existing', html_path=match.motivation_letter_html_path, report_file=report_file) }}" class="btn btn-outline-primary w-100 mb-2">Motivationsschreiben anzeigen</a> {# Updated url_for and parameter name #}
-                                    {% if match.motivation_letter_docx_path %}
-                                        <a href="{{ url_for('motivation_letter.download_motivation_letter_docx', file_path=match.motivation_letter_docx_path) }}" class="btn btn-outline-success w-100">Word herunterladen</a>
+                            <div class="card-footer">
+                                {% if full_job_url and full_job_url != 'N/A' %} {# Use the corrected full_job_url here too #}
+                                    <a href="{{ full_job_url }}" target="_blank" class="btn btn-primary">Link zum Inserat</a>
+                                    {% if match.has_motivation_letter %}
+                                        <a href="{{ url_for('motivation_letter.view_motivation_letter', operation_id='existing', letter_filepath_html=match.motivation_letter_html_path, report_file=report_file) }}" class="btn btn-outline-primary w-100 mb-2">Motivationsschreiben anzeigen</a> {# Corrected parameter name #}
+                                        {% if match.motivation_letter_docx_path %}
+                                            <a href="{{ url_for('motivation_letter.download_motivation_letter_docx', file_path=match.motivation_letter_docx_path) }}" class="btn btn-outline-success w-100">Word herunterladen</a>
                                     {% endif %}
                                 {% else %}
                                     {# This form submits via JS now, but keeping url_for correct just in case #}

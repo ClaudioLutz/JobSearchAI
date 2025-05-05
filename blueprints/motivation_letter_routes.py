@@ -649,6 +649,8 @@ def view_motivation_letter(operation_id):
     try:
         config = ConfigManager() # Get config
         if operation_id == 'existing':
+            # Log incoming arguments for debugging
+            logger.info(f"Received request args for /view/existing: {request.args}")
             # Paths passed are relative to data_root from DB
             html_path_rel_db = request.args.get('letter_filepath_html')
             docx_path_rel_db = request.args.get('letter_filepath_docx')

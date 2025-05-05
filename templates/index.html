@@ -330,21 +330,21 @@
                                                     <small>{{ letter.company_name }} ({{ letter.timestamp }})</small>
                                                 </div>
                                                 <div class="btn-group flex-shrink-0">
-                                                    {# View Letter link uses html_path (relative to project root) #}
-                                                    {% if letter.has_html and letter.html_path %}
-                                                        <a href="{{ url_for('motivation_letter.view_motivation_letter', operation_id='existing', html_path=letter.html_path) }}" class="btn btn-sm btn-outline-primary" title="View HTML Letter">View Letter</a>
+                                                    {# View Letter link uses html_path_db (relative to data root) #}
+                                                    {% if letter.has_html and letter.html_path_db %}
+                                                        <a href="{{ url_for('motivation_letter.view_motivation_letter', operation_id='existing', letter_filepath_html=letter.html_path_db) }}" class="btn btn-sm btn-outline-primary" title="View HTML Letter">View Letter</a> {# Use DB path for route param #}
                                                     {% endif %}
-                                                    {# View Email link uses json_path (relative to project root) #}
-                                                    {% if letter.has_email and letter.json_path %}
-                                                        <a href="{{ url_for('motivation_letter.view_email_text', json_path=letter.json_path) }}" class="btn btn-sm btn-outline-info" title="View Email Text">View Email</a>
+                                                    {# View Email link uses json_path_db (relative to data root) #}
+                                                    {% if letter.has_email and letter.json_path_db %}
+                                                        <a href="{{ url_for('motivation_letter.view_email_text', letter_filepath_json=letter.json_path_db) }}" class="btn btn-sm btn-outline-info" title="View Email Text">View Email</a> {# Use DB path for route param #}
                                                     {% endif %}
-                                                    {# Download DOCX link uses docx_path (relative to project root) #}
-                                                    {% if letter.has_docx and letter.docx_path %}
-                                                        <a href="{{ url_for('motivation_letter.download_motivation_letter_docx', file_path=letter.docx_path) }}" class="btn btn-sm btn-outline-success" title="Download DOCX">DOCX</a>
+                                                    {# Download DOCX link uses docx_path_ui (relative to project root) #}
+                                                    {% if letter.has_docx and letter.docx_path_ui %}
+                                                        <a href="{{ url_for('motivation_letter.download_motivation_letter_docx', file_path=letter.docx_path_ui) }}" class="btn btn-sm btn-outline-success" title="Download DOCX">DOCX</a> {# Use UI path for download #}
                                                     {% endif %}
                                                     {# View Scraped Data link uses scraped_filename #}
                                                     {% if letter.has_scraped and letter.scraped_filename %}
-                                                        <a href="{{ url_for('motivation_letter.view_scraped_data', scraped_data_filename=letter.scraped_filename) }}" class="btn btn-sm btn-outline-secondary" title="View Scraped Data">Scraped</a>
+                                                        <a href="{{ url_for('motivation_letter.view_scraped_data', scraped_data_filename=letter.scraped_filename) }}" class="btn btn-sm btn-outline-secondary" title="View Scraped Data">Scraped</a> {# Use filename #}
                                                     {% endif %}
                                                     {# Delete button uses json_filename #}
                                                     {% if letter.json_filename %}
