@@ -5,6 +5,7 @@ import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
+import math # Added for pagination
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
 from werkzeug.utils import secure_filename
 import urllib.parse
@@ -145,23 +146,30 @@ def create_app():
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
     # --- Shared State / Utilities ---
-    # Progress tracking (using app context via extensions)
+    # Progress tracking & Caching (using app context via extensions)
     app.extensions['operation_progress'] = {}
     app.extensions['operation_status'] = {}
+    app.extensions['operation_cancel_events'] = {} # Store cancellation events
+    app.extensions['cv_summary_cache'] = {} # In-memory cache for CV summaries
 
     # --- Helper Functions attached to app context ---
-    # These functions will be accessible via current_app.extensions in blueprints
-    def start_operation(operation_type):
-        """Start tracking a new operation"""
+    # These functions will be accessible via current_app.extensions or current_app directly
+    def start_operation(operation_type, cancel_event=None): # Add cancel_event parameter
+        """Start tracking a new operation, optionally storing a cancellation event."""
         operation_id = str(uuid.uuid4())
         app.extensions['operation_progress'][operation_id] = 0
         app.extensions['operation_status'][operation_id] = {
             'type': operation_type,
             'status': 'starting',
             'message': f'Starting {operation_type}...',
-            'start_time': datetime.now().isoformat()
+            'start_time': datetime.now().isoformat(),
+            'can_cancel': cancel_event is not None # Indicate if cancellation is possible
         }
-        logger.info(f"Started operation {operation_id} ({operation_type})")
+        if cancel_event:
+            app.extensions['operation_cancel_events'][operation_id] = cancel_event
+            logger.info(f"Started cancellable operation {operation_id} ({operation_type})")
+        else:
+            logger.info(f"Started operation {operation_id} ({operation_type})")
         return operation_id
 
     def update_operation_progress(operation_id, progress, status=None, message=None):
@@ -183,21 +191,75 @@ def create_app():
     def complete_operation(operation_id, status='completed', message='Operation completed'):
         """Mark an operation as completed"""
         if operation_id in app.extensions['operation_progress']:
-            app.extensions['operation_progress'][operation_id] = 100
+            app.extensions['operation_progress'][operation_id] = 100 # Set progress to 100
 
             if operation_id in app.extensions['operation_status']:
                 op_stat = app.extensions['operation_status'][operation_id]
                 op_stat['status'] = status
                 op_stat['message'] = message
                 op_stat['completed_time'] = datetime.now().isoformat()
+                op_stat['can_cancel'] = False # Cannot cancel once completed/failed/cancelled
+
+        # Clean up cancel event if it exists
+        if operation_id in app.extensions['operation_cancel_events']:
+            del app.extensions['operation_cancel_events'][operation_id]
+            logger.debug(f"Removed cancel event for completed/failed/cancelled operation {operation_id}")
+
         logger.info(f"Operation {operation_id} {status}: {message}")
 
     # Attach helper functions to app extensions for blueprint access
     app.extensions['start_operation'] = start_operation
     app.extensions['update_operation_progress'] = update_operation_progress
     app.extensions['complete_operation'] = complete_operation
-    # Attach the complex helper function directly to app for blueprint access via current_app
+
+    def get_cv_summary(cv_rel_path):
+        """Gets CV summary text, using an in-memory cache."""
+        cache = app.extensions['cv_summary_cache']
+        if cv_rel_path in cache:
+            logger.debug(f"Cache hit for CV summary: {cv_rel_path}")
+            return cache[cv_rel_path]
+
+        logger.debug(f"Cache miss for CV summary: {cv_rel_path}. Reading from file.")
+        # Construct path relative to app root
+        cv_base_dir = config.get_path('cv_data') # Use config path
+        if not cv_base_dir:
+             logger.error("Configuration error: 'cv_data' path not found in config for get_cv_summary.")
+             return None # Or raise error
+
+        # Derive summary path from relative CV path
+        try:
+            # Assuming cv_rel_path might be like 'input/MyCV.pdf' or just 'MyCV.pdf'
+            cv_filename_only = Path(cv_rel_path).name
+            cv_base_filename = Path(cv_filename_only).stem
+            summary_filename = f"{cv_base_filename}_summary.txt"
+            # Summary path is relative to the 'processed' subdir within cv_data
+            processed_dir = config.get_path('cv_data_processed')
+            if not processed_dir:
+                 logger.error("Configuration error: 'cv_data_processed' path not found in config.")
+                 return None
+            summary_path = processed_dir / summary_filename
+
+            if not summary_path.is_file():
+                logger.warning(f"CV summary file not found at expected location: {summary_path} (derived from {cv_rel_path})")
+                return None
+
+            with open(summary_path, 'r', encoding='utf-8') as f_cv:
+                summary_text = f_cv.read()
+
+            if summary_text: # Only cache non-empty summaries
+                cache[cv_rel_path] = summary_text
+                logger.info(f"Cached CV summary for: {cv_rel_path}")
+            else:
+                 logger.warning(f"CV summary file is empty: {summary_path}")
+
+            return summary_text
+        except Exception as e:
+            logger.error(f"Error reading or processing CV summary for {cv_rel_path} at {summary_path}: {e}", exc_info=True)
+            return None
+
+    # Attach helper functions directly to app for blueprint access via current_app
     app.get_job_details_for_url = get_job_details_for_url
+    app.get_cv_summary = get_cv_summary # Attach the new summary helper
 
     # --- Register Blueprints ---
     from blueprints.cv_routes import cv_bp
@@ -228,9 +290,50 @@ def create_app():
             logger.warning(f"Operation status requested for unknown ID: {operation_id}")
             return jsonify({'error': 'Operation not found'}), 404
 
+    @app.route('/cancel_operation/<operation_id>', methods=['POST'])
+    def cancel_operation_route(operation_id):
+        """Signal an operation to cancel."""
+        cancel_event = app.extensions.get('operation_cancel_events', {}).get(operation_id)
+        if cancel_event:
+            try:
+                cancel_event.set()
+                logger.info(f"Cancellation requested for operation {operation_id}")
+                # Update status immediately to reflect cancellation request
+                if operation_id in app.extensions['operation_status']:
+                     app.extensions['operation_status'][operation_id]['status'] = 'cancelling'
+                     app.extensions['operation_status'][operation_id]['message'] = 'Cancellation requested...'
+                     app.extensions['operation_status'][operation_id]['can_cancel'] = False # Prevent multiple cancels
+                return jsonify({'success': True, 'message': 'Cancellation requested.'})
+            except Exception as e:
+                 logger.error(f"Error setting cancel event for operation {operation_id}: {e}", exc_info=True)
+                 return jsonify({'success': False, 'message': f'Error requesting cancellation: {e}'}), 500
+        else:
+            logger.warning(f"Cancellation requested for unknown or non-cancellable operation ID: {operation_id}")
+            # Check if it already finished
+            if operation_id in app.extensions['operation_status']:
+                 status = app.extensions['operation_status'][operation_id].get('status')
+                 if status in ['completed', 'failed', 'cancelled']:
+                      return jsonify({'success': False, 'message': f'Operation already {status}.'}), 400
+            return jsonify({'success': False, 'message': 'Operation not found or cannot be cancelled.'}), 404
+
+
     @app.route('/')
     def index():
         """Render the main dashboard page, redirecting to setup if needed."""
+        # --- Pagination Parameters ---
+        # Get page numbers for each list type, default to 1
+        try:
+            cv_page = request.args.get('cv_page', 1, type=int)
+            batch_page = request.args.get('batch_page', 1, type=int)
+            report_page = request.args.get('report_page', 1, type=int)
+            letter_page = request.args.get('letter_page', 1, type=int)
+            per_page = 15 # Items per page for dashboard lists
+        except ValueError:
+            # Handle invalid page numbers gracefully (e.g., redirect to page 1 or show error)
+            flash("Invalid page number specified.", "warning")
+            # Redirect to base URL without invalid page params
+            return redirect(url_for('index'))
+
         # --- First Run Check ---
         # Use the config object imported at the top
         if config.is_first_run():
@@ -238,20 +341,29 @@ def create_app():
             return redirect(url_for('setup.setup_wizard'))
         # --- End First Run Check ---
 
-        # --- Get list of available CVs from Database ---
+        # --- Get list of available CVs from Database (Paginated) ---
         cv_files_data = []
+        cv_pagination = {}
         try:
             with database_connection() as conn:
                 cursor = conn.cursor()
+                # Get total count first
+                cursor.execute("SELECT COUNT(*) FROM CVS")
+                total_cvs = cursor.fetchone()[0]
+                cv_total_pages = math.ceil(total_cvs / per_page)
+                cv_offset = (cv_page - 1) * per_page
+
+                # Fetch paginated data
                 cursor.execute("""
                     SELECT id, original_filename, original_filepath, upload_timestamp
                     FROM CVS
                     ORDER BY upload_timestamp DESC
-                """)
+                    LIMIT ? OFFSET ?
+                """, (per_page, cv_offset))
                 rows = cursor.fetchall()
-                # Map database rows to the structure expected by the template
+
+                # Map database rows
                 for row in rows:
-                    # Format timestamp if needed (assuming it's stored as ISO string)
                     timestamp_str = row['upload_timestamp']
                     try:
                         # Attempt to parse and format. Handle potential errors if format is unexpected.
@@ -261,57 +373,93 @@ def create_app():
                         formatted_timestamp = timestamp_str # Fallback to original string if parsing fails
 
                     cv_files_data.append({
-                        'id': row['id'], # Pass ID for potential future use
-                        'name': row['original_filepath'], # Use relative path for display/links
-                        'filename': row['original_filename'], # Original filename for display
+                        'id': row['id'],
+                        'name': row['original_filepath'],
+                        'filename': row['original_filename'],
                         'timestamp': formatted_timestamp,
-                        # 'full_path' is no longer needed as we use relative path from DB
                     })
-            logger.info(f"Fetched {len(cv_files_data)} CV records from database.")
+
+                cv_pagination = {
+                    'page': cv_page,
+                    'per_page': per_page,
+                    'total_items': total_cvs,
+                    'total_pages': cv_total_pages
+                }
+            logger.info(f"Fetched {len(cv_files_data)} CV records (Page {cv_page}/{cv_total_pages}) from database.")
         except sqlite3.Error as db_err:
-            logger.error(f"Database error fetching CV list: {db_err}", exc_info=True)
+            logger.error(f"Database error fetching paginated CV list: {db_err}", exc_info=True)
             flash("Error fetching CV list from database.", "error")
         except Exception as e:
             logger.error(f"Unexpected error fetching CV list: {e}", exc_info=True)
             flash("An unexpected error occurred while fetching the CV list.", "error")
         # --- End Get list of available CVs from Database ---
 
-        # --- Get list of available Job Data Batches from Database ---
+        # --- Get list of available Job Data Batches from Database (Paginated) ---
         job_batches = []
+        batch_pagination = {}
         try:
             with database_connection() as conn:
                 cursor = conn.cursor()
-                # Fetch necessary columns, including the relative data_filepath
+                # Get total count
+                cursor.execute("SELECT COUNT(*) FROM JOB_DATA_BATCHES")
+                total_batches = cursor.fetchone()[0]
+                batch_total_pages = math.ceil(total_batches / per_page)
+                batch_offset = (batch_page - 1) * per_page
+
+                # Fetch paginated data
                 cursor.execute("""
                     SELECT id, batch_timestamp, data_filepath
                     FROM JOB_DATA_BATCHES
                     ORDER BY batch_timestamp DESC
-                """)
-                job_batches = cursor.fetchall() # Fetchall returns list of Row objects
-            logger.info(f"Fetched {len(job_batches)} job data batch records from database.")
+                    LIMIT ? OFFSET ?
+                """, (per_page, batch_offset))
+                job_batches = cursor.fetchall()
+
+                batch_pagination = {
+                    'page': batch_page,
+                    'per_page': per_page,
+                    'total_items': total_batches,
+                    'total_pages': batch_total_pages
+                }
+            logger.info(f"Fetched {len(job_batches)} job data batch records (Page {batch_page}/{batch_total_pages}) from database.")
         except sqlite3.Error as db_err:
-            logger.error(f"Database error fetching job data batches: {db_err}", exc_info=True)
+            logger.error(f"Database error fetching paginated job data batches: {db_err}", exc_info=True)
             flash("Error fetching job data batches from database.", "error")
         except Exception as e:
             logger.error(f"Unexpected error fetching job data batches: {e}", exc_info=True)
             flash("An unexpected error occurred while fetching the job data batches.", "error")
         # --- End Get list of available Job Data Batches from Database ---
 
-        # --- Get list of available Job Match Reports from Database ---
+        # --- Get list of available Job Match Reports from Database (Paginated) ---
         job_match_reports = []
+        report_pagination = {}
         try:
             with database_connection() as conn:
                 cursor = conn.cursor()
-                # Fetch necessary columns for display and links
+                # Get total count
+                cursor.execute("SELECT COUNT(*) FROM JOB_MATCH_REPORTS")
+                total_reports = cursor.fetchone()[0]
+                report_total_pages = math.ceil(total_reports / per_page)
+                report_offset = (report_page - 1) * per_page
+
+                # Fetch paginated data
                 cursor.execute("""
                     SELECT id, report_timestamp, report_filepath_md, report_filepath_json
                     FROM JOB_MATCH_REPORTS
                     ORDER BY report_timestamp DESC
-                """)
-                job_match_reports = cursor.fetchall() # Fetchall returns list of Row objects
-            logger.info(f"Fetched {len(job_match_reports)} job match report records from database.")
+                    LIMIT ? OFFSET ?
+                """, (per_page, report_offset))
+                job_match_reports = cursor.fetchall()
+
+                report_pagination = {
+                    'page': report_page,
+                    'per_page': per_page,
+                    'total_items': total_reports,
+                    'total_pages': report_total_pages
+                }
+            logger.info(f"Fetched {len(job_match_reports)} job match report records (Page {report_page}/{report_total_pages}) from database.")
         except sqlite3.Error as db_err:
-            logger.error(f"Database error fetching job match reports: {db_err}", exc_info=True)
+            logger.error(f"Database error fetching paginated job match reports: {db_err}", exc_info=True)
             flash("Error fetching job match reports from database.", "error")
         except Exception as e:
             logger.error(f"Unexpected error fetching job match reports: {e}", exc_info=True)
@@ -394,18 +542,28 @@ def create_app():
         generated_letters_data.sort(key=lambda x: x.get('timestamp', '0'), reverse=True)
         # --- End Get list of generated motivation letters --- # THIS SECTION IS NOW REPLACED BY DB QUERY BELOW
 
-        # --- Get list of generated motivation letters from Database ---
+        # --- Get list of generated motivation letters from Database (Paginated) ---
         motivation_letters = []
+        letter_pagination = {}
         try:
             with database_connection() as conn:
                 cursor = conn.cursor()
+                # Get total count
+                cursor.execute("SELECT COUNT(*) FROM MOTIVATION_LETTERS")
+                total_letters = cursor.fetchone()[0]
+                letter_total_pages = math.ceil(total_letters / per_page)
+                letter_offset = (letter_page - 1) * per_page
+
+                # Fetch paginated data
                 cursor.execute("""
                     SELECT id, job_title, company_name, generation_timestamp,
                            letter_filepath_html, letter_filepath_json, letter_filepath_docx, scraped_data_filepath
                     FROM MOTIVATION_LETTERS
                     ORDER BY generation_timestamp DESC
-                """)
+                    LIMIT ? OFFSET ?
+                """, (per_page, letter_offset))
                 rows = cursor.fetchall()
+
                 data_root_path = Path(config.get_path('data_root'))
                 app_root_path = Path(app.root_path)
 
@@ -470,9 +628,15 @@ def create_app():
 
                     motivation_letters.append(letter_data)
 
-            logger.info(f"Fetched {len(motivation_letters)} motivation letter records from database.")
+                letter_pagination = {
+                    'page': letter_page,
+                    'per_page': per_page,
+                    'total_items': total_letters,
+                    'total_pages': letter_total_pages
+                }
+            logger.info(f"Fetched {len(motivation_letters)} motivation letter records (Page {letter_page}/{letter_total_pages}) from database.")
         except sqlite3.Error as db_err:
-            logger.error(f"Database error fetching motivation letters: {db_err}", exc_info=True)
+            logger.error(f"Database error fetching paginated motivation letters: {db_err}", exc_info=True)
             flash("Error fetching motivation letters from database.", "error")
         except Exception as e:
             logger.error(f"Unexpected error fetching motivation letters: {e}", exc_info=True)
@@ -480,13 +644,17 @@ def create_app():
         # --- End Get list of generated motivation letters from Database ---
 
 
-        # Pass our custom config object and fetched data to the template context
+        # Pass paginated data and pagination info to the template context
         return render_template('index.html',
                                cv_files=cv_files_data,
-                               job_batches=job_batches, # Fetched earlier
-                               job_match_reports=job_match_reports, # Fetched earlier
-                               generated_letters=motivation_letters, # Pass letters from DB
-                               config=config) # Pass our ConfigManager instance
+                               cv_pagination=cv_pagination,
+                               job_batches=job_batches,
+                               batch_pagination=batch_pagination,
+                               job_match_reports=job_match_reports,
+                               report_pagination=report_pagination,
+                               generated_letters=motivation_letters,
+                               letter_pagination=letter_pagination,
+                               config=config)
 
     @app.route('/delete_files', methods=['POST'])
     def delete_files_route():

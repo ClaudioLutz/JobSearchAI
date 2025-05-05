@@ -2,6 +2,7 @@
 import os
 import json
 import logging
+import requests # Import requests to catch its specific exceptions
 from datetime import datetime
 from scrapegraphai.graphs import SmartScraperGraph
 
@@ -116,8 +117,13 @@ def run_scraper():
 
                 logger.info(f"Successfully scraped data from {url}{page}")
 
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Network error scraping {url}{page}: {type(e).__name__} - {e}")
+                # Continue to the next page/URL on network errors
             except Exception as e:
-                logger.error(f"Error scraping {url}{page}: {e}")
+                # Catch any other exceptions during scraping for a specific page
+                logger.error(f"General error scraping {url}{page}: {type(e).__name__} - {e}")
+                # Continue to the next page/URL
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = CONFIG["data_storage"]["output_directory"]

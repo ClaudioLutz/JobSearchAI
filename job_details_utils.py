@@ -1,6 +1,7 @@
 import logging
 import json
 import openai
+import requests # Import requests for exception handling
 from pathlib import Path
 from datetime import datetime
 import traceback
@@ -229,14 +230,17 @@ def get_job_details(job_url):
                 # Return the successful result immediately
                 return structured_details
             else:
-                # Log message already handled within get_job_details_with_graphscrapeai if it failed
-                logger.warning("GraphScrapeAI (headless=False) extraction failed or returned insufficient content.")
+                 # Log message already handled within get_job_details_with_graphscrapeai if it failed
+                 logger.warning("GraphScrapeAI (headless=False) extraction failed or returned insufficient content.")
 
+        except requests.exceptions.RequestException as network_err:
+            logger.error(f"Network error during GraphScrapeAI attempt for {job_url}: {type(network_err).__name__} - {network_err}", exc_info=False) # Log specific network error, no need for full traceback usually
+            structured_details = None # Ensure it's None on network failure
         except Exception as live_fetch_err:
-             logger.error(f"Error during GraphScrapeAI attempt for {job_url}: {live_fetch_err}", exc_info=True)
-             structured_details = None # Ensure it's None if the fetch itself failed
+            logger.error(f"Unexpected error during GraphScrapeAI attempt for {job_url}: {type(live_fetch_err).__name__} - {live_fetch_err}", exc_info=True) # Log other errors with traceback
+            structured_details = None # Ensure it's None if the fetch itself failed
 
-    # --- Attempt 2: Fallback to Pre-scraped Data ---
+     # --- Attempt 2: Fallback to Pre-scraped Data ---
     # This runs only if structured_details is still None after Attempt 1
     logger.info("Attempt 2: Falling back to pre-scraped data.")
     job_details_scraped = get_job_details_from_scraped_data(job_url) # This function now returns dict or None

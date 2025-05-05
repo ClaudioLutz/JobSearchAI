@@ -31,127 +31,173 @@ def run_job_scraper():
         start_operation = current_app.extensions['start_operation']
         update_operation_progress = current_app.extensions['update_operation_progress']
         complete_operation = current_app.extensions['complete_operation']
+        app_instance = current_app._get_current_object() # Get app instance for context
 
-        # Start tracking the operation
-        operation_id = start_operation('job_scraping')
+        # Create cancellation event
+        cancel_event = threading.Event()
+        # Start tracking the operation, passing the event
+        operation_id = start_operation('job_scraping', cancel_event=cancel_event)
 
         # Define a function to run the job scraper in a background thread
-        def run_job_scraper_task():
-            try:
-                # Update status
-                update_operation_progress(operation_id, 10, 'processing', 'Updating settings...')
+        def run_job_scraper_task(app, op_id, max_pages_task, cancel_event_task): # Add app, op_id, max_pages, cancel_event
+            with app.app_context(): # Establish app context
+                try: # <--- Main try block for the task
+                    # Update status
+                    update_operation_progress(op_id, 10, 'processing', 'Updating settings...')
 
-                # Update the settings.json file with the max_pages parameter
-                # Use current_app.root_path to get the application root directory
-                settings_path = os.path.join(current_app.root_path, 'job-data-acquisition', 'settings.json')
+                    # Update the settings.json file with the max_pages parameter
+                    # Use current_app.root_path to get the application root directory
+                    settings_path = os.path.join(current_app.root_path, 'job-data-acquisition', 'settings.json')
 
-                # Read the current settings
-                try:
-                    with open(settings_path, 'r', encoding='utf-8') as f:
-                        settings = json.load(f)
-                except FileNotFoundError:
-                     logger.error(f"Settings file not found at {settings_path}")
-                     complete_operation(operation_id, 'failed', 'Scraper settings file not found.')
-                     return
-                except json.JSONDecodeError:
-                     logger.error(f"Error decoding settings file at {settings_path}")
-                     complete_operation(operation_id, 'failed', 'Error reading scraper settings.')
-                     return
-
-
-                # Update the max_pages parameter
-                settings['scraper']['max_pages'] = max_pages
-
-                # Write the updated settings back to the file
-                with open(settings_path, 'w', encoding='utf-8') as f:
-                    json.dump(settings, f, indent=4, ensure_ascii=False)
-
-                # Update status
-                update_operation_progress(operation_id, 20, 'processing', 'Starting job scraper...')
-
-                # Import the job scraper module using importlib for more robust importing
-                # Get the absolute path to the app.py file relative to the application root
-                app_path = os.path.join(current_app.root_path, 'job-data-acquisition', 'app.py')
-
-                if not os.path.exists(app_path):
-                    logger.error(f"Job scraper app.py not found at {app_path}")
-                    complete_operation(operation_id, 'failed', 'Job scraper module not found.')
-                    return
-
-                # Load the module
-                spec = importlib.util.spec_from_file_location("app_module", app_path)
-                app_module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(app_module)
-
-                # Get the run_scraper function
-                run_scraper = getattr(app_module, 'run_scraper', None)
-                if not run_scraper:
-                    logger.error(f"run_scraper function not found in {app_path}")
-                    complete_operation(operation_id, 'failed', 'Job scraper function not found.')
-                    return
-
-                # Update status
-                update_operation_progress(operation_id, 30, 'processing', 'Scraping job listings...')
-
-                # Run the scraper
-                output_file = run_scraper()
-
-                if output_file is None:
-                    complete_operation(operation_id, 'failed', 'Job data acquisition failed. Check the logs for details.')
-                else:
-                    # --- Database Insertion ---
+                    # Read the current settings
                     try:
-                        data_root = config.get_path('data_root')
-                        if not data_root:
-                            raise ValueError("Configuration error: 'data_root' path not found in config.")
-
-                        absolute_output_path = Path(output_file)
-                        # Ensure the output file path is absolute before making it relative
-                        if not absolute_output_path.is_absolute():
-                             # If run_scraper returns a relative path, make it absolute based on project root
-                             absolute_output_path = Path(current_app.root_path) / output_file
-
-                        relative_data_filepath = str(absolute_output_path.relative_to(data_root)).replace('\\', '/')
-                        batch_timestamp = datetime.now().isoformat()
-
-                        # Read settings used for this run
-                        settings_path = config.get_path('settings_json')
-                        if not settings_path or not settings_path.exists():
-                             raise FileNotFoundError("Scraper settings file not found via config.")
                         with open(settings_path, 'r', encoding='utf-8') as f:
                             settings = json.load(f)
+                    except FileNotFoundError:
+                        logger.error(f"Settings file not found at {settings_path}")
+                        complete_operation(op_id, 'failed', 'Scraper settings file not found.')
+                        return
+                    except json.JSONDecodeError:
+                        logger.error(f"Error decoding settings file at {settings_path}")
+                        complete_operation(op_id, 'failed', 'Error reading scraper settings.')
+                        return
 
-                        source_urls_json = json.dumps(settings.get('target_urls', []))
-                        settings_used_json = json.dumps(settings.get('scraper', {}))
+                    # Update the max_pages parameter
+                    settings['scraper']['max_pages'] = max_pages_task # Use passed variable
 
-                        with database_connection() as conn:
-                            cursor = conn.cursor()
-                            cursor.execute("""
-                                INSERT INTO JOB_DATA_BATCHES (batch_timestamp, source_urls, data_filepath, settings_used)
-                                VALUES (?, ?, ?, ?)
-                            """, (batch_timestamp, source_urls_json, relative_data_filepath, settings_used_json))
-                        logger.info(f"Successfully added job data batch record to database: {relative_data_filepath}")
-                        complete_operation(operation_id, 'completed', f'Job data acquisition completed and recorded. Data saved to: {relative_data_filepath}')
+                    # Write the updated settings back to the file
+                    with open(settings_path, 'w', encoding='utf-8') as f:
+                        json.dump(settings, f, indent=4, ensure_ascii=False)
 
-                    except Exception as db_err:
-                        logger.error(f"Database error adding job data batch record for {output_file}: {db_err}", exc_info=True)
-                        # Still report completion, but mention DB error
-                        complete_operation(operation_id, 'completed_with_errors', f'Job data acquisition completed, but failed to record in database. Data saved to: {output_file}. Error: {db_err}')
-                    # --- End Database Insertion ---
+                    # --- Cancellation Check 1 ---
+                    if cancel_event_task.is_set():
+                        logger.info(f"Operation {op_id} (job_scraping) cancelled before starting scraper.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        return
 
-            except Exception as e:
-                logger.error(f'Error in job scraper task: {str(e)}', exc_info=True)
-                complete_operation(operation_id, 'failed', f'Error running job scraper: {str(e)}')
+                    # Update status
+                    update_operation_progress(op_id, 20, 'processing', 'Starting job scraper...')
 
-        # Start the background thread
-        thread = threading.Thread(target=run_job_scraper_task)
+                    # Import the job scraper module using importlib for more robust importing
+                    # Get the absolute path to the app.py file relative to the application root
+                    app_path = os.path.join(current_app.root_path, 'job-data-acquisition', 'app.py')
+
+                    if not os.path.exists(app_path):
+                        logger.error(f"Job scraper app.py not found at {app_path}")
+                        complete_operation(op_id, 'failed', 'Job scraper module not found.')
+                        return
+
+                    # Load the module
+                    spec = importlib.util.spec_from_file_location("app_module", app_path)
+                    app_module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(app_module)
+
+                    # Get the run_scraper function
+                    run_scraper = getattr(app_module, 'run_scraper', None)
+                    if not run_scraper:
+                        logger.error(f"run_scraper function not found in {app_path}")
+                        complete_operation(op_id, 'failed', 'Job scraper function not found.')
+                        return
+
+                    # Update status
+                    update_operation_progress(op_id, 30, 'processing', 'Scraping job listings...')
+
+                    # Run the scraper
+                    # TODO: Consider adding cancellation support *within* run_scraper if possible
+                    output_file = run_scraper()
+
+                    # --- Cancellation Check 2 ---
+                    if cancel_event_task.is_set():
+                        logger.info(f"Operation {op_id} (job_scraping) cancelled after scraper finished.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        # Note: Scraper output file might exist. Cleanup?
+                        return
+
+                    if output_file is None:
+                        # Check cancellation status before reporting failure
+                        if cancel_event_task.is_set():
+                            complete_operation(op_id, 'cancelled', 'Operation cancelled (scraper returned no output file).')
+                        else:
+                            complete_operation(op_id, 'failed', 'Job data acquisition failed. Check the logs for details.')
+                        return
+                    else:
+                        # --- Cancellation Check 3 ---
+                        if cancel_event_task.is_set():
+                            logger.info(f"Operation {op_id} (job_scraping) cancelled before database insertion.")
+                            complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                            # Note: Scraper output file exists. Cleanup?
+                            return
+
+                        # --- Database Insertion ---
+                        try:
+                            data_root = config.get_path('data_root')
+                            if not data_root:
+                                raise ValueError("Configuration error: 'data_root' path not found in config.")
+
+                            absolute_output_path = Path(output_file)
+                            # Ensure the output file path is absolute before making it relative
+                            if not absolute_output_path.is_absolute():
+                                # If run_scraper returns a relative path, make it absolute based on project root
+                                absolute_output_path = Path(current_app.root_path) / output_file
+
+                            relative_data_filepath = str(absolute_output_path.relative_to(data_root)).replace('\\', '/')
+                            batch_timestamp = datetime.now().isoformat()
+
+                            # Read settings used for this run
+                            settings_path = config.get_path('settings_json')
+                            if not settings_path or not settings_path.exists():
+                                raise FileNotFoundError("Scraper settings file not found via config.")
+                            with open(settings_path, 'r', encoding='utf-8') as f:
+                                settings = json.load(f)
+
+                            source_urls_json = json.dumps(settings.get('target_urls', []))
+                            settings_used_json = json.dumps(settings.get('scraper', {}))
+
+                            with database_connection() as conn:
+                                cursor = conn.cursor()
+                                cursor.execute("""
+                                    INSERT INTO JOB_DATA_BATCHES (batch_timestamp, source_urls, data_filepath, settings_used)
+                                    VALUES (?, ?, ?, ?)
+                                """, (batch_timestamp, source_urls_json, relative_data_filepath, settings_used_json))
+                            logger.info(f"Successfully added job data batch record to database: {relative_data_filepath}")
+
+                            # --- Final Cancellation Check ---
+                            if cancel_event_task.is_set():
+                                logger.info(f"Operation {op_id} (job_scraping) cancelled just before final completion.")
+                                complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                                # Note: DB record inserted. Cleanup?
+                                return
+
+                            complete_operation(op_id, 'completed', f'Job data acquisition completed and recorded. Data saved to: {relative_data_filepath}')
+
+                        except Exception as db_err:
+                            logger.error(f"Database error adding job data batch record for {output_file}: {db_err}", exc_info=True)
+                            # Check cancellation status before reporting error type
+                            if cancel_event_task.is_set():
+                                complete_operation(op_id, 'cancelled', f'Operation cancelled during DB error: {db_err}')
+                            else:
+                                # Still report completion, but mention DB error
+                                complete_operation(op_id, 'completed_with_errors', f'Job data acquisition completed, but failed to record in database. Data saved to: {output_file}. Error: {db_err}')
+                        # --- End Database Insertion ---
+
+                except Exception as e: # <--- This except corresponds to the main try block above
+                    logger.error(f'Error in job scraper task: {str(e)}', exc_info=True)
+                    # Check cancellation status before reporting failure
+                    if cancel_event_task.is_set():
+                        complete_operation(op_id, 'cancelled', f'Operation cancelled during error: {str(e)}')
+                    else:
+                        complete_operation(op_id, 'failed', f'Error running job scraper: {str(e)}')
+
+        # Start the background thread, passing app instance, op_id, max_pages, and cancel_event
+        thread_args = (app_instance, operation_id, max_pages, cancel_event)
+        thread = threading.Thread(target=run_job_scraper_task, args=thread_args)
         thread.daemon = True
         thread.start()
 
         # Return immediately with the operation ID
         flash(f'Job scraper started. Please wait while the job listings are being scraped. (operation_id={operation_id})')
         return redirect(url_for('index')) # Redirect to main index
-    except Exception as e:
+    except Exception as e: # <--- Correct indentation aligned with the route's try block
         flash(f'Error running job scraper: {str(e)}')
         logger.error(f'Error running job scraper: {str(e)}', exc_info=True)
         return redirect(url_for('index'))

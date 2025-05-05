@@ -40,7 +40,8 @@ function checkOperationStatus(operationId, onComplete) {
                             </div>
                             <p id="operationStatusMessage">Starting operation...</p>
                         </div>
-                        <div class="modal-footer">
+                        <div class="modal-footer" id="progressModalFooter">
+                            <button type="button" id="cancelOperationBtn" class="btn btn-warning me-auto" style="display: none;">Cancel Operation</button>
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                         </div>
                     </div>
@@ -55,23 +56,77 @@ function checkOperationStatus(operationId, onComplete) {
     const bsProgressModal = new bootstrap.Modal(progressModal);
     bsProgressModal.show();
     
-    // Get the progress bar and status message elements
+    // Get the progress bar, status message, and cancel button elements
     const progressBar = document.getElementById('operationProgressBar');
     const statusMessage = document.getElementById('operationStatusMessage');
-    
+    const cancelBtn = document.getElementById('cancelOperationBtn');
+    const progressModalLabel = document.getElementById('progressModalLabel');
+    const modalFooter = document.getElementById('progressModalFooter');
+
+    // Remove previous cancel listener if any
+    const newCancelBtn = cancelBtn.cloneNode(true);
+    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+    const currentCancelBtn = document.getElementById('cancelOperationBtn'); // Re-select the new button
+
     // Function to update the progress modal
-    function updateProgressModal(progress, message) {
+    function updateProgressModal(progress, message, statusObj = {}) {
         progressBar.style.width = `${progress}%`;
         progressBar.setAttribute('aria-valuenow', progress);
         progressBar.textContent = `${progress}%`;
-        
+
+        // Update status message, avoiding overwriting completion/error messages with HTML
         if (message && statusMessage.innerHTML.indexOf('<br>') === -1) {
-            // Only update the text content if it doesn't contain HTML (which would indicate we've already
-            // formatted it with the completion message)
             statusMessage.textContent = message;
         }
+
+        // Show/Hide Cancel Button based on status.can_cancel
+        if (statusObj.can_cancel) {
+            currentCancelBtn.style.display = 'inline-block';
+        } else {
+            currentCancelBtn.style.display = 'none';
+        }
+
+        // Update progress bar color based on status
+        progressBar.classList.remove('bg-success', 'bg-danger', 'bg-warning'); // Reset colors
+        if (statusObj.status === 'completed') {
+            progressBar.classList.add('bg-success');
+        } else if (statusObj.status === 'failed') {
+            progressBar.classList.add('bg-danger');
+        } else if (statusObj.status === 'cancelled' || statusObj.status === 'cancelling') {
+            progressBar.classList.add('bg-warning');
+        }
     }
-    
+
+    // Add event listener for the cancel button
+    currentCancelBtn.addEventListener('click', () => {
+        console.log(`Requesting cancellation for operation: ${operationId}`);
+        currentCancelBtn.disabled = true; // Disable button immediately
+        currentCancelBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Cancelling...';
+
+        fetch(`/cancel_operation/${operationId}`, { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log(`Cancellation request successful for ${operationId}`);
+                    // Status will update on the next poll to 'cancelling' or 'cancelled'
+                    // Keep button disabled, text will update via polling
+                } else {
+                    console.error(`Cancellation request failed for ${operationId}: ${data.message}`);
+                    alert(`Failed to request cancellation: ${data.message}`);
+                    // Re-enable button if cancellation failed server-side
+                    currentCancelBtn.disabled = false;
+                    currentCancelBtn.innerHTML = 'Cancel Operation';
+                }
+            })
+            .catch(error => {
+                console.error('Error sending cancellation request:', error);
+                alert(`Error sending cancellation request: ${error.message}`);
+                // Re-enable button on network error
+                currentCancelBtn.disabled = false;
+                currentCancelBtn.innerHTML = 'Cancel Operation';
+            });
+    });
+
     // Start polling for status updates
     const pollInterval = setInterval(() => {
         fetch(statusUrl)
@@ -79,63 +134,72 @@ function checkOperationStatus(operationId, onComplete) {
             .then(data => {
                 if (data.error) {
                     clearInterval(pollInterval);
-                    updateProgressModal(100, `Error: ${data.error}`);
+                    updateProgressModal(100, `Error: ${data.error}`, { status: 'failed' }); // Pass status obj
+                    currentCancelBtn.style.display = 'none'; // Hide cancel on error
                     return;
                 }
-                
+
                 const progress = data.progress;
-                const status = data.status;
-                
+                const status = data.status; // This is the status object { type, status, message, ..., can_cancel }
+
                 // Update the progress modal
-                updateProgressModal(progress, status.message);
-                
-                // Check if the operation is complete
-                if (progress === 100 || status.status === 'completed' || status.status === 'failed') {
+                updateProgressModal(progress, status.message, status);
+
+                // Check if the operation is complete, failed, or cancelled
+                const terminalStates = ['completed', 'failed', 'cancelled'];
+                if (terminalStates.includes(status.status)) {
                     clearInterval(pollInterval);
-                    
-                    // Update modal title and message based on operation status
-                    const progressModalLabel = document.getElementById('progressModalLabel');
-                    const statusMessage = document.getElementById('operationStatusMessage');
-                    
+                    currentCancelBtn.style.display = 'none'; // Hide cancel button on completion
+
+                    // Update modal title and message based on final status
+                    let finalTitle = 'Operation Status';
+                    let finalMessageHtml = status.message; // Default message
+
                     if (status.status === 'failed') {
-                        // Handle failed operations
-                        if (progressModalLabel) {
-                            progressModalLabel.textContent = 'Operation Failed';
-                        }
-                        if (statusMessage) {
-                            statusMessage.innerHTML = `${status.message}<br><br><strong>Operation failed.</strong>`;
-                        }
-                        // Change progress bar color to red for failed operations
-                        if (progressBar) {
-                            progressBar.classList.remove('bg-success');
-                            progressBar.classList.add('bg-danger');
-                        }
+                        finalTitle = 'Operation Failed';
+                        finalMessageHtml = `${status.message}<br><br><strong>Operation failed.</strong>`;
                     } else if (status.status === 'completed') {
-                        // Handle completed operations
-                        if (progressModalLabel) {
-                            progressModalLabel.textContent = 'Operation Completed';
-                        }
-                        // Change progress bar color to green for completed operations
-                        if (progressBar) {
-                            progressBar.classList.remove('bg-danger');
-                            progressBar.classList.add('bg-success');
-                        }
+                        finalTitle = 'Operation Completed';
+                        finalMessageHtml = `${status.message}<br><br><strong>Operation completed successfully.</strong>`;
+                    } else if (status.status === 'cancelled') {
+                        finalTitle = 'Operation Cancelled';
+                        finalMessageHtml = `${status.message}<br><br><strong>Operation cancelled.</strong>`;
                     }
-                    
-                    // Call the onComplete callback if provided
-                    if (onComplete && typeof onComplete === 'function') {
-                        onComplete(status);
+
+                    if (progressModalLabel) progressModalLabel.textContent = finalTitle;
+                    if (statusMessage) statusMessage.innerHTML = finalMessageHtml;
+
+                    // Remove existing dynamic buttons (like View Results) before potentially adding a new one
+                    const existingDynamicButton = modalFooter.querySelector('.btn-primary');
+                    if (existingDynamicButton) {
+                        existingDynamicButton.remove();
                     }
+
+                    // Call the onComplete callback if provided (only for 'completed' status)
+                    if (status.status === 'completed' && onComplete && typeof onComplete === 'function') {
+                        onComplete(status); // Pass the full status object
+                    }
+                } else if (status.status === 'cancelling') {
+                    // Disable cancel button if status is 'cancelling'
+                    currentCancelBtn.disabled = true;
+                    currentCancelBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Cancelling...';
                 }
+
             })
             .catch(error => {
                 console.error('Error checking operation status:', error);
                 clearInterval(pollInterval);
-                updateProgressModal(100, `Error checking status: ${error.message}`);
+                updateProgressModal(100, `Error checking status: ${error.message}`, { status: 'failed' });
+                currentCancelBtn.style.display = 'none'; // Hide cancel on error
             });
-    }, 1000); // Poll every second
-    
-    // Return the poll interval so it can be cleared if needed
+    }, 1500); // Poll slightly less frequently (1.5 seconds)
+
+    // Return the poll interval so it can be cleared if needed (e.g., if modal is closed manually)
+    progressModal.addEventListener('hidden.bs.modal', () => {
+        clearInterval(pollInterval); // Stop polling when modal is closed
+        console.log(`Polling stopped for operation ${operationId} due to modal close.`);
+    }, { once: true }); // Ensure listener is added only once per modal show
+
     return pollInterval;
 }
 
@@ -187,52 +251,57 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (operationId) {
                         // Start checking the operation status
                         checkOperationStatus(operationId, (status) => {
-                                // When the operation is complete, add a "View Results" button instead of auto-redirecting
-                                if (status.status === 'completed') {
-                                    const statusMessage = document.getElementById('operationStatusMessage');
-                                    const modalFooter = document.querySelector('#progressModal .modal-footer');
-                                    
-                                    // Update status message
-                                    if (statusMessage) {
-                                        statusMessage.innerHTML = `${status.message}<br><br><strong>Operation completed successfully.</strong>`;
+                                // onComplete callback now only runs for 'completed' status inside checkOperationStatus
+                                // We still need to handle adding the "View Results" button here
+                                const modalFooter = document.getElementById('progressModalFooter');
+                                if (modalFooter) {
+                                    // Remove any existing dynamic button first
+                                    const existingDynamicButton = modalFooter.querySelector('.btn-primary');
+                                    if (existingDynamicButton) {
+                                        existingDynamicButton.remove();
                                     }
-                                    
-                                    // Add a "View Results" button to the modal footer
-                                    if (modalFooter) {
-                                        // Remove any existing view results button
-                                        const existingButton = modalFooter.querySelector('.btn-primary');
-                                        if (existingButton) {
-                                            existingButton.remove();
-                                        }
-                                        
-                                        // Create and add the new button
+
+                                    // Add "View Results" or "View Letter" button only if completed successfully
+                                    if (status.status === 'completed') {
                                         const viewResultsButton = document.createElement('button');
                                         viewResultsButton.type = 'button';
-                                        viewResultsButton.className = 'btn btn-primary';
-                                        
-                                        if (status.type === 'motivation_letter_generation') {
+                                        viewResultsButton.className = 'btn btn-primary'; // Use primary for the action button
+
+                                        // Determine button text and action based on operation type or result data
+                                        if (status.type === 'motivation_letter_generation' && status.result?.html_file_path) {
                                             viewResultsButton.textContent = 'View Motivation Letter';
+                                            // Construct URL using operation ID (backend handles finding the result)
                                             viewResultsButton.addEventListener('click', () => {
-                                                window.location.href = `/view_motivation_letter/${operationId}`;
+                                                window.location.href = `/motivation_letter/view/${operationId}`;
                                             });
-                                        } else if (status.report_file) {
+                                        } else if (status.type === 'job_matching' && status.result?.report_file) {
                                             viewResultsButton.textContent = 'View Results';
                                             viewResultsButton.addEventListener('click', () => {
-                                                window.location.href = `/view_results/${status.report_file}`;
+                                                // Assuming report_file is relative path for URL
+                                                window.location.href = `/job_matching/view_results/${encodeURIComponent(status.result.report_file)}`;
+                                            });
+                                        } else if (status.type === 'combined_process' && status.result?.report_file) {
+                                            // Handle combined process result viewing if needed
+                                            viewResultsButton.textContent = 'View Combined Results';
+                                            viewResultsButton.addEventListener('click', () => {
+                                                window.location.href = `/job_matching/view_results/${encodeURIComponent(status.result.report_file)}`; // Assuming same endpoint
                                             });
                                         } else {
+                                            // Default fallback if no specific view action
                                             viewResultsButton.textContent = 'Reload Page';
                                             viewResultsButton.addEventListener('click', () => {
                                                 window.location.reload();
                                             });
                                         }
-                                        
-                                        modalFooter.prepend(viewResultsButton);
+                                        // Add the button before the 'Close' button
+                                        const closeButton = modalFooter.querySelector('.btn-secondary');
+                                        modalFooter.insertBefore(viewResultsButton, closeButton);
                                     }
                                 }
                         });
                     } else {
-                        // If no operation ID was found, just reload the page
+                        // If no operation ID was found in the initial response, reload or show error
+                        console.error("No operation_id found in the initial response.");
                         window.location.reload();
                     }
                 })

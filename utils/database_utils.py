@@ -100,6 +100,29 @@ def initialize_database():
             """)
             logger.info("Checked/Created MOTIVATION_LETTERS table.")
 
+            # --- Create Indexes ---
+            logger.info("Creating indexes...")
+            # Timestamp indexes for ordering dashboard lists
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_cvs_upload_timestamp ON CVS (upload_timestamp DESC);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_job_data_batches_timestamp ON JOB_DATA_BATCHES (batch_timestamp DESC);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_job_match_reports_timestamp ON JOB_MATCH_REPORTS (report_timestamp DESC);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_motivation_letters_timestamp ON MOTIVATION_LETTERS (generation_timestamp DESC);")
+
+            # Foreign Key indexes for potential joins/lookups
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_job_match_reports_cv_id ON JOB_MATCH_REPORTS (cv_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_job_match_reports_batch_id ON JOB_MATCH_REPORTS (job_data_batch_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_motivation_letters_cv_id ON MOTIVATION_LETTERS (cv_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_motivation_letters_report_id ON MOTIVATION_LETTERS (job_match_report_id);")
+
+            # Index for potential lookups by file paths (UNIQUE constraint might already create these, but explicit doesn't hurt)
+            # cursor.execute("CREATE INDEX IF NOT EXISTS idx_cvs_original_filepath ON CVS (original_filepath);") # Likely redundant due to UNIQUE
+            # cursor.execute("CREATE INDEX IF NOT EXISTS idx_job_data_batches_filepath ON JOB_DATA_BATCHES (data_filepath);") # Likely redundant due to UNIQUE
+            # cursor.execute("CREATE INDEX IF NOT EXISTS idx_job_match_reports_md_filepath ON JOB_MATCH_REPORTS (report_filepath_md);") # Likely redundant due to UNIQUE
+            # cursor.execute("CREATE INDEX IF NOT EXISTS idx_motivation_letters_json_filepath ON MOTIVATION_LETTERS (letter_filepath_json);") # Likely redundant due to UNIQUE
+
+            logger.info("Indexes created (if they didn't exist).")
+            # --- End Create Indexes ---
+
             conn.commit()
             logger.info("Database initialization complete.")
 

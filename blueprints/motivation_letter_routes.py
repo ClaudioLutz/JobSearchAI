@@ -10,6 +10,7 @@ import threading
 import urllib.parse
 import traceback
 import datetime
+import concurrent.futures # Added for ThreadPoolExecutor
 from pathlib import Path
 from flask import (
     Blueprint, request, redirect, url_for, flash, send_file, jsonify,
@@ -56,8 +57,9 @@ def sanitize_filename(name, length=30):
 def generate_motivation_letter_route():
     """Generate a motivation letter for a single job, handling manual text input."""
     try:
+        config = ConfigManager() # Instantiate config manager here
         # Get data from the form
-        cv_filename = request.form.get('cv_filename')
+        cv_filename = request.form.get('cv_filename') # This is the relative path
         job_url = request.form.get('job_url')
         report_file = request.form.get('report_file') # To redirect back to the correct results page
         manual_job_text = request.form.get('manual_job_text') # Get manual text if provided
@@ -71,14 +73,11 @@ def generate_motivation_letter_route():
             logger.error(f"Missing CV filename or job URL: cv_filename={cv_filename}, job_url={job_url}")
             return jsonify({'success': False, 'error': 'Missing CV filename or job URL'}), 400
 
-        # Check if the CV summary file exists (relative to app root)
-        # Extract base filename from cv_filename (which might be a relative path like 'input/Lebenslauf.pdf')
-        cv_filename_only = os.path.basename(cv_filename)  # Get just the filename part (e.g. 'Lebenslauf.pdf')
-        cv_base_filename = os.path.splitext(cv_filename_only)[0]  # Remove extension (e.g. 'Lebenslauf')
-        summary_path = Path(current_app.root_path) / 'process_cv/cv-data/processed' / f"{cv_base_filename}_summary.txt"
-        if not summary_path.exists():
-            logger.error(f"CV summary file not found: {summary_path}")
-            return jsonify({'success': False, 'error': f'CV summary file not found: {summary_path.name}'}), 400
+        # Check if the CV summary file exists using the helper function
+        # Note: get_cv_summary handles path construction and logging if not found
+        if not current_app.get_cv_summary(cv_filename):
+             # Error is logged within get_cv_summary if file not found/readable
+             return jsonify({'success': False, 'error': f'CV summary file not found or readable for {cv_filename}'}), 400
 
         # --- Check if letter already exists --- ONLY if not using manual text input ---
         if not manual_job_text:
@@ -88,9 +87,11 @@ def generate_motivation_letter_route():
             if job_details_check and 'Job Title' in job_details_check:
                 job_title = job_details_check['Job Title']
                 sanitized_job_title = sanitize_filename(job_title)
-                letters_dir = Path(current_app.root_path) / 'motivation_letters' # Check existing files based on project root for now
-                html_path = letters_dir / f"motivation_letter_{sanitized_job_title}.html"
-                json_path = letters_dir / f"motivation_letter_{sanitized_job_title}.json"
+                # Use config path for consistency
+                letters_dir_rel = Path(config.get_path('motivation_letters'))
+                letters_dir_abs = Path(config.get_path('data_root')) / letters_dir_rel
+                html_path = letters_dir_abs / f"motivation_letter_{sanitized_job_title}.html"
+                json_path = letters_dir_abs / f"motivation_letter_{sanitized_job_title}.json"
 
                 if html_path.is_file() and json_path.is_file():
                     logger.info(f"Motivation letter already exists for job title: {job_title} (Automatic check)")
@@ -108,20 +109,201 @@ def generate_motivation_letter_route():
         app_instance = current_app._get_current_object() # Get app instance for context
         config = ConfigManager() # Get config instance
 
-        operation_id = start_operation('motivation_letter_generation')
+        # Create a cancellation event for this operation
+        cancel_event = threading.Event()
+        operation_id = start_operation('motivation_letter_generation', cancel_event=cancel_event) # Pass event to start_operation
 
-        # Define background task function (takes app context and manual_job_text)
-        def generate_motivation_letter_task(app, op_id, cv_name, job_url_task, report_file_task, manual_job_text_task):
+        # Define background task function (takes app context, manual_job_text, and cancel_event)
+        def generate_motivation_letter_task(app, op_id, cv_name, job_url_task, report_file_task, manual_job_text_task, cancel_event_task):
             with app.app_context(): # Establish app context for the thread
                 job_details = None
-                cv_summary_text = None # Initialize variable for CV summary content
                 # Use the database_connection context manager
                 try:
-                    # Database operations will happen within this 'with' block
+                    # --- Load CV Summary using helper (checks cache) ---
+                    # cv_name is the relative path passed to the task
+                    cv_summary_text = current_app.get_cv_summary(cv_name)
+                    if cv_summary_text is None:
+                        # get_cv_summary already logs errors/warnings
+                        complete_operation(op_id, 'failed', f'Could not load CV summary for {cv_name}.')
+                        return
+                    # --- Check if summary is empty ---
+                    if not cv_summary_text or not cv_summary_text.strip():
+                         logger.error(f"Retrieved CV summary for {cv_name} is empty. Cannot generate letter without CV content.")
+                         complete_operation(op_id, 'failed', f'CV summary for {cv_name} is empty. Please re-process the CV.')
+                         return
+                    # --- End Check if summary is empty ---
+                    logger.info(f"Successfully obtained non-empty CV summary for {cv_name} (from cache or file).")
+
+                    # --- Cancellation Check 1 ---
+                    if cancel_event_task.is_set():
+                        logger.info(f"Operation {op_id} cancelled before fetching/structuring job details.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        return
+
+                    # --- Step 1: Get or Structure Job Details ---
+                    scraped_data_rel_path = None # Initialize path for saved job details (relative to data_root)
+                    job_title_for_file = "unknown_job" # Default filename part
+                    company_name_for_db = None # Initialize company name
+
+                    if manual_job_text_task:
+                        update_operation_progress(op_id, 10, 'processing', 'Structuring manual text...')
+                        logger.info(f"Structuring manually provided text for job URL: {job_url_task}")
+                        # TODO: Consider adding cancellation check within structure_text_with_openai if it's long-running
+                        job_details = structure_text_with_openai(manual_job_text_task, job_url_task, source_type="Manual Input")
+
+                        if cancel_event_task.is_set(): # Check after potentially long call
+                            logger.info(f"Operation {op_id} cancelled after structuring manual text.")
+                            complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                            return
+
+                        if not job_details:
+                            logger.error("Failed to structure manually provided text.")
+                            complete_operation(op_id, 'failed', 'Failed to structure manually provided text.')
+                            return
+                        if not has_sufficient_content(job_details):
+                             logger.warning("Manually provided text structured, but content might be insufficient.")
+                             update_operation_progress(op_id, 20, 'processing', 'Manual text structured (warning: content may be insufficient). Generating letter...')
+                        else:
+                             update_operation_progress(op_id, 20, 'processing', 'Manual text structured successfully. Generating letter...')
+                    else:
+                        update_operation_progress(op_id, 10, 'processing', 'Fetching/Scraping job details...')
+                        logger.info(f"Attempting automatic job detail fetching for URL: {job_url_task}")
+                        # TODO: Consider adding cancellation check within get_job_details if it's long-running (e.g., network requests)
+                        job_details = get_job_details(job_url_task)
+
+                        if cancel_event_task.is_set(): # Check after potentially long call
+                            logger.info(f"Operation {op_id} cancelled after fetching job details.")
+                            complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                            return
+
+                        if not job_details or not has_sufficient_content(job_details):
+                             logger.error(f"Failed to fetch sufficient job details automatically for {job_url_task}.")
+                             complete_operation(op_id, 'failed', 'Failed to fetch sufficient job details automatically.')
+                             return
+                        update_operation_progress(op_id, 20, 'processing', 'Job details fetched successfully. Generating letter...')
+
+                    # --- Cancellation Check 2 ---
+                    if cancel_event_task.is_set():
+                        logger.info(f"Operation {op_id} cancelled before saving job details JSON.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        return
+
+                    # --- Save Job Details JSON ---
+                    if job_details:
+                        job_title_for_file = sanitize_filename(job_details.get('Job Title', 'unknown_job'))
+                        company_name_for_db = job_details.get('Company Name') # Get company name for DB
+                        # Use config path relative to data_root for storage consistency
+                        letters_dir_rel = Path(config.get_path('motivation_letters')) # Path relative to data_root
+                        letters_dir_abs = Path(config.get_path('data_root')) / letters_dir_rel # Absolute path for writing
+                        letters_dir_abs.mkdir(parents=True, exist_ok=True)
+
+                        scraped_data_filename = f"motivation_letter_{job_title_for_file}_scraped_data.json"
+                        scraped_data_abs_path = letters_dir_abs / scraped_data_filename
+                        try:
+                            with open(scraped_data_abs_path, 'w', encoding='utf-8') as f_scrape:
+                                json.dump(job_details, f_scrape, ensure_ascii=False, indent=2)
+                            # Store path relative to data_root in DB
+                            scraped_data_rel_path = str(letters_dir_rel / scraped_data_filename)
+                            logger.info(f"Saved job details to: {scraped_data_abs_path} (DB path: {scraped_data_rel_path})")
+                        except Exception as save_err:
+                            logger.error(f"Error saving job details JSON to {scraped_data_abs_path}: {save_err}", exc_info=True)
+                            # Decide if this is fatal or just a warning
+
+                    # --- Cancellation Check 3 ---
+                    if cancel_event_task.is_set():
+                        logger.info(f"Operation {op_id} cancelled before generating letter content.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        return
+
+                    # --- Step 2: Generate Letter using job_details and cv_summary_text ---
+                    logger.info(f"Calling letter_generation_utils.generate_motivation_letter for CV '{cv_name}'")
+                    # TODO: Consider adding cancellation check within generate_motivation_letter if it's long-running (OpenAI call)
+                    # Function now returns (success, result_or_error)
+                    success, result_or_error = generate_motivation_letter(cv_summary_text, job_details)
+
+                    if cancel_event_task.is_set(): # Check after potentially long call
+                        logger.info(f"Operation {op_id} cancelled after generating letter content.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        return
+
+                    if not success:
+                        error_message = result_or_error if isinstance(result_or_error, str) else "Unknown generation error"
+                        logger.error(f"Failed to generate motivation letter: {error_message}")
+                        complete_operation(op_id, 'failed', f'Failed to generate motivation letter: {error_message}')
+                        return
+
+                    # If successful, result_or_error is the result dictionary
+                    result = result_or_error
+                    update_operation_progress(op_id, 70, 'processing', 'Formatting motivation letter...')
+                    logger.info(f"Successfully generated motivation letter content")
+
+                    # Check for expected keys in the result dictionary
+                    has_json = isinstance(result, dict) and 'motivation_letter_json' in result and 'json_file_path' in result
+                    docx_file_path_rel_db = None # Relative path for DB (data_root)
+                    json_file_path_rel_db = None # Relative path for DB (data_root)
+                    html_file_path_rel_db = None # Relative path for DB (data_root)
+
+                    # Paths relative to project root for operation_status result (UI links)
+                    docx_file_path_rel_ui = None
+                    json_file_path_rel_ui = None
+                    html_file_path_rel_ui = None
+
+                    if has_json:
+                        json_file_path_abs_str = result['json_file_path']
+                        logger.info(f"Generated JSON motivation letter: {json_file_path_abs_str}")
+                        update_operation_progress(op_id, 80, 'processing', 'Creating Word document...')
+                        try:
+                            abs_json_path = Path(json_file_path_abs_str)
+                            if not abs_json_path.is_absolute():
+                                abs_json_path = Path(app.root_path) / json_file_path_abs_str
+
+                            # Calculate relative paths for DB (data_root)
+                            json_file_path_rel_db = str(abs_json_path.relative_to(config.get_path('data_root')))
+                            # Calculate relative paths for UI (project root)
+                            json_file_path_rel_ui = str(abs_json_path.relative_to(app.root_path))
+
+                            abs_docx_path = abs_json_path.with_suffix('.docx')
+                            docx_path_abs = json_to_docx(result['motivation_letter_json'], output_path=str(abs_docx_path))
+                            if docx_path_abs:
+                                 # Calculate relative paths for DB (data_root)
+                                 docx_file_path_rel_db = str(Path(docx_path_abs).relative_to(config.get_path('data_root')))
+                                 # Calculate relative paths for UI (project root)
+                                 docx_file_path_rel_ui = str(Path(docx_path_abs).relative_to(app.root_path))
+                                 logger.info(f"Generated Word document: {docx_path_abs}")
+                            else:
+                                 logger.warning(f"json_to_docx returned None for {abs_json_path}")
+                        except Exception as docx_e:
+                             logger.error(f"Error generating DOCX from JSON {abs_json_path}: {docx_e}", exc_info=True)
+                             # Optionally check cancel_event here if DOCX generation is slow
+                    else:
+                        logger.info(f"Generated HTML motivation letter: {result.get('file_path', 'N/A')}")
+
+                    # --- Cancellation Check 4 ---
+                    if cancel_event_task.is_set():
+                        logger.info(f"Operation {op_id} cancelled before database insertion.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        # Note: Files might have been created (JSON, DOCX, HTML). Consider cleanup?
+                        return
+
+                    update_operation_progress(op_id, 95, 'processing', 'Finalizing and saving to database...')
+
+                    html_file_path_abs_str = result.get('html_file_path') if has_json else result.get('file_path')
+                    if html_file_path_abs_str:
+                         abs_html_path = Path(html_file_path_abs_str)
+                         if not abs_html_path.is_absolute():
+                              abs_html_path = Path(app.root_path) / html_file_path_abs_str
+                         # Calculate relative paths for DB (data_root)
+                         html_file_path_rel_db = str(abs_html_path.relative_to(config.get_path('data_root')))
+                         # Calculate relative paths for UI (project root)
+                         html_file_path_rel_ui = str(abs_html_path.relative_to(app.root_path))
+
+
+                    # --- Step 3: Insert into Database ---
+                    # Database operations happen within this 'with' block
                     with database_connection() as conn:
                         cursor = conn.cursor()
 
-                        # --- Get CV ID ---
+                        # --- Get CV ID --- (Moved inside DB block)
                         cv_id = None
                         try:
                             # Assuming cv_name is the base filename without extension, find matching record
@@ -138,7 +320,7 @@ def generate_motivation_letter_route():
                             logger.error(f"Database error fetching cv_id for {cv_name}: {db_err}", exc_info=True)
                             # Decide if fatal
 
-                        # --- Get Job Match Report ID (if report_file_task is provided) ---
+                        # --- Get Job Match Report ID (if report_file_task is provided) --- (Moved inside DB block)
                         job_match_report_id = None
                         if report_file_task:
                             try:
@@ -160,143 +342,7 @@ def generate_motivation_letter_route():
                             except Exception as db_err:
                                 logger.error(f"Database error fetching job_match_report_id for {report_file_task}: {db_err}", exc_info=True)
 
-                        # --- Load CV Summary --- (Outside DB connection block)
-                        # Extract base filename from cv_name (which might be a relative path like 'input/Lebenslauf.pdf')
-                        # First get the filename without the directory path, then remove the extension
-                        cv_filename_only = os.path.basename(cv_name)  # Get just the filename part (e.g. 'Lebenslauf.pdf')
-                        cv_base_filename = os.path.splitext(cv_filename_only)[0]  # Remove extension (e.g. 'Lebenslauf')
-                        summary_path_task = Path(app.root_path) / 'process_cv/cv-data/processed' / f"{cv_base_filename}_summary.txt" # Use base filename
-                        if not summary_path_task.is_file():
-                             logger.error(f"CV summary file not found inside task: {summary_path_task} (derived from cv_name: {cv_name})")
-                             complete_operation(op_id, 'failed', f'CV summary file not found: {cv_base_filename}_summary.txt')
-                             return
-                        try:
-                            with open(summary_path_task, 'r', encoding='utf-8') as f_cv:
-                                cv_summary_text = f_cv.read()
-                            if not cv_summary_text:
-                                 raise ValueError("CV summary file is empty.")
-                            logger.info(f"Successfully loaded CV summary for {cv_name}")
-                        except Exception as cv_load_err:
-                             logger.error(f"Error reading CV summary file {summary_path_task}: {cv_load_err}", exc_info=True)
-                             complete_operation(op_id, 'failed', f'Error reading CV summary: {cv_load_err}')
-                             return
-
-                        # --- Step 1: Get or Structure Job Details --- (Outside DB connection block)
-                        scraped_data_rel_path = None # Initialize path for saved job details (relative to data_root)
-                        job_title_for_file = "unknown_job" # Default filename part
-                        company_name_for_db = None # Initialize company name
-
-                        if manual_job_text_task:
-                            update_operation_progress(op_id, 10, 'processing', 'Structuring manual text...')
-                            logger.info(f"Structuring manually provided text for job URL: {job_url_task}")
-                            job_details = structure_text_with_openai(manual_job_text_task, job_url_task, source_type="Manual Input")
-
-                            if not job_details:
-                                logger.error("Failed to structure manually provided text.")
-                                complete_operation(op_id, 'failed', 'Failed to structure manually provided text.')
-                                return
-                            if not has_sufficient_content(job_details):
-                                 logger.warning("Manually provided text structured, but content might be insufficient.")
-                                 update_operation_progress(op_id, 20, 'processing', 'Manual text structured (warning: content may be insufficient). Generating letter...')
-                            else:
-                                 update_operation_progress(op_id, 20, 'processing', 'Manual text structured successfully. Generating letter...')
-                        else:
-                            update_operation_progress(op_id, 10, 'processing', 'Fetching/Scraping job details...')
-                            logger.info(f"Attempting automatic job detail fetching for URL: {job_url_task}")
-                            job_details = get_job_details(job_url_task)
-
-                            if not job_details or not has_sufficient_content(job_details):
-                                 logger.error(f"Failed to fetch sufficient job details automatically for {job_url_task}.")
-                                 complete_operation(op_id, 'failed', 'Failed to fetch sufficient job details automatically.')
-                                 return
-                            update_operation_progress(op_id, 20, 'processing', 'Job details fetched successfully. Generating letter...')
-
-                        # --- Save Job Details JSON --- (Outside DB connection block)
-                        if job_details:
-                            job_title_for_file = sanitize_filename(job_details.get('Job Title', 'unknown_job'))
-                            company_name_for_db = job_details.get('Company Name') # Get company name for DB
-                            # Use config path relative to data_root for storage consistency
-                            letters_dir_rel = Path(config.get_path('motivation_letters')) # Path relative to data_root
-                            letters_dir_abs = Path(config.get_path('data_root')) / letters_dir_rel # Absolute path for writing
-                            letters_dir_abs.mkdir(parents=True, exist_ok=True)
-
-                            scraped_data_filename = f"motivation_letter_{job_title_for_file}_scraped_data.json"
-                            scraped_data_abs_path = letters_dir_abs / scraped_data_filename
-                            try:
-                                with open(scraped_data_abs_path, 'w', encoding='utf-8') as f_scrape:
-                                    json.dump(job_details, f_scrape, ensure_ascii=False, indent=2)
-                                # Store path relative to data_root in DB
-                                scraped_data_rel_path = str(letters_dir_rel / scraped_data_filename)
-                                logger.info(f"Saved job details to: {scraped_data_abs_path} (DB path: {scraped_data_rel_path})")
-                            except Exception as save_err:
-                                logger.error(f"Error saving job details JSON to {scraped_data_abs_path}: {save_err}", exc_info=True)
-                                # Decide if this is fatal or just a warning
-
-                        # --- Step 2: Generate Letter using job_details and cv_summary_text --- (Outside DB connection block)
-                        logger.info(f"Calling letter_generation_utils.generate_motivation_letter for CV '{cv_name}'")
-                        result = generate_motivation_letter(cv_summary_text, job_details) # Pass the actual summary text
-
-                        if not result:
-                            logger.error("Failed to generate motivation letter (letter_generation_utils.generate_motivation_letter returned None)")
-                            complete_operation(op_id, 'failed', 'Failed to generate motivation letter')
-                            return
-
-                        update_operation_progress(op_id, 70, 'processing', 'Formatting motivation letter...')
-                        logger.info(f"Successfully generated motivation letter content")
-
-                        has_json = 'motivation_letter_json' in result and 'json_file_path' in result
-                        docx_file_path_rel_db = None # Relative path for DB (data_root)
-                        json_file_path_rel_db = None # Relative path for DB (data_root)
-                        html_file_path_rel_db = None # Relative path for DB (data_root)
-
-                        # Paths relative to project root for operation_status result (UI links)
-                        docx_file_path_rel_ui = None
-                        json_file_path_rel_ui = None
-                        html_file_path_rel_ui = None
-
-                        if has_json:
-                            json_file_path_abs_str = result['json_file_path']
-                            logger.info(f"Generated JSON motivation letter: {json_file_path_abs_str}")
-                            update_operation_progress(op_id, 80, 'processing', 'Creating Word document...')
-                            try:
-                                abs_json_path = Path(json_file_path_abs_str)
-                                if not abs_json_path.is_absolute():
-                                    abs_json_path = Path(app.root_path) / json_file_path_abs_str
-
-                                # Calculate relative paths for DB (data_root)
-                                json_file_path_rel_db = str(abs_json_path.relative_to(config.get_path('data_root')))
-                                # Calculate relative paths for UI (project root)
-                                json_file_path_rel_ui = str(abs_json_path.relative_to(app.root_path))
-
-                                abs_docx_path = abs_json_path.with_suffix('.docx')
-                                docx_path_abs = json_to_docx(result['motivation_letter_json'], output_path=str(abs_docx_path))
-                                if docx_path_abs:
-                                     # Calculate relative paths for DB (data_root)
-                                     docx_file_path_rel_db = str(Path(docx_path_abs).relative_to(config.get_path('data_root')))
-                                     # Calculate relative paths for UI (project root)
-                                     docx_file_path_rel_ui = str(Path(docx_path_abs).relative_to(app.root_path))
-                                     logger.info(f"Generated Word document: {docx_path_abs}")
-                                else:
-                                     logger.warning(f"json_to_docx returned None for {abs_json_path}")
-                            except Exception as docx_e:
-                                 logger.error(f"Error generating DOCX from JSON {abs_json_path}: {docx_e}", exc_info=True)
-                        else:
-                            logger.info(f"Generated HTML motivation letter: {result.get('file_path', 'N/A')}")
-
-                        update_operation_progress(op_id, 95, 'processing', 'Finalizing...')
-
-                        html_file_path_abs_str = result.get('html_file_path') if has_json else result.get('file_path')
-                        if html_file_path_abs_str:
-                             abs_html_path = Path(html_file_path_abs_str)
-                             if not abs_html_path.is_absolute():
-                                  abs_html_path = Path(app.root_path) / html_file_path_abs_str
-                             # Calculate relative paths for DB (data_root)
-                             html_file_path_rel_db = str(abs_html_path.relative_to(config.get_path('data_root')))
-                             # Calculate relative paths for UI (project root)
-                             html_file_path_rel_ui = str(abs_html_path.relative_to(app.root_path))
-
-
-                        # --- Step 3: Insert into Database --- (Back inside DB connection block)
+                        # --- Insert Letter Record ---
                         if html_file_path_rel_db or json_file_path_rel_db: # Only insert if at least one file was created
                             try:
                                 insert_data = {
@@ -305,10 +351,11 @@ def generate_motivation_letter_route():
                                     "job_title": job_details.get('Job Title', 'N/A') if job_details else 'N/A',
                                     "company_name": company_name_for_db,
                                     "generation_timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                "letter_filepath_html": html_file_path_rel_db,
-                                "letter_filepath_json": json_file_path_rel_db,
-                                "letter_filepath_docx": docx_file_path_rel_db,
-                                "scraped_data_filepath": scraped_data_rel_path
+                                    "letter_filepath_html": html_file_path_rel_db,
+                                    "letter_filepath_json": json_file_path_rel_db,
+                                    "letter_filepath_docx": docx_file_path_rel_db,
+                                    "scraped_data_filepath": scraped_data_rel_path,
+                                    "job_url": job_url_task # Store the job URL
                                 }
                                 columns = ', '.join(insert_data.keys())
                                 placeholders = ', '.join('?' * len(insert_data))
@@ -320,8 +367,15 @@ def generate_motivation_letter_route():
                                 logger.error(f"Database error inserting motivation letter record: {db_insert_err}", exc_info=True)
                                 # Rollback happens automatically due to exception within 'with database_connection()'
                                 # Decide if this should mark the operation as failed
+                                # No cancellation check needed within DB transaction (should be fast)
 
                     # --- Finalize Operation Status --- (Outside DB connection block)
+                    if cancel_event_task.is_set(): # Final check before completion
+                        logger.info(f"Operation {op_id} cancelled just before final completion.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        # Note: DB record might have been inserted. Consider cleanup?
+                        return
+
                     complete_operation(op_id, 'completed', 'Motivation letter generated successfully')
                     # Store paths relative to project root for UI/download links
                     operation_status[op_id]['result'] = {
@@ -336,10 +390,17 @@ def generate_motivation_letter_route():
                 # The 'with database_connection()' handles commit/rollback/close automatically
                 except Exception as e:
                     logger.error(f'Error in motivation letter generation task: {str(e)}', exc_info=True)
-                    complete_operation(op_id, 'failed', f'Error generating motivation letter: {str(e)}')
+                    # Check if cancelled before reporting failure
+                    if not cancel_event_task.is_set():
+                        complete_operation(op_id, 'failed', f'Error generating motivation letter: {str(e)}')
+                    else:
+                        # If cancelled during the exception handling? Unlikely but possible.
+                        logger.info(f"Operation {op_id} was cancelled during error handling for: {str(e)}")
+                        complete_operation(op_id, 'cancelled', f'Operation cancelled during error: {str(e)}')
                     # Rollback is handled by the context manager on exception
 
-        thread_args = (app_instance, operation_id, cv_filename, job_url, report_file, manual_job_text)
+        # Pass the cancel_event to the thread arguments
+        thread_args = (app_instance, operation_id, cv_filename, job_url, report_file, manual_job_text, cancel_event)
         thread = threading.Thread(target=generate_motivation_letter_task, args=thread_args)
         thread.daemon = True
         thread.start()
@@ -353,16 +414,17 @@ def generate_motivation_letter_route():
 
 @motivation_letter_bp.route('/generate_multiple', methods=['POST'])
 def generate_multiple_letters():
-    """Generate motivation letters for multiple selected jobs"""
-    # NOTE: This function also needs refactoring to use database_connection context manager
-    # For now, focusing on the single generation and delete routes.
+    """Generate motivation letters for multiple selected jobs using a ThreadPoolExecutor."""
+    # Define max concurrent workers for bulk generation
+    MAX_WORKERS = 5 # Limit concurrent threads
+
     data = request.get_json()
     if not data:
         logger.error("Invalid request format for /generate_multiple_letters")
         return jsonify({'error': 'Invalid request format'}), 400
 
     job_urls = data.get('job_urls')
-    cv_base_name = data.get('cv_filename')
+    cv_base_name = data.get('cv_filename') # This is the relative path
 
     if not job_urls or not isinstance(job_urls, list) or not cv_base_name:
         logger.error(f"Missing job_urls or cv_filename in request: {data}")
@@ -370,40 +432,28 @@ def generate_multiple_letters():
 
     logger.info(f"Received request to generate {len(job_urls)} letters for CV: {cv_base_name}")
 
-    # Check if the corresponding CV summary exists
-    # Extract base filename from cv_base_name (which might be a relative path like 'input/Lebenslauf.pdf')
-    cv_filename_only = os.path.basename(cv_base_name)  # Get just the filename part (e.g. 'Lebenslauf.pdf')
-    cv_base_filename = os.path.splitext(cv_filename_only)[0]  # Remove extension (e.g. 'Lebenslauf')
-    summary_path = Path(current_app.root_path) / 'process_cv/cv-data/processed' / f"{cv_base_filename}_summary.txt"
-    if not summary_path.exists():
-        logger.error(f"Required CV summary file not found: {summary_path}")
-        return jsonify({'error': f'Required CV summary file not found for {cv_base_filename}'}), 400
+    # Load the CV summary ONCE before starting tasks, using the helper
+    cv_summary_text = current_app.get_cv_summary(cv_base_name)
+    if cv_summary_text is None:
+        logger.error(f"Could not load or generate CV summary for {cv_base_name} before starting bulk generation.")
+        return jsonify({'error': f'Could not load or generate CV summary for {cv_base_name}.'}), 500
+    logger.info(f"Successfully obtained CV summary for {cv_base_name} for bulk generation.")
 
     results = {'success_count': 0, 'errors': []}
-    threads = []
     lock = threading.Lock()
     app_instance = current_app._get_current_object()
-    config = ConfigManager() # Get config instance for threads
+    config = ConfigManager() # Get config instance
 
-    cv_summary_text = None
-    try:
-        summary_path_main = Path(app_instance.root_path) / 'process_cv/cv-data/processed' / f"{cv_base_filename}_summary.txt"
-        with open(summary_path_main, 'r', encoding='utf-8') as f_cv_main:
-            cv_summary_text = f_cv_main.read()
-        if not cv_summary_text:
-            raise ValueError("CV summary file is empty.")
-        logger.info(f"Successfully loaded CV summary for {cv_base_name} for bulk generation.")
-    except Exception as cv_load_err:
-        logger.error(f"Error reading CV summary file {summary_path_main} before starting threads: {cv_load_err}", exc_info=True)
-        return jsonify({'error': f'Error reading CV summary: {cv_load_err}'}), 500
-
-    def generate_single_letter_task(app, job_url, cv_summary_content, cv_name_for_log):
-        nonlocal results
-        with app.app_context():
+    # Define the task function separately to be used with ThreadPoolExecutor
+    # It now receives the pre-loaded summary text
+    def generate_single_letter_task(app_context, job_url, cv_summary_content, cv_name_for_log, config_instance, lock_instance, results_dict):
+        """Task to generate a single letter, designed for ThreadPoolExecutor."""
+        # Note: This function now takes lock and results dict explicitly
+        with app_context(): # Use the passed app context
             try:
                 if not job_url or job_url == 'N/A' or not job_url.startswith('http'):
                     logger.warning(f"Skipping invalid job URL: {job_url}")
-                    with lock: results['errors'].append(job_url)
+                    with lock_instance: results_dict['errors'].append(job_url)
                     return
 
                 # Use the database_connection context manager
@@ -429,22 +479,25 @@ def generate_multiple_letters():
 
                 if not job_details or not has_sufficient_content(job_details):
                      logger.error(f"Bulk: Failed to fetch sufficient job details for {job_url}.")
-                     with lock: results['errors'].append(job_url)
+                     with lock_instance: results_dict['errors'].append(job_url)
                      return
 
                 logger.info(f"Bulk: Calling generate_motivation_letter for CV '{cv_name_for_log}' and URL '{job_url}'")
-                result = generate_motivation_letter(cv_summary_content, job_details)
+                # TODO: Consider adding cancellation check within generate_motivation_letter if it becomes very long
+                # Function now returns (success, result_or_error)
+                success, result_or_error = generate_motivation_letter(cv_summary_content, job_details)
 
-                if result:
+                if success:
+                    result = result_or_error # result is the dictionary
                     logger.info(f"Bulk: Generator returned result for URL: {job_url}")
-                    with lock: results['success_count'] += 1
+                    with lock_instance: results_dict['success_count'] += 1
 
                     # --- Save Job Details JSON ---
                     scraped_data_rel_path = None
                     job_title_for_file = sanitize_filename(job_details.get('Job Title', 'unknown_job'))
                     company_name_for_db = job_details.get('Company Name')
-                    letters_dir_rel = Path(config.get_path('motivation_letters'))
-                    letters_dir_abs = Path(config.get_path('data_root')) / letters_dir_rel
+                    letters_dir_rel = Path(config_instance.get_path('motivation_letters')) # Use passed config
+                    letters_dir_abs = Path(config_instance.get_path('data_root')) / letters_dir_rel # Use passed config
                     letters_dir_abs.mkdir(parents=True, exist_ok=True)
                     scraped_data_filename = f"motivation_letter_{job_title_for_file}_scraped_data.json"
                     scraped_data_abs_path = letters_dir_abs / scraped_data_filename
@@ -455,6 +508,7 @@ def generate_multiple_letters():
                         logger.info(f"Bulk: Saved job details to: {scraped_data_abs_path} (DB path: {scraped_data_rel_path})")
                     except Exception as save_err:
                         logger.error(f"Bulk: Error saving job details JSON to {scraped_data_abs_path}: {save_err}")
+                        # Consider if this should add to errors list
 
                     # --- Calculate Paths and Insert into DB ---
                     has_json = 'motivation_letter_json' in result and 'json_file_path' in result
@@ -465,13 +519,13 @@ def generate_multiple_letters():
                     if has_json:
                         try:
                             abs_json_path = Path(result['json_file_path'])
-                            if not abs_json_path.is_absolute(): abs_json_path = Path(app.root_path) / result['json_file_path']
-                            json_file_path_rel_db = str(abs_json_path.relative_to(config.get_path('data_root')))
+                            if not abs_json_path.is_absolute(): abs_json_path = Path(app_context.root_path) / result['json_file_path'] # Use app_context
+                            json_file_path_rel_db = str(abs_json_path.relative_to(config_instance.get_path('data_root'))) # Use passed config
 
                             abs_docx_path = abs_json_path.with_suffix('.docx')
                             docx_path = json_to_docx(result['motivation_letter_json'], output_path=str(abs_docx_path))
                             if docx_path:
-                                docx_file_path_rel_db = str(Path(docx_path).relative_to(config.get_path('data_root')))
+                                docx_file_path_rel_db = str(Path(docx_path).relative_to(config_instance.get_path('data_root'))) # Use passed config
                                 logger.info(f"Bulk: Generated Word document: {docx_path} for URL: {job_url}")
                             else:
                                 logger.warning(f"Bulk: Failed to generate Word document for URL: {job_url}")
@@ -481,8 +535,8 @@ def generate_multiple_letters():
                     html_file_path_abs_str = result.get('html_file_path') if has_json else result.get('file_path')
                     if html_file_path_abs_str:
                         abs_html_path = Path(html_file_path_abs_str)
-                        if not abs_html_path.is_absolute(): abs_html_path = Path(app.root_path) / html_file_path_abs_str
-                        html_file_path_rel_db = str(abs_html_path.relative_to(config.get_path('data_root')))
+                        if not abs_html_path.is_absolute(): abs_html_path = Path(app_context.root_path) / html_file_path_abs_str # Use app_context
+                        html_file_path_rel_db = str(abs_html_path.relative_to(config_instance.get_path('data_root'))) # Use passed config
 
                     # Insert into database with the database_connection context manager
                     if html_file_path_rel_db or json_file_path_rel_db:
@@ -498,7 +552,8 @@ def generate_multiple_letters():
                                     "letter_filepath_html": html_file_path_rel_db,
                                     "letter_filepath_json": json_file_path_rel_db,
                                     "letter_filepath_docx": docx_file_path_rel_db,
-                                    "scraped_data_filepath": scraped_data_rel_path
+                                    "scraped_data_filepath": scraped_data_rel_path,
+                                    "job_url": job_url # Store job URL
                                 }
                                 columns = ', '.join(insert_data.keys())
                                 placeholders = ', '.join('?' * len(insert_data))
@@ -509,20 +564,27 @@ def generate_multiple_letters():
                             except Exception as db_insert_err:
                                 logger.error(f"Bulk: DB error inserting record for {job_url}: {db_insert_err}", exc_info=True)
                                 # Rollback happens automatically on exception within 'with database_connection()'
-                else:
-                    logger.error(f"Bulk: Failed to generate letter (generate_motivation_letter returned None) for URL: {job_url}")
-                    with lock: results['errors'].append(job_url)
+                                # Consider adding URL to errors list here?
+                                with lock_instance: results_dict['errors'].append(f"{job_url} (DB Insert Error)")
+                else: # Handle generation failure
+                    error_message = result_or_error if isinstance(result_or_error, str) else "Unknown generation error"
+                    logger.error(f"Bulk: Failed to generate letter for URL: {job_url}. Error: {error_message}")
+                    with lock_instance: results_dict['errors'].append(f"{job_url} ({error_message})")
             except Exception as e:
                 logger.error(f"Bulk: Exception generating letter for URL {job_url}: {str(e)}", exc_info=True)
-                with lock: results['errors'].append(job_url)
+                with lock_instance: results_dict['errors'].append(job_url)
 
-    for url in job_urls:
-        thread = threading.Thread(target=generate_single_letter_task, args=(app_instance, url, cv_summary_text, cv_base_name))
-        threads.append(thread)
-        thread.start()
+    # Use ThreadPoolExecutor to manage threads
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        # Create futures by submitting tasks
+        # Pass necessary context/objects to each task explicitly
+        futures = [executor.submit(generate_single_letter_task, app_instance.app_context(), url, cv_summary_text, cv_base_name, config, lock, results) for url in job_urls]
 
-    for thread in threads:
-        thread.join()
+        # Wait for all futures to complete (optional, as executor shutdown waits by default)
+        concurrent.futures.wait(futures)
+        # Note: Error handling for exceptions raised *within* tasks needs care.
+        # The current task catches exceptions and updates the shared 'results' dict.
+        # If tasks raised exceptions directly, you'd check future.exception().
 
     logger.info(f"Multiple letter generation complete. Success: {results['success_count']}, Failures: {len(results['errors'])}")
     return jsonify(results)
@@ -530,14 +592,17 @@ def generate_multiple_letters():
 
 @motivation_letter_bp.route('/generate_multiple_emails', methods=['POST'])
 def generate_multiple_emails():
-    """Generate email texts for multiple selected jobs and update their JSON files."""
+    """Generate email texts for multiple selected jobs and update their JSON files using ThreadPoolExecutor."""
+    # Define max concurrent workers for bulk email generation
+    MAX_WORKERS_EMAIL = 5 # Limit concurrent threads
+
     data = request.get_json()
     if not data:
         logger.error("Invalid request format for /generate_multiple_emails")
         return jsonify({'error': 'Invalid request format'}), 400
 
     job_urls = data.get('job_urls')
-    cv_base_name = data.get('cv_filename')
+    cv_base_name = data.get('cv_filename') # This is the relative path
 
     if not job_urls or not isinstance(job_urls, list) or not cv_base_name:
         logger.error(f"Missing job_urls or cv_filename in request: {data}")
@@ -545,63 +610,55 @@ def generate_multiple_emails():
 
     logger.info(f"Received request to generate {len(job_urls)} email texts for CV: {cv_base_name}")
 
-    cv_summary = None
-    try:
-        # Extract base filename from cv_base_name (which might be a relative path like 'input/Lebenslauf.pdf')
-        cv_filename_only = os.path.basename(cv_base_name)  # Get just the filename part (e.g. 'Lebenslauf.pdf')
-        cv_base_filename = os.path.splitext(cv_filename_only)[0]  # Remove extension (e.g. 'Lebenslauf')
-        summary_path = Path(current_app.root_path) / 'process_cv/cv-data/processed' / f"{cv_base_filename}_summary.txt"
-        if not summary_path.exists():
-            logger.error(f"Required CV summary file not found: {summary_path}")
-            return jsonify({'error': f'Required CV summary file not found for {cv_base_filename}'}), 400
-        with open(summary_path, 'r', encoding='utf-8') as f:
-            cv_summary = f.read()
-    except Exception as e:
-        logger.error(f"Error loading CV summary {summary_path}: {e}", exc_info=True)
-        return jsonify({'error': f'Error loading CV summary: {e}'}), 500
-
-    if not cv_summary:
-         return jsonify({'error': 'CV summary could not be loaded.'}), 500
+    # Load CV summary ONCE using the helper
+    cv_summary = current_app.get_cv_summary(cv_base_name)
+    if cv_summary is None:
+        logger.error(f"Could not load or generate CV summary for {cv_base_name} before starting bulk email generation.")
+        return jsonify({'error': f'Could not load or generate CV summary for {cv_base_name}.'}), 500
+    logger.info(f"Successfully obtained CV summary for {cv_base_name} for bulk email generation.")
 
     results = {'success_count': 0, 'errors': [], 'not_found': []}
-    threads = []
     lock = threading.Lock()
     app_instance = current_app._get_current_object()
-    config = ConfigManager() # Get config instance for threads
+    config = ConfigManager() # Get config instance
 
-    from letter_generation_utils import generate_email_text_only
-
-    def generate_and_update_task(app, job_url):
-        nonlocal results
-        with app.app_context():
+    # Define the task function separately
+    def generate_and_update_email_task(app_context, job_url, cv_summary_content, cv_base_name_log, config_instance, lock_instance, results_dict):
+        """Task to generate email text and update JSON, designed for ThreadPoolExecutor."""
+        with app_context(): # Use passed context
             if not job_url or job_url == 'N/A' or not job_url.startswith('http'):
                 logger.warning(f"Skipping invalid job URL for email generation: {job_url}")
-                with lock: results['errors'].append({'url': job_url, 'reason': 'Invalid URL'})
+                with lock_instance: results_dict['errors'].append({'url': job_url, 'reason': 'Invalid URL'})
                 return
 
             try:
-                # Fetch job details using application context
+                # Fetch job details using application context helper
                 job_details = get_job_details_for_url(job_url)
                 if not job_details or not job_details.get('Job Title'):
                     logger.warning(f"Could not get sufficient job details for URL: {job_url}")
-                    with lock: results['errors'].append({'url': job_url, 'reason': 'Failed to get job details'})
+                    with lock_instance: results_dict['errors'].append({'url': job_url, 'reason': 'Failed to get job details'})
                     return
 
                 job_title = job_details['Job Title']
                 sanitized_job_title = sanitize_filename(job_title)
                 # Use config path relative to data_root
-                letters_dir_rel = Path(config.get_path('motivation_letters'))
-                letters_dir_abs = Path(config.get_path('data_root')) / letters_dir_rel
+                letters_dir_rel = Path(config_instance.get_path('motivation_letters')) # Use passed config
+                letters_dir_abs = Path(config_instance.get_path('data_root')) / letters_dir_rel # Use passed config
                 json_file_path_abs = letters_dir_abs / f"motivation_letter_{sanitized_job_title}.json"
 
-                logger.info(f"Generating email text for CV '{cv_base_name}' and Job '{job_title}' (URL: {job_url})")
-                email_text = generate_email_text_only(cv_summary, job_details)
+                logger.info(f"Generating email text for CV '{cv_base_name_log}' and Job '{job_title}' (URL: {job_url})")
+                # TODO: Consider adding cancellation check within generate_email_text_only if long-running
+                # Function now returns (success, result_or_error)
+                success, result_or_error = generate_email_text_only(cv_summary_content, job_details)
 
-                if not email_text:
-                    logger.error(f"Failed to generate email text (generate_email_text_only returned None) for Job: {job_title}")
-                    with lock: results['errors'].append({'url': job_url, 'reason': 'Email text generation failed'})
+                if not success:
+                    error_message = result_or_error if isinstance(result_or_error, str) else "Unknown email generation error"
+                    logger.error(f"Failed to generate email text for Job: {job_title}. Error: {error_message}")
+                    with lock_instance: results_dict['errors'].append({'url': job_url, 'reason': f'Email text generation failed: {error_message}'})
                     return
 
+                # If successful, result_or_error is the email_text string
+                email_text = result_or_error
                 letter_data = {}
                 if json_file_path_abs.is_file():
                     try:
@@ -610,34 +667,32 @@ def generate_multiple_emails():
                         logger.info(f"Loaded existing JSON: {json_file_path_abs}")
                     except Exception as load_e:
                         logger.error(f"Error loading existing JSON {json_file_path_abs}: {load_e}. Will overwrite.")
-                        letter_data = {}
+                        letter_data = {} # Reset data if loading fails
                 else:
                     logger.info(f"JSON file not found ({json_file_path_abs}), will create new.")
-                    letter_data['job_title_source'] = job_title
+                    # Optionally pre-populate with job title if creating new
+                    letter_data['job_title_source'] = job_title # Example field
 
                 letter_data['email_text'] = email_text
 
                 try:
-                    letters_dir_abs.mkdir(parents=True, exist_ok=True)
+                    letters_dir_abs.mkdir(parents=True, exist_ok=True) # Ensure directory exists
                     with open(json_file_path_abs, 'w', encoding='utf-8') as f:
                         json.dump(letter_data, f, ensure_ascii=False, indent=2)
                     logger.info(f"Successfully updated/created JSON with email text: {json_file_path_abs}")
-                    with lock: results['success_count'] += 1
+                    with lock_instance: results_dict['success_count'] += 1
                 except Exception as save_e:
                     logger.error(f"Error saving updated JSON {json_file_path_abs}: {save_e}", exc_info=True)
-                    with lock: results['errors'].append({'url': job_url, 'reason': f'Failed to save JSON: {save_e}'})
+                    with lock_instance: results_dict['errors'].append({'url': job_url, 'reason': f'Failed to save JSON: {save_e}'})
 
             except Exception as e:
                 logger.error(f"Exception generating/updating email text for URL {job_url}: {str(e)}", exc_info=True)
-                with lock: results['errors'].append({'url': job_url, 'reason': f'Unexpected error: {e}'})
+                with lock_instance: results_dict['errors'].append({'url': job_url, 'reason': f'Unexpected error: {e}'})
 
-    for url in job_urls:
-        thread = threading.Thread(target=generate_and_update_task, args=(app_instance, url,))
-        threads.append(thread)
-        thread.start()
-
-    for thread in threads:
-        thread.join()
+    # Use ThreadPoolExecutor
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS_EMAIL) as executor:
+        futures = [executor.submit(generate_and_update_email_task, app_instance.app_context(), url, cv_summary, cv_base_name, config, lock, results) for url in job_urls]
+        concurrent.futures.wait(futures)
 
     logger.info(f"Multiple email text generation/update complete. Success: {results['success_count']}, Failures: {len(results['errors'])}")
     return jsonify(results)

@@ -4,12 +4,13 @@ import logging
 import threading
 import urllib.parse
 import importlib.util
-import sqlite3 # Added
+import sqlite3
 from pathlib import Path
-from datetime import datetime # Added
+from datetime import datetime
+import math # Added for pagination calculation
 from flask import (
     Blueprint, request, redirect, url_for, flash, render_template,
-    send_file, jsonify, current_app
+    send_file, jsonify, current_app, abort # Added abort
 )
 from werkzeug.utils import secure_filename
 from config import config # Import config object
@@ -107,19 +108,34 @@ def run_job_matcher():
         complete_operation = current_app.extensions['complete_operation']
         app_instance = current_app._get_current_object() # Get app instance for context
 
-        # Start tracking the operation
-        operation_id = start_operation('job_matching')
+        # Create a cancellation event
+        cancel_event = threading.Event()
+        # Start tracking the operation, passing the event
+        operation_id = start_operation('job_matching', cancel_event=cancel_event)
 
         # Define a function to run the job matcher in a background thread
-        def run_job_matcher_task(app, op_id, cv_full_path_task, cv_path_rel_task, min_score_task, max_jobs_task, max_results_task):
+        def run_job_matcher_task(app, op_id, cv_full_path_task, cv_path_rel_task, min_score_task, max_jobs_task, max_results_task, cancel_event_task):
              with app.app_context(): # Establish app context for the thread
                 try:
                     # Update status
-                    update_operation_progress(op_id, 10, 'processing', 'Loading job data...')
+                    update_operation_progress(op_id, 10, 'processing', 'Loading job data and starting matching...')
+
+                    # --- Cancellation Check 1 ---
+                    if cancel_event_task.is_set():
+                        logger.info(f"Operation {op_id} (job_matching) cancelled before matching.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        return
 
                     # Match jobs with CV - pass both max_jobs and max_results
                     # Pass the absolute path as a string
+                    # TODO: Consider adding cancellation check *within* match_jobs_with_cv if it's very long-running
                     matches = match_jobs_with_cv(str(cv_full_path_task), min_score=min_score_task, max_jobs=max_jobs_task, max_results=max_results_task)
+
+                    # --- Cancellation Check 2 ---
+                    if cancel_event_task.is_set():
+                        logger.info(f"Operation {op_id} (job_matching) cancelled after matching.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        return
 
                     if not matches:
                         complete_operation(op_id, 'completed', 'No job matches found') # Use complete_operation
@@ -132,9 +148,23 @@ def run_job_matcher():
                     for match in matches:
                         match['cv_path'] = cv_path_rel_task # Store the relative path used for matching identification
 
+                    # --- Cancellation Check 3 ---
+                    if cancel_event_task.is_set():
+                        logger.info(f"Operation {op_id} (job_matching) cancelled before generating report.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        return
+
                     # Generate report (which now includes cv_path in the saved JSON)
+                    # TODO: Consider adding cancellation check *within* generate_report if it's long-running
                     report_file_path = generate_report(matches) # Returns full path
                     report_filename = os.path.basename(report_file_path) # report_file_path is absolute
+
+                    # --- Cancellation Check 4 ---
+                    if cancel_event_task.is_set():
+                        logger.info(f"Operation {op_id} (job_matching) cancelled before database insertion.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        # Note: Report files might exist. Cleanup?
+                        return
 
                     # --- Database Insertion ---
                     try:
@@ -188,21 +218,37 @@ def run_job_matcher():
                                 cv_id, job_data_batch_id, parameters_used, match_count
                             ))
                         logger.info(f"Successfully added job match report record to database: {report_filepath_md_rel}")
+
+                        # --- Final Cancellation Check ---
+                        if cancel_event_task.is_set():
+                            logger.info(f"Operation {op_id} (job_matching) cancelled just before final completion.")
+                            complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                            # Note: DB record inserted. Cleanup?
+                            return
+
                         complete_operation(op_id, 'completed', f'Job matching completed and recorded. Report: {report_filename}')
 
                     except Exception as db_err:
                         logger.error(f"Database error adding job match report record for {report_filename}: {db_err}", exc_info=True)
-                        # Still report completion, but mention DB error
-                        complete_operation(op_id, 'completed_with_errors', f'Job matching completed, but failed to record in database. Report: {report_filename}. Error: {db_err}')
+                        # Check cancellation status before reporting error type
+                        if cancel_event_task.is_set():
+                            complete_operation(op_id, 'cancelled', f'Operation cancelled during DB error: {db_err}')
+                        else:
+                            # Still report completion, but mention DB error
+                            complete_operation(op_id, 'completed_with_errors', f'Job matching completed, but failed to record in database. Report: {report_filename}. Error: {db_err}')
                     # --- End Database Insertion ---
 
                 except Exception as e:
                     logger.error(f'Error in job matcher task: {str(e)}', exc_info=True)
-                    complete_operation(op_id, 'failed', f'Error running job matcher: {str(e)}')
+                    # Check cancellation status before reporting failure
+                    if cancel_event_task.is_set():
+                        complete_operation(op_id, 'cancelled', f'Operation cancelled during error: {str(e)}')
+                    else:
+                        complete_operation(op_id, 'failed', f'Error running job matcher: {str(e)}')
 
-        # Start the background thread, passing app instance and args
+        # Start the background thread, passing app instance, args, and cancel_event
         # Pass the absolute path as a Path object
-        thread_args = (app_instance, operation_id, full_cv_path, cv_path_rel, min_score, max_jobs, max_results)
+        thread_args = (app_instance, operation_id, full_cv_path, cv_path_rel, min_score, max_jobs, max_results, cancel_event)
         thread = threading.Thread(target=run_job_matcher_task, args=thread_args)
         thread.daemon = True
         thread.start()
@@ -249,12 +295,14 @@ def run_combined_process():
         complete_operation = current_app.extensions['complete_operation']
         app_instance = current_app._get_current_object() # Get app instance for context
 
-        # Start tracking the operation
-        operation_id = start_operation('combined_process')
+        # Create cancellation event
+        cancel_event = threading.Event()
+        # Start tracking the operation, passing the event
+        operation_id = start_operation('combined_process', cancel_event=cancel_event)
 
         # Define a function to run the combined process in a background thread
-        # Pass necessary variables and app instance
-        def run_combined_process_task(app, op_id, cv_full_path_task, cv_path_rel_task, max_pages_task, min_score_task, max_jobs_task, max_results_task):
+        # Pass necessary variables, app instance, and cancel_event
+        def run_combined_process_task(app, op_id, cv_full_path_task, cv_path_rel_task, max_pages_task, min_score_task, max_jobs_task, max_results_task, cancel_event_task):
             with app.app_context(): # Establish app context for the thread
                 try:
                     # Access operation status via app extensions now that context exists
@@ -279,6 +327,12 @@ def run_combined_process():
                         complete_operation(op_id, 'failed', f'Error updating scraper settings: {settings_e}')
                         return
 
+                    # --- Cancellation Check 1 ---
+                    if cancel_event_task.is_set():
+                        logger.info(f"Operation {op_id} (combined) cancelled before starting scraper.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        return
+
                     # Update status
                     update_operation_progress(op_id, 10, 'processing', 'Starting job scraper...')
 
@@ -299,16 +353,32 @@ def run_combined_process():
                         spec.loader.exec_module(app_module)
                         run_scraper = getattr(app_module, 'run_scraper', None)
                         if run_scraper:
+                            # TODO: Consider adding cancellation support *within* run_scraper if possible
                             output_file = run_scraper() # run_scraper should return the output file path
                         else:
                              raise ModuleNotFoundError("run_scraper function not found in job-data-acquisition/app.py")
                     except Exception as scraper_e:
                          logger.error(f"Error running scraper in combined process: {scraper_e}", exc_info=True)
-                         complete_operation(op_id, 'failed', f'Job data acquisition failed: {scraper_e}')
+                         # Check cancellation status before reporting failure
+                         if cancel_event_task.is_set():
+                             complete_operation(op_id, 'cancelled', f'Operation cancelled during scraper run: {scraper_e}')
+                         else:
+                             complete_operation(op_id, 'failed', f'Job data acquisition failed: {scraper_e}')
                          return
 
+                    # --- Cancellation Check 2 ---
+                    if cancel_event_task.is_set():
+                        logger.info(f"Operation {op_id} (combined) cancelled after scraper finished.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        # Note: Scraper output file might exist. Cleanup?
+                        return
+
                     if output_file is None:
-                        complete_operation(op_id, 'failed', 'Job data acquisition failed (no output file). Check logs.')
+                        # Check cancellation status before reporting failure
+                        if cancel_event_task.is_set():
+                             complete_operation(op_id, 'cancelled', 'Operation cancelled (scraper returned no output file).')
+                        else:
+                             complete_operation(op_id, 'failed', 'Job data acquisition failed (no output file). Check logs.')
                         return
 
                     # --- Insert Job Data Batch Record ---
@@ -346,22 +416,44 @@ def run_combined_process():
                                 VALUES (?, ?, ?, ?)
                             """, (batch_timestamp, source_urls_json, relative_data_filepath, settings_used_json))
                             job_data_batch_id = cursor.lastrowid # Get the ID of the inserted row
-                            logger.info(f"Successfully added job data batch record (ID: {job_data_batch_id}) to database from combined run: {relative_data_filepath}")
+                            logger.info(f"Successfully added job data batch record (ID: {job_data_batch_id}) to database from combined run: {relative_data_filepath}") # Corrected indentation
 
                     except Exception as db_batch_err:
                         logger.error(f"Database error adding job data batch record from combined run for {output_file}: {db_batch_err}", exc_info=True)
-                        # Log the error but proceed to matching if possible, the report won't be linked though.
-                        update_operation_progress(op_id, 55, 'warning', 'Scraping done, but failed to record batch in DB.')
+                        # Check cancellation status before reporting warning/error
+                        if cancel_event_task.is_set():
+                            complete_operation(op_id, 'cancelled', f'Operation cancelled during batch DB insert: {db_batch_err}')
+                            return # Stop processing if cancelled here
+                        else:
+                            # Log the error but proceed to matching if possible, the report won't be linked though.
+                            update_operation_progress(op_id, 55, 'warning', 'Scraping done, but failed to record batch in DB.')
+
+                    # --- Cancellation Check 3 ---
+                    if cancel_event_task.is_set():
+                        logger.info(f"Operation {op_id} (combined) cancelled before starting matcher.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        return
 
                     # Update status
                     update_operation_progress(op_id, 60, 'processing', 'Job data acquisition completed. Starting job matcher...')
 
                     # Step 3: Run the job matcher with the newly acquired data
                     # Pass absolute path as string
+                    # TODO: Consider adding cancellation check *within* match_jobs_with_cv if it's very long-running
                     matches = match_jobs_with_cv(str(cv_full_path_task), min_score=min_score_task, max_jobs=max_jobs_task, max_results=max_results_task) # Use passed variables
 
+                    # --- Cancellation Check 4 ---
+                    if cancel_event_task.is_set():
+                        logger.info(f"Operation {op_id} (combined) cancelled after matching.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        return
+
                     if not matches:
-                        complete_operation(op_id, 'completed', 'No job matches found after scraping')
+                        # Check cancellation status before reporting completion
+                        if cancel_event_task.is_set():
+                             complete_operation(op_id, 'cancelled', 'Operation cancelled (no matches found).')
+                        else:
+                             complete_operation(op_id, 'completed', 'No job matches found after scraping')
                         return
 
                     # Update status
@@ -371,9 +463,23 @@ def run_combined_process():
                     for match in matches:
                         match['cv_path'] = cv_path_rel_task # Use passed variable
 
+                    # --- Cancellation Check 5 ---
+                    if cancel_event_task.is_set():
+                        logger.info(f"Operation {op_id} (combined) cancelled before generating report.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        return
+
                     # Step 4: Generate report
+                    # TODO: Consider adding cancellation check *within* generate_report if it's long-running
                     report_file_path = generate_report(matches)
                     report_filename = os.path.basename(report_file_path) # report_file_path is absolute
+
+                    # --- Cancellation Check 6 ---
+                    if cancel_event_task.is_set():
+                        logger.info(f"Operation {op_id} (combined) cancelled before report DB insertion.")
+                        complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                        # Note: Report files might exist. Cleanup?
+                        return
 
                     # --- Database Insertion for Report ---
                     try:
@@ -424,6 +530,14 @@ def run_combined_process():
                                 cv_id, job_data_batch_id, parameters_used, match_count
                             ))
                         logger.info(f"Successfully added job match report record to database: {report_filepath_md_rel}")
+
+                        # --- Final Cancellation Check ---
+                        if cancel_event_task.is_set():
+                            logger.info(f"Operation {op_id} (combined) cancelled just before final completion.")
+                            complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
+                            # Note: DB records inserted. Cleanup?
+                            return
+
                         complete_operation(op_id, 'completed', f'Combined process completed and recorded. Report: {report_filename}')
 
                         # Store the report file in the operation status for retrieval (if needed elsewhere)
@@ -432,17 +546,25 @@ def run_combined_process():
 
                     except Exception as db_err:
                         logger.error(f"Database error adding job match report record for {report_filename}: {db_err}", exc_info=True)
-                        # Still report completion, but mention DB error
-                        complete_operation(op_id, 'completed_with_errors', f'Combined process completed, but failed to record in database. Report: {report_filename}. Error: {db_err}')
+                        # Check cancellation status before reporting error type
+                        if cancel_event_task.is_set():
+                            complete_operation(op_id, 'cancelled', f'Operation cancelled during report DB insert: {db_err}')
+                        else:
+                            # Still report completion, but mention DB error
+                            complete_operation(op_id, 'completed_with_errors', f'Combined process completed, but failed to record in database. Report: {report_filename}. Error: {db_err}')
                     # --- End Database Insertion for Report ---
 
                 except Exception as e:
                     logger.error(f'Error in combined process task: {str(e)}', exc_info=True)
-                    complete_operation(op_id, 'failed', f'Error running combined process: {str(e)}')
+                    # Check cancellation status before reporting failure
+                    if cancel_event_task.is_set():
+                        complete_operation(op_id, 'cancelled', f'Operation cancelled during error: {str(e)}')
+                    else:
+                        complete_operation(op_id, 'failed', f'Error running combined process: {str(e)}')
 
-        # Start the background thread, passing necessary arguments including app instance
+        # Start the background thread, passing necessary arguments including app instance and cancel_event
         # Pass absolute path as Path object
-        thread_args = (app_instance, operation_id, full_cv_path, cv_path_rel, max_pages, min_score, max_jobs, max_results)
+        thread_args = (app_instance, operation_id, full_cv_path, cv_path_rel, max_pages, min_score, max_jobs, max_results, cancel_event)
         thread = threading.Thread(target=run_combined_process_task, args=thread_args)
         thread.daemon = True
         thread.start()
@@ -458,7 +580,13 @@ def run_combined_process():
 
 @job_matching_bp.route('/view_results/<report_file>')
 def view_results(report_file):
-    """View job match results"""
+    """View job match results with pagination."""
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int) # Default 20 items per page
+    except ValueError:
+        abort(404) # Invalid page/per_page format
+
     # Secure the report filename
     secure_report_file = secure_filename(report_file)
     # Use config to get paths
@@ -490,13 +618,28 @@ def view_results(report_file):
             return redirect(url_for('index'))
 
         with open(json_path, 'r', encoding='utf-8') as f:
-            matches = json.load(f)
+            all_matches = json.load(f) # Load all matches first
 
-        # Determine associated CV filename from the 'cv_path' stored in matches
+        # --- Pagination Logic ---
+        total_matches = len(all_matches)
+        total_pages = math.ceil(total_matches / per_page)
+        start_index = (page - 1) * per_page
+        end_index = start_index + per_page
+        paginated_matches = all_matches[start_index:end_index]
+
+        if page > total_pages and total_matches > 0:
+             # Requested page is out of bounds
+             logger.warning(f"Requested page {page} is out of bounds for report {secure_report_file} (Total pages: {total_pages})")
+             abort(404) # Or redirect to last page? abort seems cleaner.
+        # --- End Pagination Logic ---
+
+
+        # Determine associated CV filename from the 'cv_path' stored in the *first* match (if any)
         associated_cv_rel_path = None
         associated_cv_filename = None
-        if matches and isinstance(matches, list) and len(matches) > 0 and isinstance(matches[0], dict) and 'cv_path' in matches[0]:
-            associated_cv_rel_path = matches[0]['cv_path']
+        # Check all_matches for the CV path, not just the paginated ones
+        if all_matches and isinstance(all_matches, list) and len(all_matches) > 0 and isinstance(all_matches[0], dict) and 'cv_path' in all_matches[0]:
+            associated_cv_rel_path = all_matches[0]['cv_path']
             # Find the corresponding original filename from the DB data
             for cv_data in available_cvs_data:
                 if cv_data['original_filepath'] == associated_cv_rel_path:
@@ -519,7 +662,8 @@ def view_results(report_file):
 
         logger.info(f"Checking for generated files in {letters_dir}: {len(existing_scraped)} scraped files found.")
 
-        for match in matches:
+        # Process only the matches for the current page
+        for match in paginated_matches:
             # Normalize match_app_url (assuming 'application_url' is the key)
             match_app_url = match.get('application_url')
             if match_app_url and match_app_url != 'N/A':
@@ -653,14 +797,20 @@ def view_results(report_file):
             if not found_files_by_url:
                 logger.warning(f"No generated files could be associated with URL {match_app_url} (Report Job Title: {match.get('job_title')}) via URL matching.")
 
-        # Render the results template
+        # Render the results template with pagination data
         return render_template(
             'results.html',
-            matches=matches,
-            report_file=secure_report_file, # Pass the secured filename
-            available_cvs=available_cvs_data, # Pass full CV data for dropdown
-            associated_cv_filename=associated_cv_filename, # Pass original filename
-            associated_cv_rel_path=associated_cv_rel_path # Pass relative path
+            matches=paginated_matches, # Pass only the matches for the current page
+            report_file=secure_report_file,
+            available_cvs=available_cvs_data,
+            associated_cv_filename=associated_cv_filename,
+            associated_cv_rel_path=associated_cv_rel_path,
+            pagination={ # Pass pagination info
+                'page': page,
+                'per_page': per_page,
+                'total_matches': total_matches,
+                'total_pages': total_pages
+            }
         )
 
     except json.JSONDecodeError as json_err:

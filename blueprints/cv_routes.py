@@ -58,7 +58,8 @@ def upload_cv():
         # Process the CV
         try:
             cv_text = extract_cv_text(file_path)
-            cv_summary = summarize_cv(str(file_path)) # Pass string representation of absolute path
+            # Pass the extracted text to the summarizer, not the file path
+            cv_summary = summarize_cv(cv_text) 
 
             # Save the processed CV summary using absolute path from config
             processed_dir_path = config.get_path('cv_data_processed')
@@ -178,31 +179,19 @@ def view_cv_summary(cv_file_rel_path):
         summary_filename = f"{cv_full_path.stem}_summary.txt"
         summary_path = Path('process_cv/cv-data/processed') / summary_filename
 
-        # Check if the summary file exists
-        if not summary_path.is_file():
-            logger.info(f"Summary file not found ({summary_path}), attempting to generate from CV: {cv_full_path}")
-            # Ensure the original CV file exists before trying to process
-            if not cv_full_path.is_file():
-                 logger.error(f"Original CV file not found: {cv_full_path}")
-                 return jsonify({'error': f'CV file not found: {decoded_rel_path}'}), 404
+        # Use the new helper function to get the summary (checks cache first)
+        summary = current_app.get_cv_summary(decoded_rel_path)
 
-            # Process the CV to generate a summary
-            cv_text = extract_cv_text(str(cv_full_path)) # Pass string path
-            cv_summary = summarize_cv(cv_text)
+        if summary is None:
+            # Summary not found in cache or file.
+            # DO NOT attempt to generate it here, as that requires external services (OpenAI).
+            # Instead, inform the user that the pre-generated summary is missing.
+            logger.warning(f"Pre-generated summary not found locally for {decoded_rel_path}. Cannot generate offline.")
+            return jsonify({'error': f'Summary for {Path(decoded_rel_path).name} not found. Please process the CV again when online.'}), 404
 
-            # Save the processed CV summary
-            processed_dir = Path('process_cv/cv-data/processed')
-            processed_dir.mkdir(parents=True, exist_ok=True)
-
-            with open(summary_path, 'w', encoding='utf-8') as f:
-                f.write(cv_summary)
-            logger.info(f"Generated and saved summary file: {summary_path}")
-
-        # Load the CV summary
-        with open(summary_path, 'r', encoding='utf-8') as f:
-            summary = f.read()
-
+        # If we reach here, summary was found in cache or local file.
         return jsonify({'summary': summary})
+
     except Exception as e:
         logger.error(f"Error viewing summary for {cv_file_rel_path}: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
