@@ -3,12 +3,16 @@ import logging
 from pathlib import Path
 import sys
 
+# Import config first
+from config import config
+
 # Set up logging for the main orchestrator
+log_file_path = config.get_path('logs') / "motivation_letter_generator.log" if config.get_path('logs') else "motivation_letter_generator.log"
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("motivation_letter_generator.log"),
+        logging.FileHandler(log_file_path),
         logging.StreamHandler()
     ]
 )
@@ -34,11 +38,13 @@ except ImportError as e:
 
 def load_cv_summary(cv_filename):
     """Load the CV summary from the processed CV file"""
-    # Construct path relative to this script's parent directory
-    # Assumes this script is in the project root
-    base_path = Path(__file__).parent
+    processed_dir = config.get_path('cv_data_processed')
+    if not processed_dir:
+        logger.error("Configuration error: 'cv_data_processed' path not found in config.")
+        return None
+    
     summary_filename = f"{cv_filename}_summary.txt"
-    summary_path = base_path / 'process_cv/cv-data/processed' / summary_filename
+    summary_path = processed_dir / summary_filename
     try:
         if not summary_path.exists():
             logger.error(f"CV summary file not found: {summary_path}")
