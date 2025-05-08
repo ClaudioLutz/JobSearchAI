@@ -22,58 +22,45 @@ sys.path.append('.')
 
 # Import necessary functions from other modules
 from job_matcher import match_jobs_with_cv, generate_report
-# Assuming get_job_details_for_url might be needed and moved to a utils module or kept in main app
-# from dashboard import get_job_details_for_url # Example
+from job_details_utils import get_job_details # New canonical helper
+from config import ConfigManager # For _load_latest_raw_job_data
 
 job_matching_bp = Blueprint('job_matching', __name__, url_prefix='/job_matching')
 
 logger = logging.getLogger("dashboard.job_matching") # Use a child logger
 
-# Placeholder for get_job_details_for_url if it's moved/shared
-# This function is complex and might be better in a dedicated 'utils' or 'helpers' module
-# For now, assume it might be attached to current_app or imported from its final location.
-def get_job_details_for_url(job_url):
-    """Placeholder: Get job details for a URL from the latest job data file"""
-    # This function needs access to the job data directory and logic from the original dashboard.
-    # It should ideally be refactored into a shared utility.
-    # For now, we'll try accessing it via current_app if attached there, or raise NotImplementedError.
-    if hasattr(current_app, 'get_job_details_for_url'):
-        return current_app.get_job_details_for_url(job_url)
-    else:
-        # Fallback or raise error - depends on where the function ends up
-        logger.warning("get_job_details_for_url not found on current_app, using basic implementation.")
-        # Basic implementation attempt (might fail depending on context)
-        job_details = {}
-        try:
-            job_id = job_url.split('/')[-1]
-            # Use getattr for safer access to current_app properties in fallback
-            root_path = getattr(current_app, 'root_path', '.')
-            job_data_dir = Path(root_path) / 'job-data-acquisition/job-data-acquisition/data'
-            if job_data_dir.exists():
-                job_data_files = list(job_data_dir.glob('job_data_*.json'))
-                if job_data_files:
-                    latest_job_data_file = max(job_data_files, key=os.path.getctime)
-                    with open(latest_job_data_file, 'r', encoding='utf-8') as f:
-                        job_data = json.load(f)
-                    job_listings = []
-                    if isinstance(job_data, list):
-                         if len(job_data) > 0:
-                            if isinstance(job_data[0], list):
-                                for job_array in job_data: job_listings.extend(job_array)
-                            elif isinstance(job_data[0], dict) and 'content' in job_data[0]:
-                                job_listings = job_data[0]['content']
-                            else: job_listings = job_data
-                    for job in job_listings:
-                        job_application_url = job.get('Application URL', '')
-                        if job_id in job_application_url:
-                            job_details = job
-                            break
-                    if not job_details and job_listings: job_details = job_listings[0]
-        except Exception as e:
-            logger.error(f'Error in fallback get_job_details_for_url: {str(e)}')
-        return job_details
-        # raise NotImplementedError("get_job_details_for_url needs to be provided or refactored.")
+# Helper function to load raw data from the latest job_data_*.json file
+# Duplicated from motivation_letter_routes.py - consider moving to a shared util if used more widely.
+def _load_latest_raw_job_data() -> list[dict] | dict | None:
+    """Loads the latest job_data_*.json file and returns its raw content."""
+    try:
+        # Use ConfigManager directly as 'config' object might not be in scope here
+        cfg = ConfigManager() 
+        job_data_dir = cfg.get_path('job_data')
+        if not job_data_dir:
+            logger.error("Configuration error: 'job_data' path not found in config.")
+            return None
+        
+        if not job_data_dir.exists():
+            logger.error(f"Job data directory does not exist: {job_data_dir}")
+            return None
 
+        job_data_files = list(job_data_dir.glob('job_data_*.json'))
+        if not job_data_files:
+            logger.error(f"No job_data_*.json files found in {job_data_dir}")
+            return None
+
+        latest_job_data_file = max(job_data_files, key=os.path.getctime)
+        logger.info(f"Loading raw job data from: {latest_job_data_file}")
+
+        with open(latest_job_data_file, 'r', encoding='utf-8') as f:
+            raw_job_data = json.load(f)
+        
+        return raw_job_data
+        
+    except Exception as e:
+        logger.error(f"Error loading latest raw job data: {e}", exc_info=True)
+        return None
 
 @job_matching_bp.route('/run_matcher', methods=['POST'])
 def run_job_matcher():

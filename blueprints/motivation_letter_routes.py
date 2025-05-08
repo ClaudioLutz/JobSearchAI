@@ -27,25 +27,44 @@ sys.path.append('.')
 # Import necessary functions from other modules
 from word_template_generator import json_to_docx, create_word_document_from_json_file
 # Import functions needed for manual text structuring and generation
-from job_details_utils import structure_text_with_openai, has_sufficient_content, get_job_details
+# get_job_details is the new canonical one: get_job_details(job_ref, scraped_data)
+from job_details_utils import structure_text_with_openai, has_sufficient_content, get_job_details 
 from letter_generation_utils import generate_motivation_letter, generate_email_text_only # Import the correct generator functions
 
 motivation_letter_bp = Blueprint('motivation_letter', __name__, url_prefix='/motivation_letter')
 
 logger = logging.getLogger("dashboard.motivation_letter") # Use a child logger
 
-# Helper function to get job details - uses the function attached to current_app
-# Note: This might be redundant if get_job_details from job_details_utils is always used now.
-# Consider refactoring depending on usage patterns.
-def get_job_details_for_url(job_url):
-    """Gets job details using the function attached to the app context."""
-    if hasattr(current_app, 'get_job_details_for_url'):
-        # Use the implementation attached during app creation in dashboard.py
-        return current_app.get_job_details_for_url(job_url)
-    else:
-        # This case should ideally not happen if the app is set up correctly
-        logger.error("get_job_details_for_url function not found on current_app context!")
-        return {} # Return empty dict or raise an error
+# Helper function to load raw data from the latest job_data_*.json file
+def _load_latest_raw_job_data() -> list[dict] | dict | None:
+    """Loads the latest job_data_*.json file and returns its raw content."""
+    try:
+        cfg = ConfigManager()
+        job_data_dir = cfg.get_path('job_data')
+        if not job_data_dir:
+            logger.error("Configuration error: 'job_data' path not found in config.")
+            return None
+        
+        if not job_data_dir.exists():
+            logger.error(f"Job data directory does not exist: {job_data_dir}")
+            return None
+
+        job_data_files = list(job_data_dir.glob('job_data_*.json'))
+        if not job_data_files:
+            logger.error(f"No job_data_*.json files found in {job_data_dir}")
+            return None
+
+        latest_job_data_file = max(job_data_files, key=os.path.getctime)
+        logger.info(f"Loading raw job data from: {latest_job_data_file}")
+
+        with open(latest_job_data_file, 'r', encoding='utf-8') as f:
+            raw_job_data = json.load(f)
+        
+        return raw_job_data
+        
+    except Exception as e:
+        logger.error(f"Error loading latest raw job data: {e}", exc_info=True)
+        return None
 
 # Helper function to sanitize filenames (consider moving to utils)
 def sanitize_filename(name, length=30):
@@ -81,10 +100,23 @@ def generate_motivation_letter_route():
 
         # --- Check if letter already exists --- ONLY if not using manual text input ---
         if not manual_job_text:
-            job_details_check = get_job_details(job_url) # Use the main function
+            raw_scraped_data = _load_latest_raw_job_data()
+            job_details_check = None
             existing_letter_found = False
 
-            if job_details_check and 'Job Title' in job_details_check:
+            if raw_scraped_data is not None:
+                try:
+                    # Use the new get_job_details(job_ref, scraped_data)
+                    job_details_check = get_job_details(job_url, raw_scraped_data) 
+                except KeyError: # Raised by get_job_details if job_ref not found
+                    logger.info(f"Job URL {job_url} not found in latest scraped data for pre-check.")
+                    job_details_check = None # Ensure it's None if not found
+                except Exception as e_check:
+                    logger.error(f"Error getting job_details for pre-check of {job_url}: {e_check}", exc_info=True)
+                    job_details_check = None
+
+
+            if job_details_check and job_details_check.get('Job Title'):
                 job_title = job_details_check['Job Title']
                 sanitized_job_title = sanitize_filename(job_title)
                 # Use config path for consistency
@@ -166,13 +198,29 @@ def generate_motivation_letter_route():
                         else:
                              update_operation_progress(op_id, 20, 'processing', 'Manual text structured successfully. Generating letter...')
                     else:
-                        update_operation_progress(op_id, 10, 'processing', 'Fetching/Scraping job details...')
-                        logger.info(f"Attempting automatic job detail fetching for URL: {job_url_task}")
-                        # TODO: Consider adding cancellation check within get_job_details if it's long-running (e.g., network requests)
-                        job_details = get_job_details(job_url_task)
+                        update_operation_progress(op_id, 10, 'processing', 'Loading and searching job details...')
+                        logger.info(f"Attempting to load and find job details for URL: {job_url_task}")
+                        
+                        raw_scraped_data_task = _load_latest_raw_job_data()
+                        if raw_scraped_data_task is None:
+                            logger.error(f"Failed to load raw scraped data for {job_url_task}.")
+                            complete_operation(op_id, 'failed', 'Failed to load job data source.')
+                            return
+
+                        try:
+                            # Use the new get_job_details(job_ref, scraped_data)
+                            job_details = get_job_details(job_url_task, raw_scraped_data_task)
+                        except KeyError:
+                            logger.error(f"Job URL {job_url_task} not found in latest scraped data.")
+                            complete_operation(op_id, 'failed', f'Job details not found for {job_url_task} in pre-scraped data.')
+                            return
+                        except Exception as e_task_fetch:
+                            logger.error(f"Error getting job_details for {job_url_task} from scraped data: {e_task_fetch}", exc_info=True)
+                            complete_operation(op_id, 'failed', f'Error processing job data for {job_url_task}.')
+                            return
 
                         if cancel_event_task.is_set(): # Check after potentially long call
-                            logger.info(f"Operation {op_id} cancelled after fetching job details.")
+                            logger.info(f"Operation {op_id} cancelled after loading job details.")
                             complete_operation(op_id, 'cancelled', 'Operation cancelled by user.')
                             return
 
@@ -474,11 +522,26 @@ def generate_multiple_letters():
                         logger.error(f"Bulk DB error fetching cv_id for {cv_name_for_log}: {db_err}", exc_info=True)
 
                 logger.info(f"Bulk: Generating letter for CV '{cv_name_for_log}' and URL '{job_url}'")
-                logger.info(f"Bulk: Fetching job details for URL: {job_url}")
-                job_details = get_job_details(job_url)
+                logger.info(f"Bulk: Loading and searching job details for URL: {job_url}")
+                raw_scraped_data_bulk = _load_latest_raw_job_data()
+                if raw_scraped_data_bulk is None:
+                    logger.error(f"Bulk: Failed to load raw scraped data for {job_url}.")
+                    with lock_instance: results_dict['errors'].append(job_url)
+                    return
+                
+                try:
+                    job_details = get_job_details(job_url, raw_scraped_data_bulk)
+                except KeyError:
+                    logger.error(f"Bulk: Job URL {job_url} not found in latest scraped data.")
+                    with lock_instance: results_dict['errors'].append(job_url)
+                    return
+                except Exception as e_bulk_fetch:
+                    logger.error(f"Bulk: Error getting job_details for {job_url} from scraped data: {e_bulk_fetch}", exc_info=True)
+                    with lock_instance: results_dict['errors'].append(job_url)
+                    return
 
-                if not job_details or not has_sufficient_content(job_details):
-                     logger.error(f"Bulk: Failed to fetch sufficient job details for {job_url}.")
+                if not job_details or not has_sufficient_content(job_details): # Check content after successful fetch
+                     logger.error(f"Bulk: Fetched job details for {job_url}, but content is insufficient.")
                      with lock_instance: results_dict['errors'].append(job_url)
                      return
 
@@ -632,11 +695,27 @@ def generate_multiple_emails():
                 return
 
             try:
-                # Fetch job details using application context helper
-                job_details = get_job_details_for_url(job_url)
-                if not job_details or not job_details.get('Job Title'):
-                    logger.warning(f"Could not get sufficient job details for URL: {job_url}")
-                    with lock_instance: results_dict['errors'].append({'url': job_url, 'reason': 'Failed to get job details'})
+                # Load raw data then get details
+                raw_scraped_data_email = _load_latest_raw_job_data()
+                if raw_scraped_data_email is None:
+                    logger.error(f"Email Task: Failed to load raw scraped data for {job_url}.")
+                    with lock_instance: results_dict['errors'].append({'url': job_url, 'reason': 'Failed to load job data source'})
+                    return
+
+                try:
+                    job_details = get_job_details(job_url, raw_scraped_data_email)
+                except KeyError:
+                    logger.warning(f"Email Task: Job URL {job_url} not found in latest scraped data.")
+                    with lock_instance: results_dict['errors'].append({'url': job_url, 'reason': 'Job details not found in pre-scraped data'})
+                    return
+                except Exception as e_email_fetch:
+                    logger.error(f"Email Task: Error getting job_details for {job_url} from scraped data: {e_email_fetch}", exc_info=True)
+                    with lock_instance: results_dict['errors'].append({'url': job_url, 'reason': f'Error processing job data: {e_email_fetch}'})
+                    return
+
+                if not job_details or not job_details.get('Job Title'): # Check content after successful fetch
+                    logger.warning(f"Email Task: Could not get sufficient job details for URL: {job_url} (after fetch).")
+                    with lock_instance: results_dict['errors'].append({'url': job_url, 'reason': 'Fetched job details, but content insufficient'})
                     return
 
                 job_title = job_details['Job Title']

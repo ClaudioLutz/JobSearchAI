@@ -19,99 +19,10 @@ import sqlite3 # Import sqlite3 for error handling
 from config import config
 # Import the database initializer and connection (database_connection already imported)
 from utils.database_utils import initialize_database, database_connection
+from job_details_utils import get_job_details # Changed to import the new dispatcher
 
 # Import necessary functions used only in this file or passed to blueprints
 # from job_matcher import load_latest_job_data # Keep if used in index or get_job_details
-
-# --- Helper Functions ---
-# Note: get_job_details_for_url is complex and used by multiple blueprints.
-# It's kept here for now but ideally refactored into a shared utils module.
-def get_job_details_for_url(job_url):
-    """Get job details for a URL from the latest job data file."""
-    job_details = {}
-    # Use the logger defined later in create_app if possible, or a temporary one
-    temp_logger = logging.getLogger("dashboard.get_job_details") # Temporary logger
-    try:
-        # Extract the job ID from the URL
-        job_id = job_url.split('/')[-1]
-        temp_logger.info(f"Extracted job ID: {job_id}")
-
-        # Find the job data file (relative to current working directory)
-        # Corrected path
-        job_data_dir = config.get_path('job_data') # Use config path
-        if not job_data_dir:
-            temp_logger.error("Configuration error: 'job_data' path not found in config.")
-            return job_details # Return empty if path is missing
-        temp_logger.info(f"Job data directory: {job_data_dir}")
-
-        if job_data_dir.exists():
-            # Get the latest job data file
-            job_data_files = list(job_data_dir.glob('job_data_*.json'))
-            temp_logger.info(f"Found {len(job_data_files)} job data files")
-
-            if job_data_files:
-                latest_job_data_file = max(job_data_files, key=os.path.getctime)
-                temp_logger.info(f"Latest job data file: {latest_job_data_file}")
-
-                # Load the job data
-                with open(latest_job_data_file, 'r', encoding='utf-8') as f:
-                    job_data = json.load(f)
-
-                # Process the job data based on its structure
-                job_listings = []
-
-                # Check if the data has a nested structure
-                if isinstance(job_data, list):
-                    if len(job_data) > 0:
-                        if isinstance(job_data[0], list):
-                            # It's an array of arrays - flatten it
-                            for job_array in job_data:
-                                if isinstance(job_array, list): # Ensure inner item is a list
-                                    job_listings.extend(job_array)
-                            temp_logger.info(f"Found array of arrays structure with {len(job_listings)} total job listings")
-                        elif isinstance(job_data[0], dict) and 'content' in job_data[0]:
-                             # Structure: List of Dictionaries, each with a 'content' key
-                             for page_dict in job_data:
-                                 if isinstance(page_dict, dict) and 'content' in page_dict and isinstance(page_dict['content'], list):
-                                     job_listings.extend(page_dict['content'])
-                             temp_logger.info(f"Found list of dicts structure with {len(job_listings)} total job listings")
-                        else:
-                            # Assume it's a flat array of job listings
-                            job_listings = job_data
-                            temp_logger.info(f"Using flat job data structure with {len(job_listings)} job listings")
-                elif isinstance(job_data, dict) and 'content' in job_data: # Handle case where root is dict with content
-                     job_listings = job_data['content']
-                     temp_logger.info(f"Found root dict structure with {len(job_listings)} job listings")
-
-
-                temp_logger.info(f"Processed job data with {len(job_listings)} total job listings")
-
-                # Find the job with the matching ID
-                for i, job in enumerate(job_listings):
-                     if not isinstance(job, dict): # Skip if item is not a dict
-                         temp_logger.warning(f"Skipping non-dictionary item at index {i}")
-                         continue
-                     # Extract the job ID from the Application URL
-                     job_application_url = job.get('Application URL', '')
-                     temp_logger.info(f"Job {i+1} Application URL: {job_application_url}")
-
-                     # More robust check for job ID within the URL path
-                     if isinstance(job_application_url, str) and job_id in job_application_url.split('/')[-1]:
-                         temp_logger.info(f"Found matching job: {job.get('Job Title', 'N/A')} at {job.get('Company Name', 'N/A')}")
-                         job_details = job
-                         break
-
-                # If no exact match found, use the first job as a fallback (if any jobs exist)
-                if not job_details and job_listings and isinstance(job_listings[0], dict):
-                    temp_logger.info("No exact match found, using first job as fallback")
-                    job_details = job_listings[0]
-    except Exception as e:
-        temp_logger.error(f'Error getting job details: {str(e)}')
-        import traceback
-        temp_logger.error(traceback.format_exc())
-
-    return job_details
-
 
 # --- Logging Setup ---
 # Configure logging globally here or within create_app
@@ -273,7 +184,8 @@ def create_app():
             return None
 
     # Attach helper functions directly to app for blueprint access via current_app
-    app.get_job_details_for_url = get_job_details_for_url
+    # app.get_job_details_for_url = get_job_details_for_url # Old helper removed
+    app.get_job_details = get_job_details # Updated to use the new get_job_details dispatcher
     app.get_cv_summary = get_cv_summary # Attach the new summary helper
 
     # --- Register Blueprints ---
