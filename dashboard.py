@@ -38,7 +38,10 @@ def get_job_details_for_url(job_url):
 
         # Find the job data file (relative to current working directory)
         # Corrected path
-        job_data_dir = Path('job-data-acquisition/data')
+        job_data_dir = config.get_path('job_data') # Use config path
+        if not job_data_dir:
+            temp_logger.error("Configuration error: 'job_data' path not found in config.")
+            return job_details # Return empty if path is missing
         temp_logger.info(f"Job data directory: {job_data_dir}")
 
         if job_data_dir.exists():
@@ -116,7 +119,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("dashboard.log"), # Log file in the root directory
+        logging.FileHandler(config.get_path('logs') / "dashboard.log" if config.get_path('logs') else "dashboard.log"), # Log file in the logs directory
         logging.StreamHandler()
     ]
 )
@@ -141,9 +144,21 @@ def create_app():
 
     # --- Configuration ---
     # Configure upload folder (can be overridden by instance config)
-    app.config['UPLOAD_FOLDER'] = 'process_cv/cv-data/input'
+    upload_folder_path = config.get_path('cv_data_input')
+    if not upload_folder_path:
+        logger.critical("CRITICAL: 'cv_data_input' path not found in config. Uploads will fail.")
+        # Fallback or raise an error, for now, let it proceed to show the issue if not handled by Flask
+        app.config['UPLOAD_FOLDER'] = 'process_cv/cv-data/input_fallback' # Potentially problematic fallback
+    else:
+        app.config['UPLOAD_FOLDER'] = str(upload_folder_path) # Flask expects string path
+    
     # Ensure upload directory exists
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    try:
+        # Use the resolved path for makedirs
+        Path(app.config['UPLOAD_FOLDER']).mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        logger.error(f"Failed to create UPLOAD_FOLDER {app.config['UPLOAD_FOLDER']}: {e}")
+
 
     # --- Shared State / Utilities ---
     # Progress tracking & Caching (using app context via extensions)
