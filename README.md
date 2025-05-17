@@ -19,18 +19,18 @@ The system consists of the following main components:
 7.  **Centralized Configuration**: (`config.py`) Provides a single source of truth for configuration settings.
 8.  **Utility Modules**: (`utils/`) Collection of utility modules for common operations with improved error handling.
 
-For detailed information on each component, please refer to the files in the `documentation/` directory:
+For detailed information on each component, please refer to the files in the `Documentation/` directory:
 
--   [Job Data Acquisition](./documentation/Job_Data_Acquisition.md)
--   [CV Processor](./documentation/CV_Processor.md)
--   [Job Matcher](./documentation/Job_Matcher.md) - Fully optimized
--   [Motivation Letter Generator](./documentation/Motivation_Letter_Generator.md) - Fully optimized
--   [Word Template Generator](./documentation/Word_Template_Generator.md)
--   [Dashboard](./documentation/Dashboard.md)
--   [System Overview](./documentation/System.md)
+-   [Job Data Acquisition](./Documentation/Job_Data_Acquisition.md)
+-   [CV Processor](./Documentation/CV_Processor.md)
+-   [Job Matcher](./Documentation/Job_Matcher.md) - Fully optimized
+-   [Motivation Letter Generator](./Documentation/Motivation_Letter_Generator.md) - Fully optimized
+-   [Word Template Generator](./Documentation/Word_Template_Generator.md)
+-   [Dashboard](./Documentation/Dashboard.md)
+-   [System Overview](./Documentation/System.md)
 
 For details on the code optimization, refer to:
--   [Code Optimization](./README_OPTIMIZATION.md)
+-   [Code Optimization](./deprecated_20250427_211727/README_OPTIMIZATION.md)
 
 ## Code Optimization
 
@@ -56,7 +56,7 @@ Currently optimized components:
 - `job_details_utils.py`: Fully optimized
 - `letter_generation_utils.py`: Fully optimized
 
-See [README_OPTIMIZATION.md](./README_OPTIMIZATION.md) for detailed examples and usage.
+See [README_OPTIMIZATION.md](./deprecated_20250427_211727/README_OPTIMIZATION.md) for detailed examples and usage.
 
 ## Basic Usage
 
@@ -86,7 +86,7 @@ Navigate to `http://localhost:5000` in your web browser. The dashboard allows yo
 
 ### Running Components Manually
 
-You can also run individual components via the command line. See the respective files in the `documentation/` folder for specific instructions.
+You can also run individual components via the command line. See the respective files in the `Documentation/` folder for specific instructions.
 
 ## System Requirements
 
@@ -111,7 +111,7 @@ Configure ScrapeGraphAI in `job-data-acquisition/settings.json`.
 
 Key directories and their purposes:
 
--   `documentation/`: Detailed component documentation
+-   `Documentation/`: Detailed component documentation
 -   `job-data-acquisition/`: Job scraping component
     - `data/`: Scraped job data (JSON)
     - `settings.json`: Scraper configuration
@@ -132,10 +132,7 @@ Key directories and their purposes:
     - `file_utils.py`: File operation utilities
     - `api_utils.py`: OpenAI API wrappers
 -   `config.py`: Centralized configuration module
--   Testing modules:
-    - `test_config.py`: Tests for configuration module
-    - `test_optimized_code.py`: Integration tests for optimized modules
-    - `test_letter_generation_utils.py`, `test_job_details_utils.py`: Component tests
+-   No automated tests are included in this repository at present.
 
 ## Logging
 

@@ -1,4 +1,4 @@
-g# 6. Dashboard
+# 6. Dashboard
 
 **Purpose**: Provide a web interface for interacting with all components of the system, structured using Flask Blueprints.
 

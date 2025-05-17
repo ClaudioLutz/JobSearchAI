@@ -10,12 +10,11 @@ This application uses the ScrapeGraph AI library to extract structured data from
 
 ```
 job-data-acquisition/
-├── app.py                 # Main application script
-├── configs/
-│   └── settings.json      # Configuration settings
-├── data/                  # Directory for storing scraped data
-├── logs/                  # Directory for storing log files
-└── dependencies.txt       # List of required dependencies
+├── app.py            # Main application script
+├── settings.json     # Configuration settings (ignored in git)
+├── data/             # Directory for storing scraped data
+├── logs/             # Directory for storing log files
+└── dependencies.txt  # List of required dependencies
 ```
 
 ## Requirements
@@ -49,7 +48,7 @@ job-data-acquisition/
 
 ## Configuration
 
-The application is configured through the `configs/settings.json` file, which includes:
+The application is configured through a `settings.json` file located in the same directory as `app.py` (this file is not tracked in version control), which includes:
 
 - Scraper settings (model, token limits, temperature, etc.)
   - `max_pages`: Maximum number of pages to scrape (default: 50)
@@ -67,7 +66,7 @@ python app.py
 ```
 
 The application will:
-1. Load configuration from `configs/settings.json`
+1. Load configuration from `settings.json`
 2. Set up logging
 3. Configure the ScrapeGraph scraper
 4. Scrape job listings from the configured URLs
