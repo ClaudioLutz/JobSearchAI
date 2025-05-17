@@ -41,7 +41,7 @@
    ```
 5. Filters the evaluated jobs based on a minimum `overall_match` score (default 6 in function signature, but 3 when run directly via `__main__`).
 6. Sorts the filtered jobs by `overall_match` score in descending order.
-7. Uses `file_utils.ensure_output_directory` and `file_utils.save_json_file` to generate two output files in the `job_matches` directory:
+7. Uses the helper `ensure_output_dir` (internally calling `config.ensure_dir`) and `file_utils.save_json_file` to generate two output files in the `job_matches` directory:
    - A JSON file (`job_matches_YYYYMMDD_HHMMSS.json`) containing the detailed evaluation results.
    - A Markdown report (`job_matches_YYYYMMDD_HHMMSS.md`) summarizing the matches.
 
