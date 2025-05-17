@@ -18,7 +18,8 @@ logging.basicConfig(
 logger = logging.getLogger("cv_to_html_converter")
 
 # Load environment variables
-env_path = Path("c:/Codes/JobsearchAI/process_cv/.env")
+# Load environment variables from the .env file located next to this script
+env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 # Initialize the OpenAI client
