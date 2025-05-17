@@ -5,7 +5,7 @@
 **Key Files**:
 - `process_cv/cv_processor.py`: Main script for processing and summarizing CVs
 - `process_cv/cv_to_html_converter.py`: Script for converting CVs to HTML format
-- `process_cv/.env`: Environment variables (OpenAI API key). The script specifically loads it from `c:/Codes/JobsearchAI/process_cv/.env`.
+- `process_cv/.env`: Environment variables (OpenAI API key). The script loads this file from the same directory as the CV processor scripts.
 
 **Technologies**:
 - PyMuPDF (fitz) for PDF text and structure extraction
