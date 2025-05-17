@@ -21,7 +21,8 @@ def extract_cv_text(file_path):
     else:
         raise ValueError("Unsupported file type. Only PDF allowed.")
 
-env_path = Path("c:/Codes/JobsearchAI/process_cv/.env")
+# Load environment variables from the .env file located next to this script
+env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 # Initialize the OpenAI client
