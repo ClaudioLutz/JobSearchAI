@@ -5,6 +5,7 @@ import threading
 import importlib.util
 from pathlib import Path
 from flask import Blueprint, request, redirect, url_for, flash, render_template, current_app
+from flask_login import login_required
 from werkzeug.utils import secure_filename
 
 # Assuming operation tracking functions are accessible, e.g., via current_app or a shared module
@@ -15,6 +16,7 @@ job_data_bp = Blueprint('job_data', __name__, url_prefix='/job_data')
 logger = logging.getLogger("dashboard.job_data") # Use a child logger
 
 @job_data_bp.route('/run_scraper', methods=['POST'])
+@login_required
 def run_job_scraper():
     """Run the job data acquisition component"""
     try:
@@ -117,6 +119,7 @@ def run_job_scraper():
         return redirect(url_for('index'))
 
 @job_data_bp.route('/delete/<job_data_file>')
+@login_required
 def delete_job_data(job_data_file):
     """Delete a job data file"""
     try:
@@ -142,6 +145,7 @@ def delete_job_data(job_data_file):
     return redirect(url_for('index'))
 
 @job_data_bp.route('/view/<filename>')
+@login_required
 def view_job_data(filename):
     """Display the contents of a specific job data JSON file."""
     try:

@@ -1,0 +1,155 @@
+{% extends "auth/base_auth.html" %}
+
+{% block title %}Register - JobsearchAI{% endblock %}
+
+{% block auth_subtitle %}Create your account to get started{% endblock %}
+
+{% block content %}
+<form method="POST" novalidate>
+    {{ form.hidden_tag() }}
+    
+    <div class="form-floating mb-3">
+        {{ form.username(class="form-control" + (" is-invalid" if form.username.errors else ""), 
+                        placeholder="Enter username",
+                        id="floatingUsername") }}
+        <label for="floatingUsername">
+            <i class="bi bi-person me-2"></i>Username
+        </label>
+        {% if form.username.errors %}
+            <div class="invalid-feedback">
+                {% for error in form.username.errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="form-text">3-20 characters, letters, numbers, and underscores only</div>
+        {% endif %}
+    </div>
+
+    <div class="form-floating mb-3">
+        {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""),
+                     placeholder="Enter email",
+                     id="floatingEmail") }}
+        <label for="floatingEmail">
+            <i class="bi bi-envelope me-2"></i>Email Address
+        </label>
+        {% if form.email.errors %}
+            <div class="invalid-feedback">
+                {% for error in form.email.errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="form-text">We'll use this for your account and notifications</div>
+        {% endif %}
+    </div>
+
+    <div class="form-floating mb-3">
+        {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""),
+                        placeholder="Enter password",
+                        id="floatingPassword") }}
+        <label for="floatingPassword">
+            <i class="bi bi-lock me-2"></i>Password
+        </label>
+        {% if form.password.errors %}
+            <div class="invalid-feedback">
+                {% for error in form.password.errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="form-text">Minimum 8 characters</div>
+        {% endif %}
+    </div>
+
+    <div class="form-floating mb-3">
+        {{ form.confirm_password(class="form-control" + (" is-invalid" if form.confirm_password.errors else ""),
+                                 placeholder="Confirm password",
+                                 id="floatingConfirmPassword") }}
+        <label for="floatingConfirmPassword">
+            <i class="bi bi-lock-fill me-2"></i>Confirm Password
+        </label>
+        {% if form.confirm_password.errors %}
+            <div class="invalid-feedback">
+                {% for error in form.confirm_password.errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="d-grid mb-3">
+        {{ form.submit(class="btn btn-success btn-lg") }}
+    </div>
+</form>
+
+<div class="auth-links">
+    <p class="mb-2">Already have an account?</p>
+    <a href="{{ url_for('auth.login') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+    </a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Focus on the first input field
+    document.getElementById('floatingUsername').focus();
+    
+    // Handle form submission loading state
+    const form = document.querySelector('form');
+    const submitBtn = document.querySelector('input[type="submit"]');
+    
+    form.addEventListener('submit', function() {
+        submitBtn.disabled = true;
+        submitBtn.value = 'Creating Account...';
+        
+        // Add loading spinner
+        const spinner = document.createElement('i');
+        spinner.className = 'bi bi-arrow-repeat spinner-border spinner-border-sm me-2';
+        spinner.setAttribute('role', 'status');
+        submitBtn.parentNode.insertBefore(spinner, submitBtn);
+    });
+    
+    // Password strength indicator
+    const passwordField = document.getElementById('floatingPassword');
+    const confirmPasswordField = document.getElementById('floatingConfirmPassword');
+    
+    // Real-time password confirmation validation
+    confirmPasswordField.addEventListener('input', function() {
+        const password = passwordField.value;
+        const confirmPassword = this.value;
+        
+        if (confirmPassword && password !== confirmPassword) {
+            this.classList.add('is-invalid');
+            this.classList.remove('is-valid');
+        } else if (confirmPassword && password === confirmPassword) {
+            this.classList.remove('is-invalid');
+            this.classList.add('is-valid');
+        } else {
+            this.classList.remove('is-invalid', 'is-valid');
+        }
+    });
+    
+    // Username validation feedback
+    const usernameField = document.getElementById('floatingUsername');
+    usernameField.addEventListener('input', function() {
+        const username = this.value;
+        const isValid = /^[a-zA-Z0-9_]{3,20}$/.test(username);
+        
+        if (username.length >= 3) {
+            if (isValid) {
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+            } else {
+                this.classList.add('is-invalid');
+                this.classList.remove('is-valid');
+            }
+        } else {
+            this.classList.remove('is-invalid', 'is-valid');
+        }
+    });
+});
+</script>
+{% endblock %}

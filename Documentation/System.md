@@ -1,10 +1,16 @@
 # JobsearchAI System Overview
 
-**Purpose**: The JobsearchAI system automates and enhances the job application process by intelligently scraping job listings, matching them against candidate CVs, and generating personalized application documents.
+**Purpose**: The JobsearchAI system automates and enhances the job application process by intelligently scraping job listings, matching them against candidate CVs, and generating personalized application documents. The system features comprehensive user authentication to ensure secure access to all functionality.
 
 ## System Workflow & Data Flow
 
-The system operates through a series of interconnected components, primarily managed via a Flask web dashboard:
+The system operates through a series of interconnected components, primarily managed via a Flask web dashboard with full authentication protection:
+
+0.  **Authentication & Access Control**:
+    *   Users must log in with username/email and password to access any system functionality.
+    *   The `Authentication System` (`models/user.py`, `blueprints/auth_routes.py`, `forms/auth_forms.py`) provides secure user registration, login, and session management.
+    *   All routes are protected with `@login_required` decorators, ensuring complete system security.
+    *   User sessions are managed with Flask-Login, supporting "remember me" functionality and secure logout.
 
 1.  **CV Processing**:
     *   User uploads a CV (PDF) via the dashboard (`process_cv/cv-data/input/`).
@@ -57,13 +63,14 @@ The system operates through a series of interconnected components, primarily man
 
 ## Core Components Summary
 
-*   **CV Processor (`process_cv/`)**: Extracts text from PDF CVs and uses AI to generate structured summaries focusing on career aspects. Requires OpenAI API key.
-*   **Job Data Acquisition (`job-data-acquisition/`)**: Scrapes job listings from web pages using ScrapeGraph AI and saves structured data to JSON files. Configured via `settings.json`. Requires OpenAI API key (or other LLM config).
-*   **Job Matcher (`job_matcher.py`)**: Compares CV summaries against scraped job listings using AI evaluation to score and rank potential matches. Outputs JSON and Markdown reports. Requires OpenAI API key. Uses the centralized configuration and utility modules for improved error handling and code reusability.
-*   **Motivation Letter Generator (`motivation_letter_generator.py`, `letter_generation_utils.py`, `job_details_utils.py`)**: Creates personalized motivation letters and/or short email texts using AI, combining CV summary and job details. Outputs/updates JSON files and generates HTML letters. Requires OpenAI API key. Uses the centralized configuration and utility modules for improved error handling and code reusability.
-*   **Word Template Generator (`word_template_generator.py`)**: Converts structured JSON motivation letters into formatted Word documents using a template and `docxtpl`.
-*   **Dashboard (`dashboard.py`, `blueprints/`)**: Flask web application providing the user interface to manage files, run processes (including bulk letter and email generation), view results, and track progress. Orchestrates the interaction between components.
-*   **Centralized Configuration (`config.py`)**: Provides a single source of truth for all configuration settings, including file paths, environment variables, and default parameters.
+*   **Authentication System (`models/`, `blueprints/auth_routes.py`, `forms/auth_forms.py`)**: Provides secure user registration, login, session management, and route protection. Features Flask-Login integration, password hashing, CSRF protection, and professional UI. All system functionality requires authentication. See `Documentation/Authentication_System.md` for detailed information.
+*   **CV Processor (`process_cv/`)**: Extracts text from PDF CVs and uses AI to generate structured summaries focusing on career aspects. Requires OpenAI API key. Protected by authentication.
+*   **Job Data Acquisition (`job-data-acquisition/`)**: Scrapes job listings from web pages using ScrapeGraph AI and saves structured data to JSON files. Configured via `settings.json`. Requires OpenAI API key (or other LLM config). Protected by authentication.
+*   **Job Matcher (`job_matcher.py`)**: Compares CV summaries against scraped job listings using AI evaluation to score and rank potential matches. Outputs JSON and Markdown reports. Requires OpenAI API key. Uses the centralized configuration and utility modules for improved error handling and code reusability. Protected by authentication.
+*   **Motivation Letter Generator (`motivation_letter_generator.py`, `letter_generation_utils.py`, `job_details_utils.py`)**: Creates personalized motivation letters and/or short email texts using AI, combining CV summary and job details. Outputs/updates JSON files and generates HTML letters. Requires OpenAI API key. Uses the centralized configuration and utility modules for improved error handling and code reusability. Protected by authentication.
+*   **Word Template Generator (`word_template_generator.py`)**: Converts structured JSON motivation letters into formatted Word documents using a template and `docxtpl`. Protected by authentication.
+*   **Dashboard (`dashboard.py`, `blueprints/`)**: Flask web application providing the user interface to manage files, run processes (including bulk letter and email generation), view results, and track progress. Orchestrates the interaction between components. Fully integrated with authentication system.
+*   **Centralized Configuration (`config.py`)**: Provides a single source of truth for all configuration settings, including file paths, environment variables, default parameters, and database configuration for authentication.
 *   **Utility Modules (`utils/`)**: A collection of utility modules that provide reusable functionality:
     * `utils/decorators.py`: Decorators for error handling, retries, caching, and execution timing.
     * `utils/file_utils.py`: Functions for common file operations with improved error handling.

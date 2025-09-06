@@ -4,6 +4,7 @@ import logging
 import urllib.parse
 from pathlib import Path
 from flask import Blueprint, request, redirect, url_for, flash, jsonify, current_app
+from flask_login import login_required
 from werkzeug.utils import secure_filename
 
 # Import necessary functions from other modules (adjust paths if needed)
@@ -24,6 +25,7 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @cv_bp.route('/upload', methods=['POST'])
+@login_required
 def upload_cv():
     """Handle CV upload"""
     if 'cv_file' not in request.files:
@@ -72,6 +74,7 @@ def upload_cv():
     return redirect(url_for('index'))
 
 @cv_bp.route('/delete/<path:cv_file_rel_path>')
+@login_required
 def delete_cv(cv_file_rel_path):
     """Delete a CV file using its relative path"""
     try:
@@ -106,6 +109,7 @@ def delete_cv(cv_file_rel_path):
     return redirect(url_for('index'))
 
 @cv_bp.route('/view_summary/<path:cv_file_rel_path>')
+@login_required
 def view_cv_summary(cv_file_rel_path):
     """View a CV summary using its relative path"""
     try:

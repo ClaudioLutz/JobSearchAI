@@ -82,9 +82,22 @@ class ConfigManager:
         # Cache commonly used environment variables
         self.ENV["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
         
+        # Database environment variables
+        self.ENV["DATABASE_URL"] = os.getenv("DATABASE_URL")
+        self.ENV["DB_NAME"] = os.getenv("DB_NAME", "jobsearchai")
+        self.ENV["DB_USER"] = os.getenv("DB_USER", "jobsearchai_user")
+        self.ENV["DB_PASSWORD"] = os.getenv("DB_PASSWORD")
+        self.ENV["DB_HOST"] = os.getenv("DB_HOST", "localhost")
+        self.ENV["DB_PORT"] = os.getenv("DB_PORT", "5432")
+        self.ENV["SECRET_KEY"] = os.getenv("SECRET_KEY")
+        
         # Log warning if critical variables are missing
         if not self.ENV["OPENAI_API_KEY"]:
             logger.warning("OPENAI_API_KEY environment variable not found")
+        if not self.ENV["SECRET_KEY"]:
+            logger.warning("SECRET_KEY environment variable not found")
+        if not self.ENV["DATABASE_URL"] and not self.ENV["DB_PASSWORD"]:
+            logger.warning("Database credentials not found in environment variables")
     
     def _setup_paths(self):
         """Set up path mappings to all important directories and files"""
@@ -267,6 +280,37 @@ def get_openai_defaults() -> Dict[str, Any]:
         "model": config.get_default("openai", "model"),
         "temperature": config.get_default("openai", "temperature"),
         "max_tokens": config.get_default("openai", "max_tokens")
+    }
+
+def get_database_url() -> Optional[str]:
+    """Get the database URL for SQLAlchemy"""
+    # First try full DATABASE_URL if provided
+    database_url = config.get_env("DATABASE_URL")
+    if database_url:
+        return database_url
+    
+    # Otherwise construct from individual components
+    db_user = config.get_env("DB_USER")
+    db_password = config.get_env("DB_PASSWORD")
+    db_host = config.get_env("DB_HOST")
+    db_port = config.get_env("DB_PORT")
+    db_name = config.get_env("DB_NAME")
+    
+    if all([db_user, db_password, db_host, db_name]):
+        return f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+    
+    return None
+
+def get_secret_key() -> Optional[str]:
+    """Get the Flask secret key"""
+    return config.get_env("SECRET_KEY")
+
+def get_database_config() -> Dict[str, Any]:
+    """Get complete database configuration for Flask"""
+    return {
+        "SQLALCHEMY_DATABASE_URI": get_database_url(),
+        "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+        "SQLALCHEMY_ECHO": False  # Set to True for debugging
     }
 
 # Main function to be called if this module is run directly

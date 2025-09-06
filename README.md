@@ -2,7 +2,7 @@
 
 ## Overview
 
-JobsearchAI is a system that matches job listings with candidate CVs using AI-powered semantic matching. It scrapes job data, processes CVs, finds suitable matches, generates personalized motivation letters and email texts, and converts them to Word documents. A web dashboard provides an interface for managing the system.
+JobsearchAI is a secure, multi-user system that matches job listings with candidate CVs using AI-powered semantic matching. It scrapes job data, processes CVs, finds suitable matches, generates personalized motivation letters and email texts, and converts them to Word documents. A comprehensive authentication system protects all functionality, while a web dashboard provides an intuitive interface for managing the system.
 
 The codebase has been optimized with a centralized configuration module and utility packages that improve error handling, reduce code duplication, and enhance API usage without introducing breaking changes.
 
@@ -10,24 +10,26 @@ The codebase has been optimized with a centralized configuration module and util
 
 The system consists of the following main components:
 
-1.  **Job Data Acquisition**: Scrapes job listings using ScrapeGraphAI.
-2.  **CV Processor**: Extracts and summarizes CV information using OpenAI.
-3.  **Job Matcher**: Matches jobs with CVs using semantic understanding via OpenAI.
-4.  **Motivation Letter Generator**: Creates personalized motivation letters and email texts.
-5.  **Word Template Generator**: Converts letters to Word documents.
-6.  **Dashboard**: Web interface for system interaction.
-7.  **Centralized Configuration**: (`config.py`) Provides a single source of truth for configuration settings.
-8.  **Utility Modules**: (`utils/`) Collection of utility modules for common operations with improved error handling.
+1.  **Authentication System**: Secure user registration, login, and session management with Flask-Login.
+2.  **Job Data Acquisition**: Scrapes job listings using ScrapeGraphAI.
+3.  **CV Processor**: Extracts and summarizes CV information using OpenAI.
+4.  **Job Matcher**: Matches jobs with CVs using semantic understanding via OpenAI.
+5.  **Motivation Letter Generator**: Creates personalized motivation letters and email texts.
+6.  **Word Template Generator**: Converts letters to Word documents.
+7.  **Dashboard**: Web interface for system interaction.
+8.  **Centralized Configuration**: (`config.py`) Provides a single source of truth for configuration settings.
+9.  **Utility Modules**: (`utils/`) Collection of utility modules for common operations with improved error handling.
 
 For detailed information on each component, please refer to the files in the `Documentation/` directory:
 
+-   [Authentication System](./Documentation/Authentication_System.md) - **NEW** Complete security implementation
 -   [Job Data Acquisition](./Documentation/Job_Data_Acquisition.md)
 -   [CV Processor](./Documentation/CV_Processor.md)
 -   [Job Matcher](./Documentation/Job_Matcher.md) - Fully optimized
 -   [Motivation Letter Generator](./Documentation/Motivation_Letter_Generator.md) - Fully optimized
 -   [Word Template Generator](./Documentation/Word_Template_Generator.md)
--   [Dashboard](./Documentation/Dashboard.md)
--   [System Overview](./Documentation/System.md)
+-   [Dashboard](./Documentation/Dashboard.md) - Updated with authentication integration
+-   [System Overview](./Documentation/System.md) - Updated with authentication workflow
 
 For details on the code optimization, refer to:
 -   [Code Optimization](./deprecated_20250427_211727/README_OPTIMIZATION.md)
@@ -60,6 +62,21 @@ See [README_OPTIMIZATION.md](./deprecated_20250427_211727/README_OPTIMIZATION.md
 
 ## Basic Usage
 
+### Authentication Setup
+
+Before using the system, you need to set up the database and create user accounts:
+
+```bash
+# Initialize the database
+python init_db.py
+
+# Create an admin user (follow prompts)
+python init_db.py --create-admin
+
+# Test database connection
+python init_db.py --test-connection
+```
+
 ### Running the Dashboard
 
 The primary way to interact with the system is through the web dashboard:
@@ -68,7 +85,13 @@ The primary way to interact with the system is through the web dashboard:
 python dashboard.py
 ```
 
-Navigate to `http://localhost:5000` in your web browser. The dashboard allows you to:
+Navigate to `http://localhost:5000` in your web browser. You will be redirected to the login page where you can:
+
+- **Login** with your username/email and password
+- **Register** a new account if you don't have one
+- Access all system functionality after authentication
+
+Once logged in, the dashboard allows you to:
 
 -   Upload and manage CVs
 -   Run the job scraper with configurable parameters
@@ -83,6 +106,13 @@ Navigate to `http://localhost:5000` in your web browser. The dashboard allows yo
     - Multiple output formats (HTML, DOCX)
 -   View and manage generated files
 -   Track progress of background operations
+
+**Security Features:**
+- All routes protected by authentication
+- Secure password hashing
+- Session management with "remember me" option
+- CSRF protection on all forms
+- Professional login/registration interface
 
 ### Running Components Manually
 
@@ -112,17 +142,32 @@ Configure ScrapeGraphAI in `job-data-acquisition/settings.json`.
 Key directories and their purposes:
 
 -   `Documentation/`: Detailed component documentation
+-   `models/`: Authentication system database models
+    - `user.py`: User model with password hashing and validation
+    - `__init__.py`: Database and Flask-Login initialization
+-   `forms/`: Authentication forms with validation
+    - `auth_forms.py`: Login and registration forms
+    - `__init__.py`: Forms package initialization
+-   `templates/auth/`: Authentication UI templates
+    - `base_auth.html`: Base template for authentication pages
+    - `login.html`: Professional login page
+    - `register.html`: Interactive registration page
+-   `blueprints/`: Flask blueprint modules (all protected by authentication)
+    - `auth_routes.py`: Authentication routes (login, register, logout)
+    - `cv_routes.py`, `job_data_routes.py`, etc.: Feature blueprints
+-   `instance/`: Database files (SQLite)
+    - `jobsearchai.db`: User database (created automatically)
 -   `job-data-acquisition/`: Job scraping component
     - `data/`: Scraped job data (JSON)
     - `settings.json`: Scraper configuration
 -   `process_cv/`: CV processing component
     - `cv-data/input/`: Uploaded CVs
     - `cv-data/processed/`: CV summaries
+    - `.env`: Environment variables (OpenAI API key, database config)
 -   `motivation_letters/`: Generated letters and templates
     - `template/`: Word document templates
     - Generated files: HTML, DOCX, JSON structure, scraped data
 -   `job_matches/`: Job match reports (MD and JSON)
--   `blueprints/`: Flask blueprint modules
 -   `static/`: Dashboard static files (CSS, JS)
 -   `templates/`: Dashboard HTML templates
 -   `logs/`: Component-specific log files
@@ -132,6 +177,7 @@ Key directories and their purposes:
     - `file_utils.py`: File operation utilities
     - `api_utils.py`: OpenAI API wrappers
 -   `config.py`: Centralized configuration module
+-   `init_db.py`: Database initialization and user management script
 -   No automated tests are included in this repository at present.
 
 ## Logging
@@ -143,6 +189,17 @@ The system provides comprehensive logging:
 - Detailed error logging and stack traces for debugging
 
 ## Features
+
+### Authentication & Security
+- **Multi-user Support**: Secure user registration and login system
+- **Password Security**: Industry-standard password hashing with Werkzeug
+- **Session Management**: Flask-Login integration with "remember me" functionality
+- **Route Protection**: All application functionality protected by authentication
+- **CSRF Protection**: Cross-site request forgery protection on all forms
+- **Professional UI**: Modern, responsive login and registration pages
+- **Dual Login Methods**: Support for both username and email authentication
+- **Account Management**: User account status control (active/inactive)
+- **Database Integration**: SQLAlchemy-based user management with proper indexing
 
 ### CV Processing
 - PDF text extraction and AI-powered summarization
@@ -175,6 +232,9 @@ The system provides comprehensive logging:
 - File management and organization
 
 ### Dashboard Interface
+- **Secure Access**: All features protected behind authentication
+- **User Information**: Welcome message with username and last login display
+- **Session Control**: Easy logout functionality and session management
 - Tabbed interface for logical organization
 - File management capabilities
 - Progress tracking for background tasks

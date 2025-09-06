@@ -9,6 +9,7 @@ from flask import (
     Blueprint, request, redirect, url_for, flash, render_template,
     send_file, jsonify, current_app
 )
+from flask_login import login_required
 from werkzeug.utils import secure_filename
 
 # Add project root to path to find modules
@@ -71,6 +72,7 @@ def get_job_details_for_url(job_url):
 
 
 @job_matching_bp.route('/run_matcher', methods=['POST'])
+@login_required
 def run_job_matcher():
     """Run the job matcher with the selected CV"""
     cv_path_rel = request.form.get('cv_path') # This is the relative path from the form
@@ -146,6 +148,7 @@ def run_job_matcher():
         return redirect(url_for('index'))
 
 @job_matching_bp.route('/run_combined', methods=['POST'])
+@login_required
 def run_combined_process():
     """Run both job data acquisition and job matcher in one go"""
     try:
@@ -274,6 +277,7 @@ def run_combined_process():
 
 
 @job_matching_bp.route('/view_results/<report_file>')
+@login_required
 def view_results(report_file):
     """View job match results"""
     # Secure the report filename
@@ -463,6 +467,7 @@ def view_results(report_file):
 
 
 @job_matching_bp.route('/download_report/<report_file>')
+@login_required
 def download_report(report_file):
     """Download a job match report (Markdown file)"""
     secure_report_file = secure_filename(report_file)
@@ -483,6 +488,7 @@ def download_report(report_file):
         return redirect(url_for('index'))
 
 @job_matching_bp.route('/delete_report/<report_file>')
+@login_required
 def delete_report(report_file):
     """Delete a job match report file (MD and JSON)"""
     try:

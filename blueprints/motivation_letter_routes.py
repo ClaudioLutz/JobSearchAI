@@ -9,6 +9,7 @@ from flask import (
     Blueprint, request, redirect, url_for, flash, send_file, jsonify,
     render_template, current_app
 )
+from flask_login import login_required
 from werkzeug.utils import secure_filename
 
 # Add project root to path
@@ -45,6 +46,7 @@ def sanitize_filename(name, length=30):
     return sanitized[:length]
 
 @motivation_letter_bp.route('/generate', methods=['POST'])
+@login_required
 def generate_motivation_letter_route():
     """Generate a motivation letter for a single job, handling manual text input."""
     try:
@@ -220,6 +222,7 @@ def generate_motivation_letter_route():
 
 
 @motivation_letter_bp.route('/generate_multiple', methods=['POST'])
+@login_required
 def generate_multiple_letters():
     """Generate motivation letters for multiple selected jobs"""
     data = request.get_json()
@@ -316,6 +319,7 @@ def generate_multiple_letters():
 
 
 @motivation_letter_bp.route('/generate_multiple_emails', methods=['POST'])
+@login_required
 def generate_multiple_emails():
     """Generate email texts for multiple selected jobs and update their JSON files."""
     data = request.get_json()
@@ -424,6 +428,7 @@ def generate_multiple_emails():
 
 
 @motivation_letter_bp.route('/view/<operation_id>')
+@login_required
 def view_motivation_letter(operation_id):
     """View a generated motivation letter (newly generated or existing)"""
     try:
@@ -484,6 +489,7 @@ def view_motivation_letter(operation_id):
 
 
 @motivation_letter_bp.route('/download_html')
+@login_required
 def download_motivation_letter_html():
     """Download a generated motivation letter (HTML version using relative path)"""
     file_path_rel = request.args.get('file_path')
@@ -507,6 +513,7 @@ def download_motivation_letter_html():
 
 
 @motivation_letter_bp.route('/download_docx')
+@login_required
 def download_motivation_letter_docx():
     """Download a generated motivation letter (Word document version using relative path)"""
     file_path_rel = request.args.get('file_path')
@@ -530,6 +537,7 @@ def download_motivation_letter_docx():
 
 
 @motivation_letter_bp.route('/download_docx_from_json')
+@login_required
 def download_docx_from_json():
     """Generate (if needed) and download DOCX from JSON file path"""
     json_file_path_rel = request.args.get('json_file_path')
@@ -565,6 +573,7 @@ def download_docx_from_json():
 
 
 @motivation_letter_bp.route('/view_scraped_data/<scraped_data_filename>')
+@login_required
 def view_scraped_data(scraped_data_filename):
     """Display the contents of a specific scraped job data JSON file."""
     try:
@@ -597,6 +606,7 @@ def view_scraped_data(scraped_data_filename):
 
 
 @motivation_letter_bp.route('/view_email_text/existing')
+@login_required
 def view_email_text():
     """View the generated email text from a JSON file."""
     json_path_rel = request.args.get('json_path')
@@ -648,6 +658,7 @@ def view_email_text():
 
 
 @motivation_letter_bp.route('/delete/<json_filename>')
+@login_required
 def delete_letter_set(json_filename):
     """Delete a generated letter JSON and its associated HTML, DOCX, and scraped data files."""
     try:

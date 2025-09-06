@@ -1,6 +1,6 @@
 # 6. Dashboard
 
-**Purpose**: Provide a web interface for interacting with all components of the system, structured using Flask Blueprints.
+**Purpose**: Provide a secure web interface for interacting with all components of the system, structured using Flask Blueprints with comprehensive authentication protection.
 
 **Key Files**:
 - `dashboard.py`: Main Flask application file. Sets up the app using the factory pattern (`create_app`), registers blueprints, defines core routes (`/`, `/operation_status/<id>`, `/delete_files`), and provides shared context/functions (like operation tracking, `get_job_details_for_url`) to blueprints.
@@ -43,28 +43,33 @@
 - Bootstrap 5 & Bootstrap Icons (assumed usage in templates).
 
 **Features**:
-1.  **Tabbed Interface**: Organizes functionality into logical sections:
+1.  **Authentication & Security**: 
+    *   **Complete Route Protection**: All dashboard routes require user authentication via `@login_required` decorators.
+    *   **User Session Management**: Integration with Flask-Login for secure session handling.
+    *   **User Interface Elements**: Welcome message with username, last login display, and logout functionality.
+    *   **Unauthorized Access Handling**: Automatic redirection to login page for unauthenticated users.
+2.  **Tabbed Interface**: Organizes functionality into logical sections:
     *   **Setup & Data**: Upload CVs, Run Job Data Acquisition.
     *   **Run Process**: Run Job Matcher, Run Combined Process.
     *   **View Files**: View available CVs, Job Data, and Reports.
-2.  **CV Management**:
+3.  **CV Management**:
     *   Upload new CVs (PDF).
     *   View available CVs with timestamps (handles nested paths).
     *   View CV summaries via modal (AJAX call to `/cv/view_summary/...`, generates summary if it doesn't exist).
     *   Delete individual or multiple CVs and their associated summaries (single via link (`/cv/delete/...`), bulk via AJAX to `/delete_files`).
-3.  **Job Data Acquisition**:
+4.  **Job Data Acquisition**:
     *   Run the job scraper (background task via `/job_data/run_scraper`) to get new job listings, updating `max_pages` in `job-data-acquisition/settings.json` first.
     *   View available job data files (identified by timestamp) in an accordion section.
     *   View the contents of a selected job data file on a separate page (`/job_data/view/<filename>`).
     *   Delete individual or multiple job data files (single via link (`/job_data/delete/...`), bulk via AJAX to `/delete_files`).
-4.  **Job Matching**:
+5.  **Job Matching**:
     *   Run the job matcher (background task via `/job_matching/run_matcher`) with a selected CV and configurable parameters (`min_score`, `max_jobs`, `max_results`). Stores the `cv_path` used within the results JSON.
     *   Run a combined process (scrape + match) as a single background task (via `/job_matching/run_combined`).
     *   View available job match reports (identified by timestamp) in an accordion section.
     *   View detailed match results on a separate page (`/job_matching/view_results/<report_file>`).
     *   Download job match reports (MD format via `/job_matching/download_report/...`).
     *   Delete individual or multiple reports (MD and associated JSON) (single via link (`/job_matching/delete_report/...`), bulk via AJAX to `/delete_files`).
-5.  **Motivation Letter Generation (from Results Page)**:
+6.  **Motivation Letter Generation (from Results Page)**:
     *   **CV Selection**: A dropdown menu on the results page allows the user to select which CV summary to use for letter generation. It defaults to the CV used for the report (if found) or the first available CV.
     *   **Single Letter Generation**:
         - Generate personalized motivation letters for specific job postings using the selected CV (background task via `/motivation_letter/generate`)
@@ -80,7 +85,7 @@
         - View raw scraped data via "View Scraped Data" option (renders `scraped_data_view.html` via `/motivation_letter/view_scraped_data/...`)
         - View generated email text via "View Email Text" option (renders `email_text_view.html` via `/motivation_letter/view_email_text/existing?...`)
         - Delete letter sets including all associated files (JSON, HTML, DOCX, scraped data)
-6.  **File Linking & Display (Results Page)**:
+7.  **File Linking & Display (Results Page)**:
     *   Logic reliably links job matches displayed on the results page to their corresponding generated files:
         - HTML letter (`.html`)
         - Word document (`.docx`)
@@ -91,12 +96,12 @@
         - Normalizes paths for consistent comparison
         - Falls back to partial matching if needed
     *   Filenames are constructed using sanitized job titles from matched `_scraped_data.json` files
-7.  **User Feedback and Progress Tracking**:
+8.  **User Feedback and Progress Tracking**:
     *   Visual feedback via Flask `flash` messages and JS-driven button states/modals.
     *   Background processing for long operations (scraping, matching, letter generation) using `threading` with proper application context handling (`app.app_context()`).
     *   Progress tracking via unique operation IDs (`uuid`) stored in application context (`current_app.extensions['operation_progress']`, `current_app.extensions['operation_status']`).
     *   Frontend polls the `/operation_status/<id>` endpoint via JavaScript (AJAX) to get progress percentage and status messages.
-8.  **Dark Theme**: Consistent dark theme applied across all components (as per original documentation).
+9.  **Dark Theme**: Consistent dark theme applied across all components (as per original documentation).
 
 **Process**:
 1.  The application is created using the `create_app` factory in `dashboard.py`.

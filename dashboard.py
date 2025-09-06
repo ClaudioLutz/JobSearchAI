@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
+from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 import urllib.parse
 
@@ -121,13 +122,22 @@ logger = logging.getLogger("dashboard")
 def create_app():
     """Creates and configures the Flask application."""
     app = Flask(__name__)
-    app.secret_key = os.urandom(24)  # For flash messages
-
+    
     # --- Configuration ---
+    # Load configuration from config.py
+    from config import get_secret_key, get_database_config
+    app.config['SECRET_KEY'] = get_secret_key()
+    app.config.update(get_database_config())
+    
     # Configure upload folder (can be overridden by instance config)
     app.config['UPLOAD_FOLDER'] = 'process_cv/cv-data/input'
     # Ensure upload directory exists
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    
+    # --- Initialize Extensions ---
+    from models import db, login_manager
+    db.init_app(app)
+    login_manager.init_app(app)
 
     # --- Shared State / Utilities ---
     # Progress tracking (using app context via extensions)
@@ -181,15 +191,16 @@ def create_app():
     app.extensions['start_operation'] = start_operation
     app.extensions['update_operation_progress'] = update_operation_progress
     app.extensions['complete_operation'] = complete_operation
-    # Attach the complex helper function directly to app for blueprint access via current_app
-    app.get_job_details_for_url = get_job_details_for_url
+    app.extensions['get_job_details_for_url'] = get_job_details_for_url
 
     # --- Register Blueprints ---
+    from blueprints.auth_routes import auth
     from blueprints.cv_routes import cv_bp
     from blueprints.job_data_routes import job_data_bp
     from blueprints.job_matching_routes import job_matching_bp
     from blueprints.motivation_letter_routes import motivation_letter_bp
 
+    app.register_blueprint(auth)
     app.register_blueprint(cv_bp)
     app.register_blueprint(job_data_bp)
     app.register_blueprint(job_matching_bp)
@@ -197,6 +208,7 @@ def create_app():
 
     # --- Core Routes (kept in this file) ---
     @app.route('/operation_status/<operation_id>')
+    @login_required
     def get_operation_status_route(operation_id):
         """Get the status of an operation"""
         # Access progress/status via app extensions
@@ -212,6 +224,7 @@ def create_app():
             return jsonify({'error': 'Operation not found'}), 404
 
     @app.route('/')
+    @login_required
     def index():
         """Render the main dashboard page"""
         # Get list of available CVs with timestamps
@@ -358,6 +371,7 @@ def create_app():
                               generated_letters=generated_letters_data) # Pass new list
 
     @app.route('/delete_files', methods=['POST'])
+    @login_required
     def delete_files_route():
         """Handle bulk deletion of files"""
         data = request.get_json()

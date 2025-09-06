@@ -9,14 +9,42 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
-    <div class="container mt-4">
-        <h1 class="mb-4">JobsearchAI Dashboard</h1>
+<div class="container mt-4">
+        <!-- Header with user info and logout -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="mb-0">JobsearchAI Dashboard</h1>
+            {% if current_user.is_authenticated %}
+                <div class="d-flex align-items-center">
+                    <div class="me-3">
+                        <span class="text-muted">Welcome,</span>
+                        <strong>{{ current_user.username }}</strong>
+                        {% if current_user.last_login %}
+                            <small class="text-muted d-block">Last login: {{ current_user.last_login.strftime('%Y-%m-%d %H:%M') if current_user.last_login else 'Never' }}</small>
+                        {% endif %}
+                    </div>
+                    <div class="btn-group">
+                        <a href="{{ url_for('auth.logout_get') }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-box-arrow-right me-1"></i>Logout
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
 
         <!-- Flash Messages -->
-        {% with messages = get_flashed_messages() %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-                {% for message in messages %}
-                    <div class="alert alert-info alert-dismissible fade show" role="alert">
+                {% for category, message in messages %}
+                    {% set alert_class = 'alert-info' %}
+                    {% if category == 'error' %}
+                        {% set alert_class = 'alert-danger' %}
+                    {% elif category == 'success' %}
+                        {% set alert_class = 'alert-success' %}
+                    {% elif category == 'warning' %}
+                        {% set alert_class = 'alert-warning' %}
+                    {% endif %}
+                    <div class="alert {{ alert_class }} alert-dismissible fade show" role="alert">
+                        <i class="bi bi-{% if category == 'error' %}exclamation-triangle{% elif category == 'success' %}check-circle{% elif category == 'warning' %}exclamation-circle{% else %}info-circle{% endif %} me-2"></i>
                         {{ message }}
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>

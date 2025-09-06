@@ -1,0 +1,85 @@
+{% extends "auth/base_auth.html" %}
+
+{% block title %}Sign In - JobsearchAI{% endblock %}
+
+{% block auth_subtitle %}Sign in to access your dashboard{% endblock %}
+
+{% block content %}
+<form method="POST" novalidate>
+    {{ form.hidden_tag() }}
+    
+    <div class="form-floating mb-3">
+        {{ form.username_or_email(class="form-control" + (" is-invalid" if form.username_or_email.errors else ""), 
+                                  placeholder="Enter username or email",
+                                  id="floatingUsernameOrEmail") }}
+        <label for="floatingUsernameOrEmail">
+            <i class="bi bi-person me-2"></i>Username or Email
+        </label>
+        {% if form.username_or_email.errors %}
+            <div class="invalid-feedback">
+                {% for error in form.username_or_email.errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="form-floating mb-3">
+        {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""),
+                        placeholder="Enter password",
+                        id="floatingPassword") }}
+        <label for="floatingPassword">
+            <i class="bi bi-lock me-2"></i>Password
+        </label>
+        {% if form.password.errors %}
+            <div class="invalid-feedback">
+                {% for error in form.password.errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="form-check mb-3">
+        {{ form.remember_me(class="form-check-input", id="rememberMe") }}
+        <label class="form-check-label" for="rememberMe">
+            Remember me for 30 days
+        </label>
+    </div>
+
+    <div class="d-grid mb-3">
+        {{ form.submit(class="btn btn-primary btn-lg") }}
+    </div>
+</form>
+
+<div class="auth-links">
+    <p class="mb-2">Don't have an account?</p>
+    <a href="{{ url_for('auth.register') }}" class="btn btn-outline-primary">
+        <i class="bi bi-person-plus me-2"></i>Create Account
+    </a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Focus on the first input field
+    document.getElementById('floatingUsernameOrEmail').focus();
+    
+    // Handle form submission loading state
+    const form = document.querySelector('form');
+    const submitBtn = document.querySelector('input[type="submit"]');
+    
+    form.addEventListener('submit', function() {
+        submitBtn.disabled = true;
+        submitBtn.value = 'Signing In...';
+        
+        // Add loading spinner
+        const spinner = document.createElement('i');
+        spinner.className = 'bi bi-arrow-repeat spinner-border spinner-border-sm me-2';
+        spinner.setAttribute('role', 'status');
+        submitBtn.parentNode.insertBefore(spinner, submitBtn);
+    });
+});
+</script>
+{% endblock %}
