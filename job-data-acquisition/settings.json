@@ -1,0 +1,24 @@
+{
+    "scraper": {
+        "llm": {
+            "model": "openai/gpt-4.1-mini",
+            "api_key": "${OPENAI_API_KEY}",
+            "temperature": 0.1
+        },
+        "headless": true,
+        "verbose": true,
+        "output_format": "json",
+        "max_pages": 1
+    },
+    "target_urls": [
+        "https://www.ostjob.ch/job/alle-jobs-nach-datum-seite-"
+    ],
+    "data_storage": {
+        "output_directory": "job-data-acquisition/data",
+        "file_prefix": "job_data_"
+    },
+    "logging": {
+        "log_directory": "job-data-acquisition/logs",
+        "log_level": "INFO"
+    }
+}

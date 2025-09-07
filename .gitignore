@@ -60,11 +60,13 @@ test_job_details_utils.py
 job-data-acquisition/configs/settings.json
 job-data-acquisition/venv
 job-data-acquisition/job-data-acquisition
-job-data-acquisition/settings.json
+# Keep template, ignore actual config with sensitive data
+job-data-acquisition/settings.local.json
 job-data-acquisition/job-data-acquisition/data/
+# Ignore generated job data files but keep directory
 job-data-acquisition/data/*.json
-job-data-acquisition/logs/
-logs/
+job-data-acquisition/logs/*.log
+logs/*.log
 
 # CV data - may contain personal information
 process_cv/cv-data/input/

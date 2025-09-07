@@ -1,5 +1,36 @@
 # JobsearchAI
 
+## Quick Start (After Fresh Clone)
+
+After cloning this repository, follow these steps to get started:
+
+1. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Set up Environment Variables**:
+   Create/update `process_cv/.env` with your OpenAI API key:
+   ```
+   OPENAI_API_KEY=your_openai_api_key_here
+   SECRET_KEY=your_secret_key_here
+   ```
+
+3. **Initialize Database**:
+   ```bash
+   python init_db.py
+   ```
+
+4. **Run the Application**:
+   ```bash
+   python dashboard.py
+   ```
+
+5. **Access the Dashboard**:
+   Open your browser to `http://localhost:5000` and register a new account.
+
+That's it! The application should now run without any critical errors.
+
 ## Overview
 
 JobsearchAI is a secure, multi-user system that matches job listings with candidate CVs using AI-powered semantic matching. It scrapes job data, processes CVs, finds suitable matches, generates personalized motivation letters and email texts, and converts them to Word documents. A comprehensive authentication system protects all functionality, while a web dashboard provides an intuitive interface for managing the system.

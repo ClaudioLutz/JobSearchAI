@@ -278,7 +278,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 cvSummaryModal.show();
 
                 // Fetch CV summary
-                fetch(`/view_cv_summary/${encodeURIComponent(cvFile)}`)
+                fetch(`/cv/view_summary/${encodeURIComponent(cvFile)}`)
                     .then(response => response.json())
                     .then(data => {
                         if (data.error) {
@@ -570,8 +570,11 @@ document.addEventListener('DOMContentLoaded', function() {
                             bulkDeleteButton.style.display = 'none';
                             // If list becomes empty, show the 'No files' message (optional enhancement)
                             if (listElement.querySelectorAll('li').length === 0) {
-                                const noFilesMessage = listElement.closest('.card-body').querySelector('p');
-                                if (noFilesMessage) noFilesMessage.style.display = 'block';
+                                const cardBody = listElement.closest('.card-body');
+                                if (cardBody) {
+                                    const noFilesMessage = cardBody.querySelector('p');
+                                    if (noFilesMessage) noFilesMessage.style.display = 'block';
+                                }
                                 listElement.style.display = 'none'; // Hide the empty ul
                                 bulkDeleteButton.remove(); // Remove the button entirely if list is empty
                             }

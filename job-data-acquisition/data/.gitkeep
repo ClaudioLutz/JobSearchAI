@@ -1,0 +1,2 @@
+# This file ensures the data directory is preserved in the repository
+# Job data files (*.json) will be stored here but are ignored by git

@@ -42,12 +42,14 @@ def extract_cv_text(file_path):
 
 # Load environment variables from the .env file located next to this script
 env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(dotenv_path=env_path)
+load_dotenv(dotenv_path=env_path, override=True)  # Force override system env vars
 
 # Initialize the OpenAI client
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     logger.warning("OPENAI_API_KEY not set. OpenAI API calls may fail.")
+else:
+    logger.info(f"Using OpenAI API key starting with: {api_key[:10]}...")
 client = openai.OpenAI(api_key=api_key)
 
 def summarize_cv(cv_text):
@@ -86,7 +88,7 @@ def summarize_cv(cv_text):
         return ""
 
 if __name__ == "__main__":
-    sample_cv = "cv-data/Lebenslauf_Claudio Lutz.pdf"
+    sample_cv = "cv-data/input/Lebenslauf_-_Lutz_Claudio.pdf"
     logger.info(f"Running test CV processing for {sample_cv}")
     text = extract_cv_text(sample_cv)
     summary = summarize_cv(text)
