@@ -1,9 +1,30 @@
 
 import os
+import sys
 import json
 import logging
 from datetime import datetime
+from flask import Flask, jsonify, request
 from scrapegraphai.graphs import SmartScraperGraph
+
+# Add the parent directory to the Python path to import config
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Create Flask app for health checks and API endpoints
+app = Flask(__name__)
+
+# Import the config manager to get the correct environment variables
+try:
+    from config import ConfigManager
+    config_manager = ConfigManager()
+    # Override the environment variable with the correct one from config
+    api_key = config_manager.get_env("OPENAI_API_KEY")
+    if api_key:
+        os.environ['OPENAI_API_KEY'] = api_key
+    else:
+        logging.error("No OpenAI API key found in configuration")
+except Exception as e:
+    logging.error(f"Failed to load config manager: {e}")
 
 # Load configuration from settings.json
 def load_config():
@@ -52,17 +73,41 @@ def setup_logging():
 
 # Define the extraction prompt
 EXTRACTION_PROMPT = """
-Extract **all** job postings from the page. For each job listing, return a JSON object with the following fields:
-1. Job Title
-2. Company Name
-3. Job Description
-4. Required Skills
-5. Location
-6. Salary Range
-7. Posting Date
-8. Application URL
+IMPORTANT: If there is a cookie consent banner or popup, ignore it and focus on the job listings content below it.
 
-**Output** should be a **JSON array** of objects, one for each of the job listing found on the page.
+Extract **all** job postings from the current page. Look for job listings that typically contain:
+- Job titles (like "Kundenberater", "Software Engineer", etc.)
+- Company names 
+- Location information (like "Bern", "Zürich", "Appenzellerland", etc.)
+- Job descriptions or snippets
+- Application links/URLs
+
+For each job listing found, return a JSON object with these exact fields:
+- "Job Title": The job position title
+- "Company Name": The company/employer name  
+- "Job Description": Description text or summary
+- "Required Skills": Skills mentioned (if any, otherwise "N/A")
+- "Location": Job location/region
+- "Salary Range": Salary info if mentioned (otherwise "N/A") 
+- "Posting Date": Date posted if available (otherwise "N/A")
+- "Application URL": Link to apply or view full job details
+
+**Output format**: Return a JSON array containing all job objects found on this page.
+**If no job listings are found**, return an empty array: []
+
+Example output:
+[
+    {
+        "Job Title": "Kundenberater im Aussendienst",
+        "Company Name": "Universal-Job AG",
+        "Job Description": "Du bist ein Kommunikationstalent und liebst den direkten Kontakt zu Menschen...",
+        "Required Skills": "Kommunikation, Verkauf",
+        "Location": "Appenzellerland",
+        "Salary Range": "80-100%",
+        "Posting Date": "07.09.2025",
+        "Application URL": "https://www.ostjob.ch/job/details/12345"
+    }
+]
 """
 
 # Configure the ScrapeGraph pipeline with page number
@@ -71,12 +116,24 @@ def configure_scraper(source_url, page):
         raise ValueError("Configuration not loaded. Cannot configure scraper.")
     
     scraper_config = CONFIG["scraper"]
+    
+    # Use the updated configuration from settings.json
     graph_config = {
         "llm": scraper_config["llm"],
         "verbose": scraper_config["verbose"],
         "headless": scraper_config["headless"],
         "output_format": scraper_config["output_format"]
     }
+    
+    # Add additional config options if they exist in settings.json
+    if "wait_time" in scraper_config:
+        graph_config["wait_time"] = scraper_config["wait_time"]
+    if "timeout" in scraper_config:
+        graph_config["timeout"] = scraper_config["timeout"]
+    if "load_wait" in scraper_config:
+        graph_config["load_wait"] = scraper_config["load_wait"]
+    if "browser_config" in scraper_config:
+        graph_config["browser_config"] = scraper_config["browser_config"]
 
     # Construct the URL using proper pagination query parameter
     paginated_url = f"{source_url}{page}"
@@ -89,6 +146,82 @@ def configure_scraper(source_url, page):
 
     return scraper
 
+
+# Flask health check endpoint
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Docker and Cloud Run"""
+    try:
+        # Basic health check - verify config is loaded
+        if CONFIG is None:
+            return jsonify({
+                "status": "unhealthy",
+                "message": "Configuration not loaded",
+                "timestamp": datetime.now().isoformat()
+            }), 503
+        
+        # Check if we can access the display (Xvfb check)
+        display = os.environ.get('DISPLAY')
+        if not display:
+            return jsonify({
+                "status": "warning",
+                "message": "No DISPLAY environment variable set",
+                "timestamp": datetime.now().isoformat()
+            }), 200
+        
+        return jsonify({
+            "status": "healthy",
+            "message": "JobSearchAI scraper is running",
+            "display": display,
+            "headless_mode": CONFIG["scraper"]["headless"],
+            "timestamp": datetime.now().isoformat()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "status": "unhealthy", 
+            "message": f"Health check failed: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }), 503
+
+@app.route('/scrape', methods=['POST'])
+def scrape_endpoint():
+    """API endpoint to trigger scraping"""
+    try:
+        logger = setup_logging()
+        logger.info("Scraping request received via API")
+        
+        output_file = run_scraper()
+        
+        return jsonify({
+            "status": "success",
+            "message": "Scraping completed",
+            "output_file": output_file,
+            "timestamp": datetime.now().isoformat()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Scraping failed: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }), 500
+
+@app.route('/')
+def home():
+    """Root endpoint with basic information"""
+    return jsonify({
+        "service": "JobSearchAI Scraper",
+        "version": "1.0.0",
+        "status": "running",
+        "endpoints": {
+            "health": "/health",
+            "scrape": "/scrape (POST)",
+            "home": "/"
+        },
+        "headless_mode": CONFIG["scraper"]["headless"] if CONFIG else None,
+        "timestamp": datetime.now().isoformat()
+    })
 
 # Function to run the scraper and save results
 def run_scraper():
@@ -157,6 +290,19 @@ def run_scraper():
 if __name__ == "__main__":
     if CONFIG is None:
         print("Failed to load configuration. Exiting.")
-    else:
-        output_file = run_scraper()
-        print(f"Job data extraction complete. Data saved to: {output_file}")
+        sys.exit(1)
+    
+    # Get port from environment variable (for Cloud Run compatibility)
+    port = int(os.environ.get('PORT', 8080))
+    
+    print(f"Starting JobSearchAI Scraper API server on port {port}")
+    print(f"Headless mode: {CONFIG['scraper']['headless']}")
+    print(f"Display: {os.environ.get('DISPLAY', 'Not set')}")
+    
+    # Run Flask server
+    app.run(
+        host='0.0.0.0',  # Accept connections from any IP (required for Cloud Run)
+        port=port,
+        debug=False,     # Disable debug mode in production
+        threaded=True    # Enable threading for concurrent requests
+    )

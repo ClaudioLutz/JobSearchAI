@@ -147,7 +147,7 @@ def run_job_matcher():
         logger.error(f'Error running job matcher: {str(e)}', exc_info=True)
         return redirect(url_for('index'))
 
-@job_matching_bp.route('/run_combined', methods=['POST'])
+@job_matching_bp.route('/run_combined_process', methods=['POST'])
 @login_required
 def run_combined_process():
     """Run both job data acquisition and job matcher in one go"""

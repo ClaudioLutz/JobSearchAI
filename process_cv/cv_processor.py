@@ -77,7 +77,7 @@ def summarize_cv(cv_text):
                 {"role": "user", "content": prompt}
             ],
             temperature=0.2,
-            max_tokens=800,
+            max_tokens=4000,
         )
 
         summary = response.choices[0].message.content.strip()

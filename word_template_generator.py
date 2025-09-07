@@ -1,7 +1,11 @@
 import os
 import json
 from pathlib import Path
-from docxtpl import DocxTemplate
+from utils.warning_utils import SuppressWarnings
+
+# Import docxtpl with suppressed pkg_resources warnings
+with SuppressWarnings(['pkg_resources']):
+    from docxtpl import DocxTemplate
 
 def json_to_docx(motivation_letter_json, template_path='motivation_letters/template/motivation_letter_template.docx', output_path=None):
     """Generate a Word document from motivation letter JSON using docxtpl template."""

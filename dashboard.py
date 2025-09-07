@@ -510,6 +510,11 @@ def create_app():
 # --- Main Execution ---
 if __name__ == '__main__':
     app = create_app()
-    # Use 127.0.0.1 instead of localhost for explicit binding
-    # Set debug=False for production or testing without auto-reload
-    app.run(debug=True, host='127.0.0.1', port=5000)
+    # Bind to 0.0.0.0 for Docker container accessibility
+    # Use environment variables for production configuration
+    import os
+    host = os.environ.get('HOST', '0.0.0.0')
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_ENV') != 'production'
+    
+    app.run(debug=debug, host=host, port=port)

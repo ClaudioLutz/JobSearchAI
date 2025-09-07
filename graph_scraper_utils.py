@@ -8,23 +8,32 @@ from pathlib import Path
 # Set up logger for this module
 logger = logging.getLogger("graph_scraper_utils")
 
-# Load configuration from settings.json (relative to this file's location)
+# Load configuration from settings.json
 def load_config():
     """Loads configuration from job-data-acquisition/settings.json"""
     try:
-        # Construct path relative to this script's directory
-        script_dir = Path(__file__).parent
-        config_path = script_dir / "job-data-acquisition" / "settings.json"
-        if not config_path.is_file():
-             logger.error(f"Configuration file not found at expected path: {config_path}")
-             # Try path relative to project root as fallback (if script is run from root)
-             config_path_alt = Path("job-data-acquisition") / "settings.json"
-             if config_path_alt.is_file():
-                  config_path = config_path_alt
-                  logger.info(f"Using alternative config path: {config_path}")
-             else:
-                  logger.error(f"Alternative config path also not found: {config_path_alt}")
-                  return None
+        # Get the current working directory (project root)
+        project_root = Path.cwd()
+        
+        # Try multiple possible paths for the settings file
+        possible_paths = [
+            project_root / "job-data-acquisition" / "settings.json",
+            Path(__file__).parent / "job-data-acquisition" / "settings.json",
+            Path("job-data-acquisition") / "settings.json"
+        ]
+        
+        config_path = None
+        for path in possible_paths:
+            if path.is_file():
+                config_path = path
+                logger.info(f"Found configuration file at: {config_path}")
+                break
+        
+        if config_path is None:
+            logger.error("Configuration file not found in any expected locations:")
+            for path in possible_paths:
+                logger.error(f"  - {path}")
+            return None
 
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
@@ -65,7 +74,7 @@ AUSGABE IN DER GLEICHEN SPRACHE WIE DER TEXT DES STELLENANGEBOTES!
 # Renamed function back
 def get_job_details_with_graphscrapeai(job_url):
     """
-    Attempts to extract structured job details using ScrapeGraphAI, forcing headless=False.
+    Attempts to extract structured job details using optimized headless ScrapeGraphAI.
 
     Args:
         job_url (str): The URL of the job posting page.
@@ -74,7 +83,7 @@ def get_job_details_with_graphscrapeai(job_url):
         dict or None: A dictionary containing the extracted job details,
                       or None if extraction fails or is incomplete.
     """
-    logger.info(f"Attempting GraphScrapeAI structured extraction (headless=False) for URL: {job_url}")
+    logger.info(f"Attempting optimized GraphScrapeAI extraction (headless=True) for URL: {job_url}")
 
     if CONFIG is None:
         logger.error("Configuration not loaded. Cannot proceed with GraphScrapeAI.")
@@ -91,25 +100,43 @@ def get_job_details_with_graphscrapeai(job_url):
              logger.error("API key or model missing in LLM configuration within settings.json.")
              return None
 
-        # Construct graph_config using loaded settings
-        # Add model_provider if missing in config (for backward compatibility or flexibility)
+        # Construct OPTIMIZED graph_config with quality improvements
         llm_config = scraper_config['llm'].copy() # Avoid modifying original CONFIG dict
         if 'model_provider' not in llm_config:
              if 'openai' in llm_config.get('model', ''):
                   llm_config['model_provider'] = 'openai'
                   logger.info("Automatically added 'model_provider': 'openai' to LLM config.")
-             # Add other providers if needed (e.g., 'groq', 'gemini') based on model name
              else:
                   logger.warning(f"Could not determine model_provider for model: {llm_config.get('model')}. Scraper might fail.")
-                  # Optionally default to openai or raise error
 
+        # OPTIMIZED CONFIGURATION based on quality analysis
         graph_config = {
             "llm": llm_config,
-            "verbose": scraper_config.get("verbose", True), # Keep verbose for debugging
-            "headless": False, # Force headless=False to mimic successful test
-            "output_format": "json" # Expect JSON output for structured prompt
+            "verbose": scraper_config.get("verbose", True),
+            "headless": True, # Deployment-ready
+            "output_format": "json",
+            "wait_time": 5,  # KEY OPTIMIZATION: Increased wait time for dynamic content
+            "browser_config": {
+                "args": [
+                    "--disable-blink-features=AutomationControlled",  # Avoid bot detection
+                    "--disable-dev-shm-usage",  # Better memory management
+                    "--no-sandbox",  # Required for some server environments
+                    "--disable-setuid-sandbox",
+                    "--disable-extensions",
+                    "--disable-plugins",
+                    "--disable-background-timer-throttling",  # Ensure JS runs properly
+                    "--disable-backgrounding-occluded-windows",
+                    "--disable-renderer-backgrounding",
+                    "--disable-features=TranslateUI",
+                    "--disable-ipc-flooding-protection"
+                ],
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "viewport": {"width": 1920, "height": 1080}  # Standard desktop viewport
+            },
+            "timeout": 30000,  # 30 second timeout
+            "load_wait": "networkidle"  # Wait for network to be idle
         }
-        logger.debug(f"Using GraphScrapeAI config (headless=False): {graph_config}")
+        logger.debug(f"Using OPTIMIZED GraphScrapeAI config: {graph_config}")
 
         # Use the structured extraction prompt
         scraper = SmartScraperGraph(
@@ -119,77 +146,28 @@ def get_job_details_with_graphscrapeai(job_url):
         )
 
         result = scraper.run()
-        # Log the raw dictionary result for detailed diagnosis
-        try:
-            # Log the full result now to see the structure
-            logger.info(f"GraphScrapeAI raw result dictionary (headless=False): {json.dumps(result, indent=2, ensure_ascii=False)}")
-        except Exception as log_e:
-            logger.error(f"Could not serialize GraphScrapeAI result for logging: {log_e}")
-            logger.info(f"GraphScrapeAI raw result (non-JSON, headless=False): {result}") # Fallback log
-
-        # --- Validate the result ---
-        if not isinstance(result, dict):
-            logger.warning(f"GraphScrapeAI (headless=False) did not return a dictionary for {job_url}. Type: {type(result)}")
-            return None
-
-        # --- Check if the actual content is nested ---
-        job_details = None # Initialize as None
-        if 'content' in result and isinstance(result['content'], dict):
-            logger.info("Found nested 'content' key in GraphScrapeAI result. Using nested dictionary.")
-            job_details = result['content']
-        elif len(result) == 1 and isinstance(list(result.values())[0], list) and len(list(result.values())[0]) > 0 and isinstance(list(result.values())[0][0], dict):
-             # Handle cases where result might be {"jobs": [{...}]}
-             logger.info("Found result nested within a list under a single key. Using first item from list.")
-             job_details = list(result.values())[0][0]
-        elif 'Job Title' in result: # Check if result itself is the details dict (less likely now but possible)
-             logger.info("Result dictionary seems to be the job details directly.")
-             job_details = result
+        
+        # Process and validate result
+        job_details = process_scraper_result(result, job_url)
+        
+        if job_details:
+            # Calculate quality score for monitoring
+            quality_score = calculate_quality_score(job_details)
+            logger.info(f"GraphScrapeAI successfully extracted details (OPTIMIZED headless=True) - Quality Score: {quality_score}")
+            
+            # Log extracted details
+            logger.info(f"--- Extracted Job Details (Optimized GraphScrapeAI Method) ---")
+            for key, value in job_details.items():
+                log_value = value
+                if isinstance(log_value, str) and len(log_value) > 100:
+                    log_value = log_value[:100] + "... [truncated]"
+                logger.info(f"{key}: {log_value}")
+            logger.info("---------------------------------------------")
+            
+            return job_details
         else:
-             logger.warning(f"GraphScrapeAI result dictionary does not contain 'content' key or expected structure for {job_url}.")
-             return None
-        # --- End Nested Check ---
-
-
-        # Check for essential fields within the job_details dictionary
-        title = job_details.get('Job Title')
-        description = job_details.get('Job Description')
-        responsibilities = job_details.get('Responsibilities')
-        skills = job_details.get('Required Skills')
-
-        if not title:
-            logger.warning(f"GraphScrapeAI failed to extract 'Job Title' from the result structure for {job_url}.")
+            logger.warning(f"Failed to extract meaningful job details from {job_url}")
             return None
-
-        # Check if at least one of the key content fields has meaningful data
-        # Using the existing has_sufficient_content logic (assuming it's defined elsewhere or we add it here)
-        # For now, just check if description is present and non-trivial
-        has_meaningful_content = False
-        if description and isinstance(description, str) and len(description.strip()) > 10: # Arbitrary length check
-            has_meaningful_content = True
-        if not has_meaningful_content and responsibilities and isinstance(responsibilities, str) and len(responsibilities.strip()) > 10:
-            has_meaningful_content = True
-        if not has_meaningful_content and skills and isinstance(skills, str) and len(skills.strip()) > 5:
-            has_meaningful_content = True
-
-        if not has_meaningful_content:
-            logger.warning(f"GraphScrapeAI extracted a title but failed to find meaningful Description/Responsibilities/Skills for {job_url}.")
-            # Return None as content is key for motivation letters
-            return None
-        # --- End Validation ---
-
-        logger.info(f"GraphScrapeAI successfully extracted details (headless=False) for {job_url}")
-        # Ensure the original Application URL is preserved/added to the final job_details dict
-        job_details['Application URL'] = job_url
-
-        # Log extracted details (similar format to other methods)
-        logger.info(f"--- Extracted Job Details (GraphScrapeAI Method, headless=False) ---")
-        for key, value in job_details.items(): # Log from the final job_details dict
-            log_value = value
-            if isinstance(log_value, str) and len(log_value) > 100:
-                log_value = log_value[:100] + "... [truncated]"
-            logger.info(f"{key}: {log_value}")
-        logger.info("---------------------------------------------")
-        return job_details # Return the potentially nested dictionary
 
     except ImportError as ie:
          logger.error(f"ImportError during GraphScrapeAI: {ie}. Is scrapegraphai installed correctly?")
@@ -198,15 +176,98 @@ def get_job_details_with_graphscrapeai(job_url):
         logger.error(f"Error during GraphScrapeAI extraction for {job_url}: {e}", exc_info=True)
         return None
 
+def process_scraper_result(result, job_url):
+    """Process and validate scraper result"""
+    if not isinstance(result, dict):
+        logger.warning(f"GraphScrapeAI did not return a dictionary for {job_url}. Type: {type(result)}")
+        return None
+
+    job_details = None
+    if 'content' in result and isinstance(result['content'], dict):
+        logger.info("Found nested 'content' key in GraphScrapeAI result.")
+        job_details = result['content']
+    elif len(result) == 1 and isinstance(list(result.values())[0], list) and len(list(result.values())[0]) > 0 and isinstance(list(result.values())[0][0], dict):
+        logger.info("Found result nested within a list under a single key.")
+        job_details = list(result.values())[0][0]
+    elif 'Job Title' in result:
+        logger.info("Result dictionary contains job details directly.")
+        job_details = result
+    else:
+        logger.warning(f"GraphScrapeAI result dictionary does not contain expected structure for {job_url}.")
+        return None
+
+    if not isinstance(job_details, dict):
+        logger.warning(f"job_details is not a dictionary after processing result for {job_url}. Type: {type(job_details)}")
+        return None
+
+    # Basic validation
+    title = job_details.get('Job Title')
+    if not title:
+        logger.warning(f"GraphScrapeAI failed to extract 'Job Title' from {job_url}.")
+        return None
+
+    # Check for meaningful content
+    description = job_details.get('Job Description')
+    responsibilities = job_details.get('Responsibilities')
+    skills = job_details.get('Required Skills')
+
+    has_meaningful_content = False
+    if description and isinstance(description, str) and len(description.strip()) > 10:
+        has_meaningful_content = True
+    if not has_meaningful_content and responsibilities and isinstance(responsibilities, (str, list)) and len(str(responsibilities).strip()) > 10:
+        has_meaningful_content = True
+    if not has_meaningful_content and skills and isinstance(skills, (str, list)) and len(str(skills).strip()) > 5:
+        has_meaningful_content = True
+
+    if not has_meaningful_content:
+        logger.warning(f"GraphScrapeAI extracted a title but failed to find meaningful Description/Responsibilities/Skills for {job_url}.")
+        return None
+
+    # Ensure URL is preserved
+    job_details['Application URL'] = job_url
+    return job_details
+
+def calculate_quality_score(details):
+    """Calculate quality score for monitoring"""
+    if not details:
+        return 0
+    
+    score = 0
+    weights = {
+        'Job Title': 10,
+        'Company Name': 8,
+        'Job Description': 15,
+        'Required Skills': 12,
+        'Responsibilities': 12,
+        'Company Information': 8,
+        'Contact Person': 5,
+        'Location': 5,
+        'Application Email': 3,
+        'Salary Range': 3
+    }
+    
+    for field, weight in weights.items():
+        value = details.get(field, "")
+        if value and str(value).strip():
+            # Base score for having the field
+            field_score = weight * 0.5
+            # Additional score based on content length
+            content_length = len(str(value).strip())
+            if content_length > 10:
+                field_score += min(weight * 0.5, content_length / 100 * weight * 0.5)
+            score += field_score
+    
+    return round(score, 2)
+
 if __name__ == '__main__':
-    # Example usage for testing structured extraction with headless=False
+    # Example usage for testing structured extraction with headless=True
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    # Replace with a real URL for testing
-    test_url = "https://www.ostjob.ch/job/sachbearbeiterin-rechnungswesen-administration-80-100-m-w-d/994155" # Use the one from the log
+    # Use one of the test URLs from the task description
+    test_url = "https://www.ostjob.ch/job/kundenberater-im-aussendienst-80-100-m-w-d/1023929"
     details = get_job_details_with_graphscrapeai(test_url)
     if details:
-        print("\n--- Test Result (Structured Extraction, headless=False) ---")
+        print("\n--- Test Result (Structured Extraction, headless=True) ---")
         print(json.dumps(details, indent=2, ensure_ascii=False))
         print("----------------------------------------------------------")
     else:
-        print(f"\nFailed to extract details for {test_url} using GraphScrapeAI (headless=False).")
+        print(f"\nFailed to extract details for {test_url} using GraphScrapeAI (headless=True).")
