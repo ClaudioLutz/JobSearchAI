@@ -1,0 +1,20 @@
+{
+  "session_summary": {
+    "session_start": "2025-09-07T19:28:40.002922",
+    "total_extractions": 3,
+    "successful_extractions": 3,
+    "success_rate": 100.0,
+    "quality_failures": 0,
+    "quality_failure_rate": 0.0,
+    "average_quality": 53.96
+  },
+  "quality_distribution": {
+    "excellent": 2,
+    "good": 1,
+    "acceptable": 0,
+    "poor": 0
+  },
+  "recommendations": [],
+  "failed_urls": [],
+  "low_quality_urls": []
+}

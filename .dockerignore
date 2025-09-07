@@ -1,0 +1,165 @@
+# Docker ignore file for JobSearchAI
+# Excludes unnecessary files from Docker build context for faster builds
+
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# pdm
+.pdm.toml
+
+# PEP 582
+__pypackages__/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Project specific
+logs/
+*.log
+job-data-acquisition/logs/
+job-data-acquisition/data/
+job-data-acquisitiondata/
+job_matches/
+motivation_letters/
+process_cv/cv-data/
+instance/
+*.db
+*.sqlite
+
+# Development and testing files
+test_*.py
+*_test.py
+tests/
+.coverage
+htmlcov/
+
+# Documentation
+Documentation/
+README.md
+*.md
+
+# Quality analysis files
+headless_quality_analysis_*.json
+quality_report_*.json
+HEADLESS_OPTIMIZATION_SUMMARY.md
+
+# Deployment scripts (will be copied separately if needed)
+deploy-*.sh
+docker-*.sh
+cloudbuild.yaml
+
+# Temporary files
+*.tmp
+*.temp
+nul
