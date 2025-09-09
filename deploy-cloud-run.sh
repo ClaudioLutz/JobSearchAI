@@ -5,9 +5,9 @@
 set -e  # Exit on any error
 
 # Configuration
-PROJECT_ID=${GOOGLE_CLOUD_PROJECT:-"your-project-id"}  # Replace with your actual project ID
+PROJECT_ID=${GOOGLE_CLOUD_PROJECT:-"healthy-coil-466105-d7"}  # Updated with actual project ID
 SERVICE_NAME="jobsearchai-scraper"
-REGION=${GOOGLE_CLOUD_REGION:-"us-central1"}  # Can be changed to europe-west1 for EU
+REGION=${GOOGLE_CLOUD_REGION:-"europe-west6"}  # Zurich region - optimal for Switzerland
 IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
 
 echo "=========================================="

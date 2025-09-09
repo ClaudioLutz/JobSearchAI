@@ -20,6 +20,7 @@ sys.path.append('.')
 from job_matcher import match_jobs_with_cv, generate_report
 # Assuming get_job_details_for_url might be needed and moved to a utils module or kept in main app
 # from dashboard import get_job_details_for_url # Example
+from utils.decorators import admin_required
 
 job_matching_bp = Blueprint('job_matching', __name__, url_prefix='/job_matching')
 
@@ -73,6 +74,7 @@ def get_job_details_for_url(job_url):
 
 @job_matching_bp.route('/run_matcher', methods=['POST'])
 @login_required
+@admin_required
 def run_job_matcher():
     """Run the job matcher with the selected CV"""
     cv_path_rel = request.form.get('cv_path') # This is the relative path from the form
@@ -149,6 +151,7 @@ def run_job_matcher():
 
 @job_matching_bp.route('/run_combined_process', methods=['POST'])
 @login_required
+@admin_required
 def run_combined_process():
     """Run both job data acquisition and job matcher in one go"""
     try:

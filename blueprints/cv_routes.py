@@ -11,6 +11,7 @@ from werkzeug.utils import secure_filename
 import sys
 sys.path.append('.') # Add project root to path
 from process_cv.cv_processor import extract_cv_text, summarize_cv
+from utils.decorators import admin_required
 
 # Assuming helper functions and progress tracking are accessible via current_app or imported
 # from dashboard import allowed_file, logger # Example if helpers are in dashboard
@@ -26,6 +27,7 @@ def allowed_file(filename):
 
 @cv_bp.route('/upload', methods=['POST'])
 @login_required
+@admin_required
 def upload_cv():
     """Handle CV upload"""
     if 'cv_file' not in request.files:

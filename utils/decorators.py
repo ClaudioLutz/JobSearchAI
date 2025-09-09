@@ -10,6 +10,8 @@ import logging
 import time
 import traceback
 from typing import Any, Callable, Dict, Optional, TypeVar, Union, cast
+from flask import flash, redirect, url_for, abort
+from flask_login import current_user
 
 # Type variable for functions
 F = TypeVar('F', bound=Callable[..., Any])
@@ -63,6 +65,43 @@ def handle_exceptions(
         return cast(F, wrapper)
     
     return decorator
+
+def admin_required(func: F) -> F:
+    """
+    Decorator to require admin privileges for accessing a route.
+    
+    This decorator must be used after @login_required to ensure the user is authenticated.
+    Non-admin users will receive a 403 Forbidden error.
+    
+    Args:
+        func: The function to decorate
+        
+    Returns:
+        Decorated function that checks for admin privileges
+        
+    Example:
+        @app.route('/admin/dashboard')
+        @login_required
+        @admin_required
+        def admin_dashboard():
+            return render_template('admin_dashboard.html')
+    """
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        # Check if user is authenticated
+        if not current_user.is_authenticated:
+            flash('You must be logged in to access this resource.', 'error')
+            return redirect(url_for('auth.login'))
+        
+        # Check if user has admin privileges
+        if not hasattr(current_user, 'is_admin') or not current_user.is_admin:
+            flash('Administrator privileges required to access this resource.', 'error')
+            abort(403)  # Forbidden
+        
+        # User is authenticated and has admin privileges, proceed with the function
+        return func(*args, **kwargs)
+    
+    return cast(F, wrapper)
 
 def retry(
     max_attempts: int = 3,

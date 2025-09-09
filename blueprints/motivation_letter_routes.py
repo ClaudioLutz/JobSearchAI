@@ -21,6 +21,7 @@ from word_template_generator import json_to_docx, create_word_document_from_json
 # Import functions needed for manual text structuring and generation
 from job_details_utils import structure_text_with_openai, has_sufficient_content, get_job_details
 from letter_generation_utils import generate_motivation_letter, generate_email_text_only # Import the correct generator functions
+from utils.decorators import admin_required
 
 motivation_letter_bp = Blueprint('motivation_letter', __name__, url_prefix='/motivation_letter')
 
@@ -47,6 +48,7 @@ def sanitize_filename(name, length=30):
 
 @motivation_letter_bp.route('/generate', methods=['POST'])
 @login_required
+@admin_required
 def generate_motivation_letter_route():
     """Generate a motivation letter for a single job, handling manual text input."""
     try:
@@ -223,6 +225,7 @@ def generate_motivation_letter_route():
 
 @motivation_letter_bp.route('/generate_multiple', methods=['POST'])
 @login_required
+@admin_required
 def generate_multiple_letters():
     """Generate motivation letters for multiple selected jobs"""
     data = request.get_json()
@@ -320,6 +323,7 @@ def generate_multiple_letters():
 
 @motivation_letter_bp.route('/generate_multiple_emails', methods=['POST'])
 @login_required
+@admin_required
 def generate_multiple_emails():
     """Generate email texts for multiple selected jobs and update their JSON files."""
     data = request.get_json()

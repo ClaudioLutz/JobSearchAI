@@ -10,6 +10,7 @@ from werkzeug.utils import secure_filename
 
 # Assuming operation tracking functions are accessible, e.g., via current_app or a shared module
 # from dashboard import start_operation, update_operation_progress, complete_operation, logger # Example
+from utils.decorators import admin_required
 
 job_data_bp = Blueprint('job_data', __name__, url_prefix='/job_data')
 
@@ -17,6 +18,7 @@ logger = logging.getLogger("dashboard.job_data") # Use a child logger
 
 @job_data_bp.route('/run_scraper', methods=['POST'])
 @login_required
+@admin_required
 def run_job_scraper():
     """Run the job data acquisition component"""
     try:
