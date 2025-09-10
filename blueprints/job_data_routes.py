@@ -33,79 +33,93 @@ def run_job_scraper():
         # Start tracking the operation
         operation_id = start_operation('job_scraping')
 
+        # Get the Flask app instance before starting the thread  
+        app = current_app._get_current_object()
+
         # Define a function to run the job scraper in a background thread
         def run_job_scraper_task():
-            try:
-                # Update status
-                update_operation_progress(operation_id, 10, 'processing', 'Updating settings...')
-
-                # Update the settings.json file with the max_pages parameter
-                # Use current_app.root_path to get the application root directory
-                settings_path = os.path.join(current_app.root_path, 'job-data-acquisition', 'settings.json')
-
-                # Read the current settings
+            with app.app_context():  # Ensure Flask application context is available
                 try:
-                    with open(settings_path, 'r', encoding='utf-8') as f:
-                        settings = json.load(f)
-                except FileNotFoundError:
-                     logger.error(f"Settings file not found at {settings_path}")
-                     complete_operation(operation_id, 'failed', 'Scraper settings file not found.')
-                     return
-                except json.JSONDecodeError:
-                     logger.error(f"Error decoding settings file at {settings_path}")
-                     complete_operation(operation_id, 'failed', 'Error reading scraper settings.')
-                     return
+                    # Update status
+                    update_operation_progress(operation_id, 10, 'processing', 'Updating settings...')
 
+                    # Update the settings.json file with the max_pages parameter
+                    # Use current_app.root_path to get the application root directory
+                    settings_path = os.path.join(current_app.root_path, 'job-data-acquisition', 'settings.json')
 
-                # Update the max_pages parameter
-                settings['scraper']['max_pages'] = max_pages
-
-                # Write the updated settings back to the file
-                with open(settings_path, 'w', encoding='utf-8') as f:
-                    json.dump(settings, f, indent=4, ensure_ascii=False)
-
-                # Update status
-                update_operation_progress(operation_id, 20, 'processing', 'Starting job scraper...')
-
-                # Import the job scraper module using importlib for more robust importing
-                # Get the absolute path to the app.py file relative to the application root
-                app_path = os.path.join(current_app.root_path, 'job-data-acquisition', 'app.py')
-
-                if not os.path.exists(app_path):
-                    logger.error(f"Job scraper app.py not found at {app_path}")
-                    complete_operation(operation_id, 'failed', 'Job scraper module not found.')
-                    return
-
-                # Load the module
-                spec = importlib.util.spec_from_file_location("app_module", app_path)
-                app_module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(app_module)
-
-                # Get the run_scraper function
-                run_scraper = getattr(app_module, 'run_scraper', None)
-                if not run_scraper:
-                    logger.error(f"run_scraper function not found in {app_path}")
-                    complete_operation(operation_id, 'failed', 'Job scraper function not found.')
-                    return
-
-                # Update status
-                update_operation_progress(operation_id, 30, 'processing', 'Scraping job listings...')
-
-                # Run the scraper
-                output_file = run_scraper()
-
-                if output_file is None:
-                    complete_operation(operation_id, 'failed', 'Job data acquisition failed. Check the logs for details.')
-                else:
-                    # Make output_file relative for the message if possible
+                    # Read the current settings
                     try:
-                        relative_output_file = Path(output_file).relative_to(current_app.root_path)
-                    except ValueError:
-                        relative_output_file = output_file # Keep absolute if not relative
-                    complete_operation(operation_id, 'completed', f'Job data acquisition completed. Data saved to: {relative_output_file}')
-            except Exception as e:
-                logger.error(f'Error in job scraper task: {str(e)}', exc_info=True)
-                complete_operation(operation_id, 'failed', f'Error running job scraper: {str(e)}')
+                        with open(settings_path, 'r', encoding='utf-8') as f:
+                            settings = json.load(f)
+                    except FileNotFoundError:
+                        logger.error(f"Settings file not found at {settings_path}")
+                        complete_operation(operation_id, 'failed', 'Scraper settings file not found.')
+                        return
+                    except json.JSONDecodeError:
+                        logger.error(f"Error decoding settings file at {settings_path}")
+                        complete_operation(operation_id, 'failed', 'Error reading scraper settings.')
+                        return
+
+                    # Update the max_pages parameter
+                    settings['scraper']['max_pages'] = max_pages
+
+                    # Write the updated settings back to the file
+                    with open(settings_path, 'w', encoding='utf-8') as f:
+                        json.dump(settings, f, indent=4, ensure_ascii=False)
+
+                    # Update status
+                    update_operation_progress(operation_id, 20, 'processing', 'Starting job scraper...')
+
+                    # Import the job scraper module using importlib for more robust importing
+                    # Get the absolute path to the app.py file relative to the application root
+                    app_path = os.path.join(current_app.root_path, 'job-data-acquisition', 'app.py')
+
+                    if not os.path.exists(app_path):
+                        logger.error(f"Job scraper app.py not found at {app_path}")
+                        complete_operation(operation_id, 'failed', 'Job scraper module not found.')
+                        return
+
+                    # Load the module
+                    spec = importlib.util.spec_from_file_location("app_module", app_path)
+                    if spec is None:
+                        logger.error(f"Could not create spec for {app_path}")
+                        complete_operation(operation_id, 'failed', 'Job scraper module spec creation failed.')
+                        return
+                    
+                    app_module = importlib.util.module_from_spec(spec)
+                    if spec.loader is None:
+                        logger.error(f"No loader available for {app_path}")
+                        complete_operation(operation_id, 'failed', 'Job scraper module loader not available.')
+                        return
+                        
+                    spec.loader.exec_module(app_module)
+
+                    # Get the run_scraper function
+                    run_scraper = getattr(app_module, 'run_scraper', None)
+                    if not run_scraper:
+                        logger.error(f"run_scraper function not found in {app_path}")
+                        complete_operation(operation_id, 'failed', 'Job scraper function not found.')
+                        return
+
+                    # Update status
+                    update_operation_progress(operation_id, 30, 'processing', 'Scraping job listings...')
+
+                    # Run the scraper
+                    output_file = run_scraper()
+
+                    if output_file is None:
+                        complete_operation(operation_id, 'failed', 'Job data acquisition failed. Check the logs for details.')
+                    else:
+                        # Make output_file relative for the message if possible
+                        try:
+                            relative_output_file = Path(output_file).relative_to(current_app.root_path)
+                        except ValueError:
+                            relative_output_file = output_file # Keep absolute if not relative
+                        complete_operation(operation_id, 'completed', f'Job data acquisition completed. Data saved to: {relative_output_file}')
+                        
+                except Exception as e:
+                    logger.error(f'Error in job scraper task: {str(e)}', exc_info=True)
+                    complete_operation(operation_id, 'failed', f'Error running job scraper: {str(e)}')
 
         # Start the background thread
         thread = threading.Thread(target=run_job_scraper_task)

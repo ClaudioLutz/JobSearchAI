@@ -1,10 +1,17 @@
 # Dockerfile for JobSearchAI Dashboard Web Application
 FROM python:3.10-slim
 
-# Install system dependencies
+# Install system dependencies including Playwright requirements
 RUN apt-get update && apt-get install -y \
     curl \
     wget \
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libdrm2 \
+    libxkbcommon0 \
+    libgtk-3-0 \
+    libgbm1 \
+    libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -13,6 +20,9 @@ WORKDIR /app
 # Copy requirements and install Python dependencies
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Playwright browsers (without --with-deps to avoid font package issues)
+RUN playwright install chromium
 
 # Copy application files
 COPY . /app/

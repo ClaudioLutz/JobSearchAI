@@ -1,12 +1,46 @@
 import os
 import json
 import logging
+import re
 from scrapegraphai.graphs import SmartScraperGraph
 # Removed dotenv import as config file should handle API key
 from pathlib import Path
 
 # Set up logger for this module
 logger = logging.getLogger("graph_scraper_utils")
+
+def substitute_env_vars(config_str):
+    """
+    Substitute environment variable placeholders in configuration string.
+    Replaces ${VAR_NAME} with the actual environment variable value.
+    """
+    def replace_var(match):
+        var_name = match.group(1)
+        env_value = os.getenv(var_name)
+        if env_value:
+            # Only log first few characters for security
+            logger.info(f"Substituting ${var_name} with env value: {env_value[:15]}...")
+            return env_value
+        else:
+            logger.warning(f"Environment variable ${var_name} not found, keeping placeholder")
+            return match.group(0)
+    
+    # Pattern to match ${VAR_NAME}
+    pattern = r'\$\{([^}]+)\}'
+    return re.sub(pattern, replace_var, config_str)
+
+def substitute_env_vars_in_dict(config_dict):
+    """
+    Recursively substitute environment variables in a configuration dictionary.
+    """
+    if isinstance(config_dict, dict):
+        return {k: substitute_env_vars_in_dict(v) for k, v in config_dict.items()}
+    elif isinstance(config_dict, list):
+        return [substitute_env_vars_in_dict(item) for item in config_dict]
+    elif isinstance(config_dict, str):
+        return substitute_env_vars(config_dict)
+    else:
+        return config_dict
 
 # Load configuration from settings.json
 def load_config():
@@ -38,6 +72,12 @@ def load_config():
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
             logger.info(f"Successfully loaded configuration from {config_path}")
+            
+            # Apply environment variable substitution
+            logger.info("Applying environment variable substitution to configuration...")
+            config = substitute_env_vars_in_dict(config)
+            logger.info("Environment variable substitution complete")
+            
             return config
     except Exception as e:
         logger.error(f"Error loading configuration: {e}", exc_info=True)

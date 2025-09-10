@@ -1,17 +1,17 @@
 #!/bin/bash
-# Deployment script for JobSearchAI to Google Cloud Run with Xvfb support
-# This script builds and deploys the Docker container with headless=false configuration
+# Deployment script for JobSearchAI Dashboard to Google Cloud Run
+# This script builds and deploys the Docker container for the web dashboard
 
 set -e  # Exit on any error
 
 # Configuration
 PROJECT_ID=${GOOGLE_CLOUD_PROJECT:-"healthy-coil-466105-d7"}  # Updated with actual project ID
-SERVICE_NAME="jobsearchai-scraper"
+SERVICE_NAME="jobsearchai-dashboard"
 REGION=${GOOGLE_CLOUD_REGION:-"europe-west6"}  # Zurich region - optimal for Switzerland
 IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
 
 echo "=========================================="
-echo "JobSearchAI Cloud Run Deployment Script"
+echo "JobSearchAI Dashboard Deployment Script"
 echo "=========================================="
 echo "Project ID: ${PROJECT_ID}"
 echo "Service Name: ${SERVICE_NAME}"
@@ -52,7 +52,7 @@ gcloud services enable containerregistry.googleapis.com
 
 # Build the Docker image
 echo "🏗️  Building Docker image..."
-echo "Building with headless=false for better quality extraction..."
+echo "Building JobSearchAI Dashboard..."
 docker build -t ${IMAGE_NAME} .
 
 # Push to Google Container Registry
@@ -61,18 +61,43 @@ docker push ${IMAGE_NAME}
 
 # Deploy to Cloud Run
 echo "🚀 Deploying to Cloud Run..."
-gcloud run deploy ${SERVICE_NAME} \
-    --image ${IMAGE_NAME} \
-    --platform managed \
-    --region ${REGION} \
-    --allow-unauthenticated \
-    --memory 4Gi \
-    --cpu 2 \
-    --concurrency 1 \
-    --timeout 900 \
-    --max-instances 10 \
-    --set-env-vars="DISPLAY=:99" \
-    --port 5000
+
+# Check if OPENAI_API_KEY is provided
+if [ -z "$OPENAI_API_KEY" ]; then
+    echo "⚠️  WARNING: OPENAI_API_KEY environment variable not set."
+    echo "   CV summarization will not work without the OpenAI API key."
+    echo "   You can set it after deployment using:"
+    echo "   export OPENAI_API_KEY=your_key && ./set-api-key.sh \$OPENAI_API_KEY"
+    echo ""
+    
+    gcloud run deploy ${SERVICE_NAME} \
+        --image ${IMAGE_NAME} \
+        --platform managed \
+        --region ${REGION} \
+        --allow-unauthenticated \
+        --memory 2Gi \
+        --cpu 2 \
+        --concurrency 50 \
+        --timeout 300 \
+        --max-instances 10 \
+        --port 8080 \
+        --set-env-vars FLASK_ENV=production,DATABASE_URL=sqlite:////app/instance/jobsearchai.db
+else
+    echo "✅ OPENAI_API_KEY found - deploying with API key configured"
+    
+    gcloud run deploy ${SERVICE_NAME} \
+        --image ${IMAGE_NAME} \
+        --platform managed \
+        --region ${REGION} \
+        --allow-unauthenticated \
+        --memory 2Gi \
+        --cpu 2 \
+        --concurrency 50 \
+        --timeout 300 \
+        --max-instances 10 \
+        --port 8080 \
+        --set-env-vars FLASK_ENV=production,DATABASE_URL=sqlite:////app/instance/jobsearchai.db,OPENAI_API_KEY="${OPENAI_API_KEY}"
+fi
 
 # Get the service URL
 SERVICE_URL=$(gcloud run services describe ${SERVICE_NAME} --platform managed --region ${REGION} --format 'value(status.url)')
@@ -80,20 +105,19 @@ SERVICE_URL=$(gcloud run services describe ${SERVICE_NAME} --platform managed --
 echo ""
 echo "✅ Deployment completed successfully!"
 echo "=========================================="
-echo "Service URL: ${SERVICE_URL}"
-echo "Health Check: ${SERVICE_URL}/health"
-echo "Scrape API: ${SERVICE_URL}/scrape (POST)"
+echo "Dashboard URL: ${SERVICE_URL}"
+echo "Login URL: ${SERVICE_URL}/login"
 echo ""
-echo "Test the deployment:"
-echo "curl ${SERVICE_URL}/health"
+echo "Default Admin Credentials:"
+echo "Username: admin"
+echo "Password: admin123"
 echo ""
-echo "To trigger scraping:"
-echo "curl -X POST ${SERVICE_URL}/scrape"
+echo "IMPORTANT: Change the admin password after first login!"
 echo ""
 echo "Configuration Details:"
-echo "- Memory: 4 GiB (for headed browser + Xvfb)"
-echo "- CPU: 2 vCPU (for better performance)"
-echo "- Concurrency: 1 (recommended for Playwright)"
-echo "- Timeout: 900s (15 minutes for complex scraping)"
-echo "- Headless Mode: false (with Xvfb virtual display)"
+echo "- Memory: 2 GiB"
+echo "- CPU: 2 vCPU"
+echo "- Concurrency: 50 (web dashboard)"
+echo "- Timeout: 300s (5 minutes)"
+echo "- Port: 8080"
 echo "=========================================="

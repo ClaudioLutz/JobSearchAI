@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import urllib.parse
+from datetime import datetime
 from pathlib import Path
 from flask import Blueprint, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required
@@ -152,3 +153,166 @@ def view_cv_summary(cv_file_rel_path):
     except Exception as e:
         logger.error(f"Error viewing summary for {cv_file_rel_path}: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+# DEBUG ENDPOINTS - Remove these after debugging is complete
+@cv_bp.route('/debug/environment')
+@login_required
+@admin_required
+def debug_environment():
+    """Debug endpoint to check environment variables and API key loading"""
+    import openai as debug_openai
+    
+    debug_info = {
+        'timestamp': str(datetime.now()),
+        'openai_api_key_present': bool(os.getenv('OPENAI_API_KEY')),
+        'openai_api_key_length': len(os.getenv('OPENAI_API_KEY', '')),
+        'openai_api_key_prefix': os.getenv('OPENAI_API_KEY', '')[:15] + '...' if os.getenv('OPENAI_API_KEY') else None,
+        'env_vars_with_key_or_api': [k for k in os.environ.keys() if 'API' in k or 'KEY' in k],
+        'working_directory': os.getcwd(),
+        'dotenv_path_exists': os.path.exists(Path(__file__).resolve().parent.parent / 'process_cv' / '.env'),
+        'openai_version': debug_openai.__version__
+    }
+    
+    # Test OpenAI client initialization
+    try:
+        api_key = os.getenv('OPENAI_API_KEY')
+        if api_key:
+            client = debug_openai.OpenAI(api_key=api_key)
+            models = client.models.list()
+            debug_info['openai_client_test'] = 'SUCCESS'
+            debug_info['available_models_count'] = len(models.data)
+        else:
+            debug_info['openai_client_test'] = 'FAILED - No API key'
+    except Exception as e:
+        debug_info['openai_client_test'] = f'FAILED - {str(e)}'
+    
+    return jsonify(debug_info)
+
+@cv_bp.route('/debug/pdf_extraction/<filename>')
+@login_required
+@admin_required
+def debug_pdf_extraction(filename):
+    """Debug endpoint to test PDF text extraction"""
+    from datetime import datetime
+    
+    try:
+        # Construct file path
+        cv_path = Path('process_cv/cv-data/input') / filename
+        
+        debug_info = {
+            'timestamp': str(datetime.now()),
+            'filename': filename,
+            'full_path': str(cv_path),
+            'file_exists': cv_path.exists(),
+            'file_size': cv_path.stat().st_size if cv_path.exists() else None
+        }
+        
+        if cv_path.exists():
+            # Test text extraction
+            extracted_text = extract_cv_text(str(cv_path))
+            debug_info['text_extraction'] = 'SUCCESS'
+            debug_info['extracted_length'] = len(extracted_text)
+            debug_info['text_preview'] = extracted_text[:500] + '...' if len(extracted_text) > 500 else extracted_text
+        else:
+            debug_info['text_extraction'] = 'FAILED - File not found'
+            
+    except Exception as e:
+        debug_info['text_extraction'] = f'FAILED - {str(e)}'
+        debug_info['exception_type'] = type(e).__name__
+    
+    return jsonify(debug_info)
+
+@cv_bp.route('/debug/summarization_test')
+@login_required
+@admin_required
+def debug_summarization_test():
+    """Debug endpoint to test OpenAI summarization with sample text"""
+    from datetime import datetime
+    
+    sample_text = """
+    Lutz Claudio
+    Software Engineer
+    
+    Berufserfahrung:
+    2020-2023: Senior Developer bei TechCorp
+    - Entwicklung von Web-Anwendungen mit Python und JavaScript
+    - Team-Leadership für 5 Entwickler
+    
+    2018-2020: Junior Developer bei StartupXYZ
+    - Frontend-Entwicklung mit React
+    - Backend APIs mit Node.js
+    
+    Ausbildung:
+    2014-2018: Bachelor Informatik, ETH Zürich
+    
+    Fähigkeiten: Python, JavaScript, React, Node.js, Docker, Kubernetes
+    """
+    
+    debug_info = {
+        'timestamp': str(datetime.now()),
+        'sample_text_length': len(sample_text),
+        'sample_text': sample_text
+    }
+    
+    try:
+        summary = summarize_cv(sample_text)
+        debug_info['summarization'] = 'SUCCESS'
+        debug_info['summary_length'] = len(summary)
+        debug_info['summary_content'] = summary
+        debug_info['summary_is_error'] = summary.startswith('Error:')
+        
+    except Exception as e:
+        debug_info['summarization'] = f'FAILED - {str(e)}'
+        debug_info['exception_type'] = type(e).__name__
+    
+    return jsonify(debug_info)
+
+@cv_bp.route('/debug/file_operations')
+@login_required 
+@admin_required
+def debug_file_operations():
+    """Debug endpoint to test file I/O operations"""
+    from datetime import datetime
+    
+    debug_info = {
+        'timestamp': str(datetime.now()),
+        'working_directory': os.getcwd()
+    }
+    
+    # Test directory structure
+    cv_dirs = {
+        'input': Path('process_cv/cv-data/input'),
+        'processed': Path('process_cv/cv-data/processed')
+    }
+    
+    for dir_name, dir_path in cv_dirs.items():
+        debug_info[f'{dir_name}_dir_exists'] = dir_path.exists()
+        if dir_path.exists():
+            debug_info[f'{dir_name}_dir_files'] = list(dir_path.glob('*'))
+            debug_info[f'{dir_name}_dir_permissions'] = oct(dir_path.stat().st_mode)[-3:]
+    
+    # Test file write/read
+    test_file = Path('process_cv/cv-data/processed/debug_test.txt')
+    test_content = f"Debug test at {datetime.now()}"
+    
+    try:
+        # Test write
+        with open(test_file, 'w', encoding='utf-8') as f:
+            f.write(test_content)
+        debug_info['file_write'] = 'SUCCESS'
+        
+        # Test read
+        with open(test_file, 'r', encoding='utf-8') as f:
+            read_content = f.read()
+        debug_info['file_read'] = 'SUCCESS'
+        debug_info['content_match'] = read_content == test_content
+        
+        # Clean up
+        test_file.unlink()
+        debug_info['file_cleanup'] = 'SUCCESS'
+        
+    except Exception as e:
+        debug_info['file_operations'] = f'FAILED - {str(e)}'
+        debug_info['exception_type'] = type(e).__name__
+    
+    return jsonify(debug_info)

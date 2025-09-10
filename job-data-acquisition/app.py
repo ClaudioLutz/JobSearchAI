@@ -2,6 +2,7 @@
 import os
 import sys
 import json
+import re
 import logging
 from datetime import datetime
 from flask import Flask, jsonify, request
@@ -26,6 +27,38 @@ try:
 except Exception as e:
     logging.error(f"Failed to load config manager: {e}")
 
+def substitute_env_vars(config_str):
+    """
+    Substitute environment variable placeholders in configuration string.
+    Replaces ${VAR_NAME} with the actual environment variable value.
+    """
+    def replace_var(match):
+        var_name = match.group(1)
+        env_value = os.getenv(var_name)
+        if env_value:
+            print(f"Substituting ${var_name} with env value: {env_value[:15]}...")
+            return env_value
+        else:
+            print(f"Environment variable ${var_name} not found, keeping placeholder")
+            return match.group(0)
+    
+    # Pattern to match ${VAR_NAME}
+    pattern = r'\$\{([^}]+)\}'
+    return re.sub(pattern, replace_var, config_str)
+
+def substitute_env_vars_in_dict(config_dict):
+    """
+    Recursively substitute environment variables in a configuration dictionary.
+    """
+    if isinstance(config_dict, dict):
+        return {k: substitute_env_vars_in_dict(v) for k, v in config_dict.items()}
+    elif isinstance(config_dict, list):
+        return [substitute_env_vars_in_dict(item) for item in config_dict]
+    elif isinstance(config_dict, str):
+        return substitute_env_vars(config_dict)
+    else:
+        return config_dict
+
 # Load configuration from settings.json
 def load_config():
     # Get the directory where this script is located
@@ -33,7 +66,14 @@ def load_config():
     config_path = os.path.join(script_dir, "settings.json")
     try:
         with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            config = json.load(f)
+            
+        # Apply environment variable substitution
+        print("Applying environment variable substitution to job-data-acquisition config...")
+        config = substitute_env_vars_in_dict(config)
+        print("Environment variable substitution complete")
+        
+        return config
     except Exception as e:
         print(f"Error loading configuration: {e}")
         return None

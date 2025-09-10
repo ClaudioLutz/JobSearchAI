@@ -122,8 +122,15 @@ def create_admin_user(app, username="admin", email="admin@jobsearchai.local", pa
     """
     with app.app_context():
         # Check if admin user already exists
-        if User.query.filter_by(username=username).first():
-            print(f"User '{username}' already exists!")
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            # If user exists but is not admin, promote to admin
+            if not existing_user.is_admin:
+                existing_user.is_admin = True
+                db.session.commit()
+                print(f"User '{username}' promoted to admin!")
+            else:
+                print(f"Admin user '{username}' already exists!")
             return
         
         # Create admin user
@@ -131,6 +138,7 @@ def create_admin_user(app, username="admin", email="admin@jobsearchai.local", pa
         admin_user.username = username
         admin_user.email = email
         admin_user.set_password(password)
+        admin_user.is_admin = True  # Set admin privileges
         
         db.session.add(admin_user)
         db.session.commit()
@@ -138,6 +146,7 @@ def create_admin_user(app, username="admin", email="admin@jobsearchai.local", pa
         print(f"Admin user '{username}' created successfully!")
         print(f"Email: {email}")
         print(f"Password: {password}")
+        print(f"Admin privileges: Yes")
         print("IMPORTANT: Change the admin password after first login!")
 
 
