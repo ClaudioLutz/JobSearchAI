@@ -190,7 +190,7 @@ def configure_scraper(source_url, page):
 # Flask health check endpoint
 @app.route('/health')
 def health_check():
-    """Health check endpoint for Docker and Cloud Run"""
+    """Enhanced health check endpoint for Docker and Cloud Run"""
     try:
         # Basic health check - verify config is loaded
         if CONFIG is None:
@@ -202,18 +202,30 @@ def health_check():
         
         # Check if we can access the display (Xvfb check)
         display = os.environ.get('DISPLAY')
-        if not display:
-            return jsonify({
-                "status": "warning",
-                "message": "No DISPLAY environment variable set",
-                "timestamp": datetime.now().isoformat()
-            }), 200
+        
+        # Test Playwright browser availability
+        browser_status = "unknown"
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True, args=['--no-sandbox'])
+                browser.close()
+                browser_status = "available"
+        except Exception as browser_error:
+            browser_status = f"error: {str(browser_error)}"
+        
+        # Test OpenAI API key
+        api_key_status = "configured" if os.environ.get('OPENAI_API_KEY') else "missing"
         
         return jsonify({
             "status": "healthy",
             "message": "JobSearchAI scraper is running",
             "display": display,
             "headless_mode": CONFIG["scraper"]["headless"],
+            "browser_status": browser_status,
+            "api_key_status": api_key_status,
+            "environment": "production" if os.environ.get('FLASK_ENV') == 'production' else "development",
+            "memory_usage": f"{os.popen('free -m').read().split()[9]}MB" if os.name != 'nt' else "N/A",
             "timestamp": datetime.now().isoformat()
         }), 200
         

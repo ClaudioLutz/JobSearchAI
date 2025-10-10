@@ -1,0 +1,16 @@
+# MCP Server Requirements
+# Add these to your existing requirements.txt or install separately
+
+# MCP SDK
+mcp>=1.0.0
+
+# HTTP Server for streamable transport (required for Cloud Run)
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Additional dependencies for MCP server
+pydantic>=2.0.0
+python-multipart>=0.0.6
+
+# Keep existing JobSearchAI dependencies
+-r requirements.txt

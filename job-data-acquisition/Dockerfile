@@ -1,7 +1,7 @@
-# Simplified Docker configuration for JobSearchAI Job Scraper Service
+# Production Docker configuration for JobSearchAI Job Scraper Service
 FROM python:3.10-slim
 
-# Install system dependencies for web scraping
+# Install system dependencies for Playwright + Chromium in containers
 RUN apt-get update && apt-get install -y \
     curl \
     wget \
@@ -13,6 +13,20 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     gnupg \
     lsb-release \
+    libnss3 \
+    libnspr4 \
+    libatk-bridge2.0-0 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm1 \
+    libxss1 \
+    libasound2 \
+    libatspi2.0-0 \
+    libgtk-3-0 \
+    libgdk-pixbuf-xlib-2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
