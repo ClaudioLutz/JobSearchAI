@@ -103,3 +103,8 @@ last_session.md
 
 # Production Planning
 production_planning/
+
+
+.bmad-core/
+web-bundles/
+.clinerules/
