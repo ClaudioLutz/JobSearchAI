@@ -20,9 +20,10 @@ so that **I can confidently send professional job applications while preventing 
 
 2. **AC-2: Data Validation Module**
    - Create `utils/validation.py` with `ApplicationValidator` class
-   - Validate all required fields: recipient_email, recipient_name, company_name, job_title, job_description, motivation_letter
-   - Check minimum character lengths: job_description (50 chars), motivation_letter (200 chars)
-   - Validate email format using email-validator library
+   - Validate all required fields: recipient_email, recipient_name, company_name, job_title, job_description, motivation_letter, subject_line
+   - Check minimum character lengths: job_description (50 chars), motivation_letter (200 chars), recipient_name (2 chars), company_name (2 chars), job_title (5 chars), subject_line (10 chars)
+   - Validate email format using email-validator library with clear error messages for EmailNotValidError
+   - Generate subject_line if missing: "Bewerbung als {job_title} bei {company_name}"
    - Calculate completeness score (0-100%) based on validation results
    - Return structured validation result with missing_fields, invalid_fields, and warnings
 
@@ -132,6 +133,12 @@ so that **I can confidently send professional job applications while preventing 
 - Log all failures for debugging
 - Return actionable error messages to user
 - No silent failures
+
+**Language Localization:**
+- Email greeting should match motivation letter language
+- German letters: "Sehr geehrte/r {name},"
+- English letters: "Dear {name},"
+- Detect language from motivation_letter content or job posting metadata
 
 ### Project Structure Notes
 

@@ -21,21 +21,23 @@ so that **I can efficiently review pending applications, validate completeness, 
 2. **AC-2: Queue Dashboard Template**
    - Create `templates/application_queue.html` with responsive layout
    - Display application cards with Bootstrap 5 styling
-   - Show count summary (X ready, Y need review)
-   - Implement filter tabs (All | Ready | Needs Review | Sent)
+   - Show count summary (X ready, Y need review, Z failed)
+   - Implement filter tabs (All | Ready | Needs Review | Failed | Sent)
    - Display completeness progress bar (0-100%) for each application
-   - Show status badges (✅ Ready | ⚠️ Review | 📧 Sent)
+   - Show status badges (✅ Ready | ⚠️ Review | 🔴 Failed | 📧 Sent)
+   - Failed items show error message and "Retry" button
    - Include "Review" button opening modal for each application
    - Include "Send" button for ready applications
    - Implement "Send All Ready" batch action button
 
 3. **AC-3: Application Detail Modal**
    - Create modal component showing full application details
-   - Implement tabbed interface: Overview | Letter | Validation
-   - Display job details (title, company, description, URL)
-   - Display motivation letter with formatting
-   - Show validation results (status, score, missing/invalid fields)
-   - Include "Send Now" button with confirmation dialog
+   - Implement tabbed interface: Job Info | Bewerbung (Letter) | Email Preview
+   - Job Info tab: Display job details (title, company, description, URL) and validation results
+   - Bewerbung tab: Display formatted motivation letter
+   - Email Preview tab: Show complete email (To, Subject, formatted body) as it will be sent
+   - Add "Edit Fields" mode to fix incomplete applications (toggle button, input fields for missing data, Save/Cancel)
+   - Include "Send Now" button with confirmation dialog (disabled if validation fails)
    - Include "Close" button to dismiss modal
 
 4. **AC-4: JavaScript Interactions**
