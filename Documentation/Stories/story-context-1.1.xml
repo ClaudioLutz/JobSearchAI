@@ -1,0 +1,335 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>1.1</storyId>
+    <title>Backend Infrastructure (Email Sending + Data Validation)</title>
+    <status>Draft</status>
+    <generatedAt>2025-10-15T23:01:00Z</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>Documentation/Stories/story-1.1.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>job applicant using JobSearchAI</asA>
+    <iWant>reliable email sending with automated validation checks</iWant>
+    <soThat>I can confidently send professional job applications while preventing incomplete or invalid submissions</soThat>
+    <tasks>
+      <task id="1" ac="1">Create Email Sender Module
+        <subtask>Create utils/email_sender.py file</subtask>
+        <subtask>Implement EmailSender.__init__() with credential loading from environment</subtask>
+        <subtask>Implement send_application() method with SMTP connection logic</subtask>
+        <subtask>Add HTML email composition with MIME multipart</subtask>
+        <subtask>Implement TLS encryption on port 587</subtask>
+        <subtask>Add comprehensive error handling (auth, connection, SMTP exceptions)</subtask>
+        <subtask>Add logging for all email operations</subtask>
+        <subtask>Test manual email send with test script</subtask>
+      </task>
+      <task id="2" ac="2">Create Data Validation Module
+        <subtask>Create utils/validation.py file</subtask>
+        <subtask>Implement ApplicationValidator class with field definitions</subtask>
+        <subtask>Implement validate_application() method</subtask>
+        <subtask>Add required field presence checks</subtask>
+        <subtask>Add minimum length validation logic</subtask>
+        <subtask>Add email format validation using email-validator</subtask>
+        <subtask>Implement completeness score calculation</subtask>
+        <subtask>Return structured validation result dictionary</subtask>
+        <subtask>Test with sample application data</subtask>
+      </task>
+      <task id="3" ac="3">Create Email Sender Tests
+        <subtask>Create tests/test_email_sender.py file</subtask>
+        <subtask>Write test for successful email sending (mock SMTP)</subtask>
+        <subtask>Write test for authentication failure scenario</subtask>
+        <subtask>Write test for invalid recipient handling</subtask>
+        <subtask>Write test for HTML formatting correctness</subtask>
+        <subtask>Write test for missing credentials error</subtask>
+        <subtask>Run tests and verify >80% coverage</subtask>
+        <subtask>Fix any failing tests</subtask>
+      </task>
+      <task id="4" ac="4">Create Validation Tests
+        <subtask>Create tests/test_validation.py file</subtask>
+        <subtask>Write test for complete valid application</subtask>
+        <subtask>Write test for missing required fields</subtask>
+        <subtask>Write test for invalid email format</subtask>
+        <subtask>Write test for minimum length violations</subtask>
+        <subtask>Write test for completeness score calculation</subtask>
+        <subtask>Run tests and verify >80% coverage</subtask>
+        <subtask>Fix any failing tests</subtask>
+      </task>
+      <task id="5" ac="5">Update Environment Configuration
+        <subtask>Add GMAIL_ADDRESS variable to .env.example</subtask>
+        <subtask>Add GMAIL_APP_PASSWORD variable to .env.example</subtask>
+        <subtask>Document Gmail App Password setup steps in comments</subtask>
+        <subtask>Update .env with actual credentials (local only, not committed)</subtask>
+        <subtask>Verify credentials load correctly on app startup</subtask>
+      </task>
+      <task id="6" ac="6">Update Dependencies
+        <subtask>Add email-validator==2.1.0 to requirements.txt</subtask>
+        <subtask>Run pip install email-validator==2.1.0 in virtual environment</subtask>
+        <subtask>Verify successful installation</subtask>
+        <subtask>Update README.md with new dependency information</subtask>
+        <subtask>Test import from email_validator import validate_email</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-1" priority="critical">
+      <title>Email Sending Module</title>
+      <description>Create utils/email_sender.py with EmailSender class implementing Gmail SMTP authentication, HTML email format, comprehensive error handling, and logging</description>
+      <verification>
+        - EmailSender class exists with send_application() method
+        - Gmail SMTP connection established on port 587 with TLS
+        - HTML and plain text email formats supported
+        - Returns (success: bool, message: str) tuple
+        - Logs all email attempts with detailed error messages
+        - Handles SMTPAuthenticationError, SMTPException, and general exceptions
+      </verification>
+    </criterion>
+    <criterion id="AC-2" priority="critical">
+      <title>Data Validation Module</title>
+      <description>Create utils/validation.py with ApplicationValidator class validating required fields, minimum lengths, email format, and calculating completeness score</description>
+      <verification>
+        - ApplicationValidator class exists with validate_application() method
+        - Validates all required fields: recipient_email, recipient_name, company_name, job_title, job_description, motivation_letter
+        - Checks minimum lengths: job_description (50 chars), motivation_letter (200 chars)
+        - Uses email-validator library for email format validation
+        - Returns dict with is_valid, completeness_score (0-100), missing_fields, invalid_fields, warnings
+      </verification>
+    </criterion>
+    <criterion id="AC-3" priority="high">
+      <title>Email Sender Unit Tests</title>
+      <description>Create comprehensive unit tests for email_sender module with >80% code coverage</description>
+      <verification>
+        - tests/test_email_sender.py exists with pytest tests
+        - Tests cover: successful send (mocked), auth failure, invalid recipient, HTML formatting, missing credentials
+        - All tests pass
+        - Coverage report shows >80% for utils/email_sender.py
+      </verification>
+    </criterion>
+    <criterion id="AC-4" priority="high">
+      <title>Validation Unit Tests</title>
+      <description>Create comprehensive unit tests for validation module with >80% code coverage</description>
+      <verification>
+        - tests/test_validation.py exists with pytest tests
+        - Tests cover: complete valid app, missing fields, invalid email, min length violations, score calculation
+        - All tests pass
+        - Coverage report shows >80% for utils/validation.py
+      </verification>
+    </criterion>
+    <criterion id="AC-5" priority="medium">
+      <title>Environment Configuration</title>
+      <description>Update .env.example with Gmail credentials documentation and setup instructions</description>
+      <verification>
+        - .env.example contains GMAIL_ADDRESS and GMAIL_APP_PASSWORD variables
+        - Comments document Gmail App Password setup process
+        - Credentials load correctly from environment variables
+      </verification>
+    </criterion>
+    <criterion id="AC-6" priority="medium">
+      <title>Dependencies Installation</title>
+      <description>Add email-validator library to project dependencies and documentation</description>
+      <verification>
+        - requirements.txt contains email-validator==2.1.0
+        - Library installs successfully via pip
+        - README.md documents new dependency
+        - Import statement works: from email_validator import validate_email
+      </verification>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/tech-spec.md</path>
+        <title>Technical Specification - MVP Email Automation Feature</title>
+        <section>Module 1: Email Sender</section>
+        <snippet>Complete Python implementation of EmailSender class using smtplib with Gmail SMTP on port 587, TLS encryption, HTML/text multipart messages, and comprehensive error handling for auth failures, connection timeouts, and SMTP exceptions</snippet>
+      </doc>
+      <doc>
+        <path>docs/tech-spec.md</path>
+        <title>Technical Specification - MVP Email Automation Feature</title>
+        <section>Module 2: Data Validation</section>
+        <snippet>Complete Python implementation of ApplicationValidator class with required field checks, minimum length validation, email format validation using email-validator library, and completeness score calculation (0-100%)</snippet>
+      </doc>
+      <doc>
+        <path>docs/tech-spec.md</path>
+        <title>Technical Specification - MVP Email Automation Feature</title>
+        <section>Testing Approach</section>
+        <snippet>Unit test specifications for both modules requiring >80% coverage, mocked SMTP connections, comprehensive scenario coverage (success, auth failure, validation failures), and pytest framework usage</snippet>
+      </doc>
+      <doc>
+        <path>docs/tech-spec.md</path>
+        <title>Technical Specification - MVP Email Automation Feature</title>
+        <section>Email Configuration</section>
+        <snippet>Gmail SMTP settings: smtp.gmail.com:587 with TLS, 30-second timeout, credentials from GMAIL_ADDRESS and GMAIL_APP_PASSWORD environment variables</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-stories.md</path>
+        <title>Epic: MVP Email Automation Pipeline</title>
+        <section>Story 1: Backend Infrastructure</section>
+        <snippet>5 story points, 5-7 hour estimate. Foundation for application sending with quality gates. Deliverables include email_sender.py, validation.py, and comprehensive unit tests. No dependencies - can start immediately</snippet>
+      </doc>
+      <doc>
+        <path>docs/product-brief-JobSearchAI-2025-10-15.md</path>
+        <title>Product Brief</title>
+        <section>MVP Priorities</section>
+        <snippet>Email automation via Gmail SMTP (simplest, most reliable), data validation with completeness scoring (0-100%), preventing incomplete applications through quality gates</snippet>
+      </doc>
+      <doc>
+        <path>docs/technology-stack.md</path>
+        <title>Technology Stack Analysis</title>
+        <section>Core Technologies</section>
+        <snippet>Python 3.11.5 with Flask 2.3.3, existing utils/ module pattern for shared functionality, pytest for testing framework</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>utils/api_utils.py</path>
+        <kind>utility</kind>
+        <symbol>Existing utilities module</symbol>
+        <lines>N/A</lines>
+        <reason>Reference for existing utils/ module pattern and structure to follow</reason>
+      </artifact>
+      <artifact>
+        <path>utils/decorators.py</path>
+        <kind>utility</kind>
+        <symbol>login_required</symbol>
+        <lines>N/A</lines>
+        <reason>Authentication decorator used in existing routes, may be referenced for consistency</reason>
+      </artifact>
+      <artifact>
+        <path>utils/file_utils.py</path>
+        <kind>utility</kind>
+        <symbol>Existing file utilities</symbol>
+        <lines>N/A</lines>
+        <reason>Reference for utils module structure and coding patterns</reason>
+      </artifact>
+      <artifact>
+        <path>config.py</path>
+        <kind>configuration</kind>
+        <symbol>Config class</symbol>
+        <lines>N/A</lines>
+        <reason>May need to verify environment variable loading patterns</reason>
+      </artifact>
+      <artifact>
+        <path>requirements.txt</path>
+        <kind>dependencies</kind>
+        <symbol>N/A</symbol>
+        <lines>N/A</lines>
+        <reason>Must be updated to add email-validator==2.1.0</reason>
+      </artifact>
+      <artifact>
+        <path>.env.example</path>
+        <kind>configuration</kind>
+        <symbol>N/A</symbol>
+        <lines>N/A</lines>
+        <reason>Must be updated with GMAIL_ADDRESS and GMAIL_APP_PASSWORD variables with documentation</reason>
+      </artifact>
+      <artifact>
+        <path>README.md</path>
+        <kind>documentation</kind>
+        <symbol>N/A</symbol>
+        <lines>N/A</lines>
+        <reason>Must be updated to document new email sending and validation features</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <existing>
+          <package name="Flask" version="2.3.3"/>
+          <package name="playwright" version="1.40.0"/>
+          <package name="openai" version="1.3.5"/>
+          <package name="pytest" version="(existing)"/>
+        </existing>
+        <new>
+          <package name="email-validator" version="2.1.0" required="true"/>
+        </new>
+        <stdlib>
+          <module name="smtplib" usage="Email sending via SMTP"/>
+          <module name="email.mime.text" usage="Plain text email content"/>
+          <module name="email.mime.multipart" usage="HTML multipart email messages"/>
+          <module name="os" usage="Environment variable loading"/>
+          <module name="logging" usage="Email operation logging"/>
+        </stdlib>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint priority="critical">Use Python's built-in smtplib library - no external SMTP libraries beyond stdlib</constraint>
+    <constraint priority="critical">Gmail SMTP server: smtp.gmail.com:587 with TLS encryption (do not use SSL or other ports)</constraint>
+    <constraint priority="critical">App Password authentication only - do not implement OAuth2 for MVP</constraint>
+    <constraint priority="critical">Synchronous email sending - do not implement async/background tasks for MVP</constraint>
+    <constraint priority="critical">All validation must prevent invalid applications from being sent - fail-safe design</constraint>
+    <constraint priority="high">Follow existing utils/ module pattern - place new modules in utils/ directory</constraint>
+    <constraint priority="high">Use pytest framework for all tests - match existing test infrastructure</constraint>
+    <constraint priority="high">Mock SMTP connections in tests - do not send real emails during testing</constraint>
+    <constraint priority="high">Achieve >80% code coverage for both new modules</constraint>
+    <constraint priority="medium">Log all email operations with detailed error messages for debugging</constraint>
+    <constraint priority="medium">Return structured error messages that can be displayed to users</constraint>
+    <constraint priority="medium">Follow PEP 8 Python style guide for code formatting</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>EmailSender.send_application()</name>
+      <kind>class method</kind>
+      <signature>def send_application(self, recipient_email: str, recipient_name: str, subject: str, motivation_letter: str, job_title: str, company_name: str) -> Tuple[bool, str]</signature>
+      <path>utils/email_sender.py</path>
+      <description>Sends job application email via Gmail SMTP. Returns (success, message) tuple.</description>
+    </interface>
+    <interface>
+      <name>ApplicationValidator.validate_application()</name>
+      <kind>class method</kind>
+      <signature>def validate_application(self, application: Dict) -> Dict</signature>
+      <path>utils/validation.py</path>
+      <description>Validates application completeness. Returns dict with is_valid, completeness_score, missing_fields, invalid_fields, warnings.</description>
+      <returns>
+        {
+          'is_valid': bool,
+          'completeness_score': int (0-100),
+          'missing_fields': list[str],
+          'invalid_fields': dict[str, str],
+          'warnings': list[str]
+        }
+      </returns>
+    </interface>
+    <interface>
+      <name>Environment Variables</name>
+      <kind>configuration</kind>
+      <signature>
+        GMAIL_ADDRESS: str - Gmail account email address
+        GMAIL_APP_PASSWORD: str - 16-character Gmail app password
+      </signature>
+      <path>.env</path>
+      <description>Required environment variables for Gmail SMTP authentication</description>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Use pytest framework with comprehensive mocking for external dependencies. Achieve >80% code coverage. Test both success and failure scenarios. Use descriptive test names following pattern: test_module_scenario_expected_result(). Mock SMTP connections to avoid sending real emails. Use pytest fixtures for common setup. Run coverage reports with: pytest --cov=utils --cov-report=html tests/</standards>
+    <locations>
+      <location>tests/test_email_sender.py</location>
+      <location>tests/test_validation.py</location>
+      <pattern>tests/test_*.py</pattern>
+    </locations>
+    <ideas>
+      <idea ac="AC-1">Test EmailSender successful send with mocked SMTP - verify connection, TLS, authentication, message composition</idea>
+      <idea ac="AC-1">Test EmailSender authentication failure - verify error handling and error message clarity</idea>
+      <idea ac="AC-1">Test EmailSender connection timeout - verify timeout handling and logging</idea>
+      <idea ac="AC-1">Test EmailSender invalid recipient email - verify SMTP exception handling</idea>
+      <idea ac="AC-1">Test EmailSender HTML email formatting - verify MIME multipart structure</idea>
+      <idea ac="AC-1">Test EmailSender missing credentials - verify ValueError raised with clear message</idea>
+      <idea ac="AC-2">Test ApplicationValidator with complete valid application - verify is_valid=True, score=100</idea>
+      <idea ac="AC-2">Test ApplicationValidator with missing required fields - verify fields detected in missing_fields list</idea>
+      <idea ac="AC-2">Test ApplicationValidator with invalid email format - verify email-validator integration</idea>
+      <idea ac="AC-2">Test ApplicationValidator with short job_description - verify minimum length check (50 chars)</idea>
+      <idea ac="AC-2">Test ApplicationValidator with short motivation_letter - verify minimum length check (200 chars)</idea>
+      <idea ac="AC-2">Test ApplicationValidator completeness score calculation - verify math with partial data</idea>
+      <idea ac="AC-2">Test ApplicationValidator optional warnings - verify job_url warning when missing</idea>
+      <idea ac="AC-3">Integration test: Validate application -> Send email flow (mocked SMTP)</idea>
+      <idea ac="AC-4">Edge case test: Empty strings vs None values in validation</idea>
+      <idea ac="AC-5">Test environment variable loading - verify credentials loaded correctly</idea>
+    </ideas>
+  </tests>
+</story-context>
