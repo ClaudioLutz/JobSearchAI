@@ -29,7 +29,12 @@ test.py
 # Job data and matches
 job_matches_*.json
 job_matches_*.md
-job_matches/
+job_matches/*.json
+job_matches/*.md
+# Keep directory structure but ignore application files
+job_matches/pending/*.json
+job_matches/sent/*.json
+job_matches/failed/*.json
 
 # Generated motivation letters
 motivation_letters/*.html

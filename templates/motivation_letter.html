@@ -46,8 +46,11 @@
                 <a href="{{ url_for('motivation_letter.download_docx_from_json', json_file_path=file_path) }}" class="btn btn-success">Word herunterladen</a>
                 {% elif file_path and file_path.endswith('.html') %}
                  {# Construct relative JSON path from HTML path #}
-                <a href="{{ url_for('motivation_letter.download_docx_from_json', json_file_path=file_path|replace('.html', '.json')) }}" class="btn btn-success">Word herunterladen</a>
+                <a href="{{ url_for('motivation_letter.download_docx_from_json', json_file_path=file_path|replace('.html', '.json')) }}" class="btn btn-success me-2">Word herunterladen</a>
                 {% endif %}
+                <a href="{{ url_for('motivation_letter.prepare_send_application', job_title=job_details.get('Job Title', 'application')) }}" class="btn btn-warning">
+                    📧 Bewerbung senden
+                </a>
             </div>
         </div>
         

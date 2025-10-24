@@ -1,0 +1,182 @@
+{% extends "index.html" %}
+{% block content %}
+
+<div class="container mt-4">
+    <h2>📧 Send Job Application</h2>
+    <h4>{{ job_details.get('Job Title', 'Job Application') }}</h4>
+    <p class="text-muted">{{ job_details.get('Company Name', '') }}</p>
+    
+    <div class="card mb-3">
+        <div class="card-header">
+            <h5>✅ Pre-Send Checklist</h5>
+        </div>
+        <div class="card-body">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="check-email-text">
+                <label class="form-check-label" for="check-email-text">
+                    Email text reviewed and edited
+                </label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="check-bewerbung-pdf">
+                <label class="form-check-label" for="check-bewerbung-pdf">
+                    Bewerbungsschreiben PDF uploaded (edited & converted from Word)
+                </label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="check-lebenslauf">
+                <label class="form-check-label" for="check-lebenslauf">
+                    Lebenslauf will be auto-attached (Lebenslauf_-_Lutz_Claudio.pdf)
+                </label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="check-recipient">
+                <label class="form-check-label" for="check-recipient">
+                    Recipient email verified
+                </label>
+            </div>
+        </div>
+    </div>
+    
+    <form id="send-application-form">
+        <!-- Recipient Email -->
+        <div class="mb-3">
+            <label for="recipient-email" class="form-label">Recipient Email *</label>
+            <input type="email" class="form-control" id="recipient-email" 
+                   value="{{ job_details.get('Application Email', '') }}" required>
+        </div>
+        
+        <!-- Subject -->
+        <div class="mb-3">
+            <label for="email-subject" class="form-label">Subject *</label>
+            <input type="text" class="form-control" id="email-subject" 
+                   value="Bewerbung - {{ job_details.get('Job Title', '') }}" required>
+        </div>
+        
+        <!-- Email Text -->
+        <div class="mb-3">
+            <label for="email-text" class="form-label">Email Text * (Editable)</label>
+            <textarea class="form-control" id="email-text" rows="10" required>{{ email_text }}</textarea>
+            <small class="form-text text-muted">You can edit this text before sending</small>
+        </div>
+        
+        <!-- PDF Upload -->
+        <div class="mb-3">
+            <label for="pdf-file" class="form-label">Upload Bewerbungsschreiben PDF *</label>
+            <input type="file" class="form-control" id="pdf-file" accept=".pdf" required>
+            <small class="form-text text-muted">Upload your edited and PDF-converted Bewerbungsschreiben</small>
+            <div id="upload-status" class="mt-2"></div>
+        </div>
+        
+        <!-- Hidden field for uploaded PDF path -->
+        <input type="hidden" id="bewerbungsschreiben-pdf-path">
+        
+        <!-- Send Button -->
+        <button type="submit" class="btn btn-primary btn-lg" id="send-btn" disabled>
+            📤 Send Application
+        </button>
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+    </form>
+    
+    <div id="send-result" class="mt-3"></div>
+</div>
+
+<script>
+document.getElementById('pdf-file').addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('pdf_file', file);
+    formData.append('job_title', '{{ job_title }}');
+    
+    document.getElementById('upload-status').innerHTML = '<span class="text-info">Uploading...</span>';
+    
+    try {
+        const response = await fetch('/motivation_letter/upload_pdf', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            document.getElementById('upload-status').innerHTML = 
+                '<span class="text-success">✓ PDF uploaded successfully</span>';
+            document.getElementById('bewerbungsschreiben-pdf-path').value = result.file_path;
+            document.getElementById('check-bewerbung-pdf').checked = true;
+            checkFormReady();
+        } else {
+            document.getElementById('upload-status').innerHTML = 
+                '<span class="text-danger">✗ Upload failed: ' + result.error + '</span>';
+        }
+    } catch (error) {
+        document.getElementById('upload-status').innerHTML = 
+            '<span class="text-danger">✗ Upload error: ' + error.message + '</span>';
+    }
+});
+
+function checkFormReady() {
+    const allChecked = 
+        document.getElementById('check-email-text').checked &&
+        document.getElementById('check-bewerbung-pdf').checked &&
+        document.getElementById('check-lebenslauf').checked &&
+        document.getElementById('check-recipient').checked;
+    
+    const pdfUploaded = document.getElementById('bewerbungsschreiben-pdf-path').value !== '';
+    
+    document.getElementById('send-btn').disabled = !(allChecked && pdfUploaded);
+}
+
+// Enable checkboxes to be manually checked
+document.querySelectorAll('.form-check-input').forEach(checkbox => {
+    checkbox.addEventListener('change', checkFormReady);
+});
+
+document.getElementById('send-application-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const sendBtn = document.getElementById('send-btn');
+    sendBtn.disabled = true;
+    sendBtn.innerHTML = 'Sending...';
+    
+    const data = {
+        recipient_email: document.getElementById('recipient-email').value,
+        subject: document.getElementById('email-subject').value,
+        email_text: document.getElementById('email-text').value,
+        bewerbungsschreiben_pdf_path: document.getElementById('bewerbungsschreiben-pdf-path').value,
+        job_title: '{{ job_details.get("Job Title", "") }}',
+        company_name: '{{ job_details.get("Company Name", "") }}'
+    };
+    
+    try {
+        const response = await fetch('/motivation_letter/send_application', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            document.getElementById('send-result').innerHTML = 
+                '<div class="alert alert-success">✓ Application sent successfully!</div>';
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 2000);
+        } else {
+            document.getElementById('send-result').innerHTML = 
+                '<div class="alert alert-danger">✗ Error: ' + result.message + '</div>';
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = '📤 Send Application';
+        }
+    } catch (error) {
+        document.getElementById('send-result').innerHTML = 
+            '<div class="alert alert-danger">✗ Error: ' + error.message + '</div>';
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = '📤 Send Application';
+    }
+});
+</script>
+
+{% endblock %}

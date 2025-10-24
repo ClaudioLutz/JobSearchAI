@@ -1,5 +1,6 @@
 openai==1.74.0
 python-dotenv==1.1.0
+email-validator==2.1.0
 PyMuPDF==1.25.5
 docxtpl==0.19.0
 pathlib==1.0.1
@@ -21,3 +22,7 @@ WTForms==3.1.2
 psycopg2-binary==2.9.9
 Flask-Migrate==4.0.5
 setuptools<81
+pytest==8.0.0
+pytest-cov==4.1.0
+python-docx2pdf==0.1.8
+PyPDF2==3.0.1

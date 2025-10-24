@@ -129,7 +129,11 @@ def generate_motivation_letter(cv_summary, job_details):
     if 'contact_person' not in motivation_letter_json:
         motivation_letter_json['contact_person'] = job_details.get('Contact Person')  # Get from original details if LLM missed it
     
-    logger.info("Successfully parsed motivation letter JSON and added greeting.")
+    # Add application_url and job_title for queue bridge matching (Story 1.4)
+    motivation_letter_json['application_url'] = job_details.get('Application URL', '')
+    motivation_letter_json['job_title'] = job_details.get('Job Title', '')
+    
+    logger.info("Successfully parsed motivation letter JSON and added greeting, application_url, and job_title.")
 
     # Generate HTML from the JSON
     html_content = json_to_html(motivation_letter_json)

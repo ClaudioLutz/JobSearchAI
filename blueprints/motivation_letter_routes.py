@@ -365,13 +365,21 @@ def generate_multiple_emails():
     def generate_and_update_task(app, job_url):
         nonlocal results
         with app.app_context():
+            # VALIDATE AND CLEAN URL FIRST
+            from utils.url_utils import URLNormalizer
+            original_url = job_url
+            job_url = URLNormalizer.clean_malformed_url(job_url)
+            
+            if original_url != job_url:
+                logger.info(f"Cleaned malformed URL: '{original_url}' → '{job_url}'")
+            
             if not job_url or job_url == 'N/A' or not job_url.startswith('http'):
-                logger.warning(f"Skipping invalid job URL for email generation: {job_url}")
-                with lock: results['errors'].append({'url': job_url, 'reason': 'Invalid URL'})
+                logger.warning(f"Skipping invalid job URL after cleaning: {job_url} (original: {original_url})")
+                with lock: results['errors'].append({'url': original_url, 'reason': 'Invalid URL'})
                 return
 
             try:
-                job_details = get_job_details_for_url(job_url)
+                job_details = get_job_details(job_url)
                 if not job_details or not job_details.get('Job Title'):
                     logger.warning(f"Could not get sufficient job details for URL: {job_url}")
                     with lock: results['errors'].append({'url': job_url, 'reason': 'Failed to get job details'})
@@ -659,6 +667,153 @@ def view_email_text():
              return redirect(url_for('job_matching.view_results', report_file=report_file))
         else:
              return redirect(url_for('index'))
+
+
+@motivation_letter_bp.route('/upload_pdf', methods=['POST'])
+@login_required
+def upload_bewerbungsschreiben_pdf():
+    """Upload Bewerbungsschreiben PDF for sending"""
+    try:
+        if 'pdf_file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+        
+        file = request.files['pdf_file']
+        
+        if not file.filename or file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        if not file.filename.lower().endswith('.pdf'):
+            return jsonify({'success': False, 'error': 'Only PDF files are allowed'}), 400
+        
+        # Secure filename and save
+        job_title = request.form.get('job_title', 'application')
+        sanitized_title = sanitize_filename(job_title)
+        filename = f"Bewerbungsschreiben_{sanitized_title}.pdf"
+        
+        # Save to ready_to_send directory
+        upload_dir = Path(current_app.root_path) / 'motivation_letters/ready_to_send'
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        file_path = upload_dir / filename
+        file.save(str(file_path))
+        
+        logger.info(f"Uploaded Bewerbungsschreiben PDF: {file_path}")
+        
+        return jsonify({
+            'success': True,
+            'file_path': str(file_path.relative_to(current_app.root_path)),
+            'filename': filename
+        })
+    
+    except Exception as e:
+        logger.error(f'Error uploading PDF: {str(e)}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@motivation_letter_bp.route('/send_application', methods=['POST'])
+@login_required
+def send_application_email():
+    """Send job application email with PDF attachments"""
+    try:
+        data = request.get_json()
+        
+        recipient_email = data.get('recipient_email')
+        subject = data.get('subject')
+        email_text = data.get('email_text')
+        bewerbungsschreiben_pdf_path = data.get('bewerbungsschreiben_pdf_path')
+        job_title = data.get('job_title', '')
+        company_name = data.get('company_name', '')
+        
+        # Validate required fields
+        if not all([recipient_email, subject, email_text, bewerbungsschreiben_pdf_path]):
+            return jsonify({
+                'success': False,
+                'error': 'Missing required fields'
+            }), 400
+        
+        # Build attachment paths
+        bewerbungsschreiben_full_path = Path(current_app.root_path) / bewerbungsschreiben_pdf_path
+        lebenslauf_full_path = Path(current_app.root_path) / 'process_cv/cv-data/input/Lebenslauf_-_Lutz_Claudio.pdf'
+        
+        # Validate both files exist
+        if not bewerbungsschreiben_full_path.is_file():
+            return jsonify({
+                'success': False,
+                'error': 'Bewerbungsschreiben PDF not found'
+            }), 400
+        
+        if not lebenslauf_full_path.is_file():
+            return jsonify({
+                'success': False,
+                'error': 'Lebenslauf PDF not found. Please ensure CV is at process_cv/cv-data/input/Lebenslauf_-_Lutz_Claudio.pdf'
+            }), 400
+        
+        # Send email with attachments
+        from utils.email_sender import EmailSender
+        sender = EmailSender()
+        success, message = sender.send_application_with_attachments(
+            recipient_email=recipient_email,
+            subject=subject,
+            body_text=email_text,
+            attachment_paths=[
+                str(bewerbungsschreiben_full_path),
+                str(lebenslauf_full_path)
+            ],
+            job_title=job_title,
+            company_name=company_name
+        )
+        
+        if success:
+            logger.info(f"Application sent successfully to {recipient_email} for {job_title} at {company_name}")
+        
+        return jsonify({
+            'success': success,
+            'message': message
+        })
+    
+    except Exception as e:
+        logger.error(f'Error sending application: {str(e)}', exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': f'Error sending application: {str(e)}'
+        }), 500
+
+
+@motivation_letter_bp.route('/prepare_send/<job_title>')
+@login_required
+def prepare_send_application(job_title):
+    """Show the send application page with email text and upload form"""
+    try:
+        # Load the email text from JSON
+        sanitized_title = sanitize_filename(job_title)
+        json_path = Path(current_app.root_path) / 'motivation_letters' / f'motivation_letter_{sanitized_title}.json'
+        
+        email_text = ""
+        job_details = {}
+        
+        if json_path.is_file():
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                email_text = data.get('email_text', '')
+                # Load job details from the JSON
+                job_details = {
+                    'Job Title': data.get('job_title_source', job_title),
+                    'Company Name': data.get('company_name', ''),
+                    'Application Email': data.get('contact_email', ''),
+                    'Application URL': data.get('job_url', '')
+                }
+        
+        return render_template(
+            'send_application.html',
+            job_title=job_title,
+            email_text=email_text,
+            job_details=job_details
+        )
+    
+    except Exception as e:
+        flash(f'Error preparing send application: {str(e)}')
+        logger.error(f'Error in prepare_send_application: {str(e)}', exc_info=True)
+        return redirect(url_for('index'))
 
 
 @motivation_letter_bp.route('/delete/<json_filename>')

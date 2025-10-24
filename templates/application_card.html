@@ -1,0 +1,54 @@
+<div class="col-md-6 col-lg-4 mb-3" data-app-id="{{ app.id }}" data-valid="{{ 'true' if app.validation.is_valid else 'false' }}">
+    <div class="card application-card {% if not app.validation.is_valid %}needs-review{% endif %}">
+        <div class="card-body">
+            <h5 class="card-title">{{ app.job_title }}</h5>
+            <p class="card-text">
+                <strong>{{ app.company_name }}</strong><br>
+                <small class="text-muted">{{ app.recipient_name }} ({{ app.recipient_email }})</small>
+            </p>
+
+            <!-- Status Badge -->
+            {% if app.validation.is_valid %}
+                <span class="badge bg-success">
+                    <i class="bi bi-check-circle"></i> Ready
+                </span>
+            {% else %}
+                <span class="badge bg-warning text-dark">
+                    <i class="bi bi-exclamation-triangle"></i> Review
+                </span>
+            {% endif %}
+
+            <!-- Completeness Progress Bar -->
+            <div class="progress mt-2 mb-2" style="height: 20px;">
+                {% set score = app.validation.completeness_score %}
+                {% if score >= 80 %}
+                    {% set bar_color = 'bg-success' %}
+                {% elif score >= 50 %}
+                    {% set bar_color = 'bg-warning' %}
+                {% else %}
+                    {% set bar_color = 'bg-danger' %}
+                {% endif %}
+                <div class="progress-bar {{ bar_color }}" role="progressbar" 
+                     style="width: {{ score }}%;" 
+                     aria-valuenow="{{ score }}" 
+                     aria-valuemin="0" 
+                     aria-valuemax="100">
+                    {{ score }}%
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="btn-group w-100 mt-2" role="group">
+                <button type="button" class="btn btn-sm btn-outline-primary review-btn" 
+                        data-app-id="{{ app.id }}">
+                    <i class="bi bi-eye"></i> Review
+                </button>
+                <button type="button" class="btn btn-sm btn-success send-btn" 
+                        data-app-id="{{ app.id }}"
+                        {% if not app.validation.is_valid %}disabled{% endif %}>
+                    <i class="bi bi-send"></i> Send
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

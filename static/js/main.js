@@ -337,27 +337,23 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('job_title', jobTitle); // Send job title too
 
             // Submit using fetch (similar to existing form logic)
-            fetch('/generate_motivation_letter', { // Use the correct endpoint
+            fetch('/motivation_letter/generate', { // Use the correct blueprint endpoint
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.text()) // Get response as text to parse HTML
-            .then(html => {
-                // Parse the HTML to extract the operation ID from the flash message
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-                const flashMessages = doc.querySelectorAll('.alert');
-
-                // Look for an operation ID in the flash messages
-                let operationId = null;
-                flashMessages.forEach(message => {
-                    const match = message.textContent.match(/operation_id=([a-f0-9-]+)/i);
-                    if (match && match[1]) {
-                        operationId = match[1];
-                    }
-                });
-
-                if (operationId) {
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(errData => {
+                        throw new Error(errData.error || `Server error: ${response.statusText}`);
+                    }).catch(() => {
+                        throw new Error(`Server error: ${response.statusText}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success && data.operation_id) {
+                    const operationId = data.operation_id;
                     // Start checking the operation status using the existing function
                     checkOperationStatus(operationId, (status) => {
                         // Re-enable link when operation completes (success or fail)
@@ -878,5 +874,139 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+
+    // --- Queue Integration (Story 1.4) ---
+    
+    // Select All / Deselect All Toggle
+    const toggleSelectAllBtn = document.getElementById('toggle-select-all-btn');
+    if (toggleSelectAllBtn) {
+        let allSelected = false;
+        
+        toggleSelectAllBtn.addEventListener('click', function() {
+            const checkboxes = document.querySelectorAll('.job-select-checkbox');
+            allSelected = !allSelected;
+            
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = allSelected;
+            });
+            
+            // Update button text and icon
+            if (allSelected) {
+                this.innerHTML = '<i class="bi bi-square"></i> Deselect All';
+            } else {
+                this.innerHTML = '<i class="bi bi-check-square"></i> Select All';
+            }
+        });
+    }
+    
+    // Send to Queue Functionality
+    const sendToQueueBtn = document.getElementById('send-to-queue-btn');
+    const queueAlert = document.getElementById('queue-alert');
+    const queueAlertMessage = document.getElementById('queue-alert-message');
+    
+    if (sendToQueueBtn && queueAlert && queueAlertMessage) {
+        sendToQueueBtn.addEventListener('click', function() {
+            const selectedCheckboxes = document.querySelectorAll('.job-select-checkbox:checked');
+            const reportFile = this.getAttribute('data-report-file');
+            
+            if (selectedCheckboxes.length === 0) {
+                showQueueAlert('warning', 'Please select at least one job to send to queue.');
+                return;
+            }
+            
+            if (!reportFile) {
+                showQueueAlert('danger', 'Error: Report file not specified.');
+                console.error('Report file attribute missing from send-to-queue button');
+                return;
+            }
+            
+            // Get selected indices (based on checkbox position in the table)
+            const selectedIndices = [];
+            const allCheckboxes = document.querySelectorAll('.job-select-checkbox');
+            allCheckboxes.forEach((checkbox, index) => {
+                if (checkbox.checked) {
+                    selectedIndices.push(index);
+                }
+            });
+            
+            console.log('Sending to queue:', { reportFile, selectedIndices });
+            
+            // Set loading state
+            setButtonLoading(sendToQueueBtn, true);
+            sendToQueueBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sending...';
+            
+            // Send AJAX request
+            fetch('/job_matching/send_to_queue', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    match_file: reportFile,
+                    selected_indices: selectedIndices
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Queue response:', data);
+                
+                if (data.success) {
+                    const results = data.results;
+                    let message = `✓ Successfully queued ${results.success_count} application(s)!`;
+                    
+                    // Add details about duplicates
+                    if (results.duplicate_count > 0) {
+                        message += `<br>⚠ Skipped ${results.duplicate_count} duplicate(s).`;
+                    }
+                    
+                    // Add details about errors
+                    if (results.error_count > 0) {
+                        message += `<br>✗ ${results.error_count} error(s) occurred.`;
+                        if (results.errors && results.errors.length > 0) {
+                            message += '<br><small>Failed jobs: ' + results.errors.map(e => e.job_title).join(', ') + '</small>';
+                        }
+                    }
+                    
+                    // Add link to queue dashboard
+                    message += '<br><br><a href="/application_queue" class="alert-link">View Application Queue →</a>';
+                    
+                    // Show success/warning based on if there were any issues
+                    const alertType = results.error_count > 0 || results.duplicate_count > 0 ? 'warning' : 'success';
+                    showQueueAlert(alertType, message);
+                    
+                    // Uncheck all checkboxes on success
+                    selectedCheckboxes.forEach(cb => cb.checked = false);
+                    
+                } else {
+                    showQueueAlert('danger', `✗ Error: ${data.error || 'Unknown error occurred'}`);
+                }
+            })
+            .catch(error => {
+                console.error('Error sending to queue:', error);
+                showQueueAlert('danger', `✗ Error: ${error.message}`);
+            })
+            .finally(() => {
+                // Restore button state
+                setButtonLoading(sendToQueueBtn, false);
+                sendToQueueBtn.innerHTML = '<i class="bi bi-send"></i> Send to Queue';
+            });
+        });
+        
+        // Helper function to show queue alerts
+        function showQueueAlert(type, message) {
+            queueAlert.className = `alert alert-${type} alert-dismissible fade show`;
+            queueAlertMessage.innerHTML = message;
+            queueAlert.style.display = 'block';
+            
+            // Auto-dismiss after 10 seconds for success, 15 seconds for errors
+            const dismissTime = type === 'success' ? 10000 : 15000;
+            setTimeout(() => {
+                const bsAlert = bootstrap.Alert.getOrCreateInstance(queueAlert);
+                bsAlert.close();
+            }, dismissTime);
+        }
+    }
+    
+    // --- End Queue Integration ---
 
 }); // End of main DOMContentLoaded listener

@@ -10,11 +10,22 @@ After cloning this repository, follow these steps to get started:
    ```
 
 2. **Set up Environment Variables**:
-   Create/update `process_cv/.env` with your OpenAI API key:
+   Create/update `process_cv/.env` with your OpenAI API key and Gmail credentials:
    ```
    OPENAI_API_KEY=your_openai_api_key_here
    SECRET_KEY=your_secret_key_here
+   GMAIL_ADDRESS=your_gmail@gmail.com
+   GMAIL_APP_PASSWORD=your_16_character_app_password
    ```
+   
+   **Gmail App Password Setup**:
+   To send emails via Gmail, you need to create an App Password:
+   1. Go to your Google Account settings: https://myaccount.google.com/
+   2. Navigate to Security → 2-Step Verification (must be enabled)
+   3. Scroll to "App passwords" at the bottom
+   4. Select app: "Mail" and device: "Other" (Custom name: "JobSearchAI")
+   5. Click "Generate" and copy the 16-character password
+   6. Add it to your `.env` file as `GMAIL_APP_PASSWORD`
 
 3. **Initialize Database**:
    ```bash
@@ -261,6 +272,25 @@ The system provides comprehensive logging:
   - Email texts
 - Bulk operations support
 - File management and organization
+
+### Email Automation Pipeline
+- **Application Queue Dashboard**: Visual queue for reviewing and sending job applications
+- **Smart Validation**: Automatic validation of application data with completeness scores
+- **User-Friendly Error Messages**: Clear, actionable error messages for all failures
+- **Batch Sending**: Send multiple applications at once with detailed results
+- **File Management**: Automatic organization of sent/failed applications
+- **Gmail Integration**: Secure email sending via Gmail with app password authentication
+- **Toast Notifications**: Real-time feedback for all user actions
+- **Loading States**: Visual indicators during async operations
+- **Responsive Design**: Mobile-friendly interface for review on any device
+
+**Morning Review Workflow**:
+1. Navigate to the Queue Dashboard (`/queue`)
+2. Review pending applications with validation status indicators
+3. Click "Review" to see full application details and email preview
+4. Send individual applications or batch-send all ready applications
+5. Successfully sent applications are moved to "Sent" tab
+6. Failed applications are logged with error details for troubleshooting
 
 ### Dashboard Interface
 - **Secure Access**: All features protected behind authentication

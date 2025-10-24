@@ -22,6 +22,7 @@ from utils.file_utils import (
 )
 from utils.api_utils import openai_client, generate_json_from_prompt
 from utils.decorators import handle_exceptions, retry, log_execution_time
+from utils.url_utils import URLNormalizer
 
 # Set up logging
 logging.basicConfig(
@@ -227,6 +228,7 @@ def match_jobs_with_cv(cv_path, min_score=6, max_jobs=50, max_results=10):
     
     # Evaluate each job listing
     matches = []
+    url_normalizer = URLNormalizer()
     for job in job_listings:
         logger.info(f"Evaluating job: {job.get('Job Title', 'Unknown')}")
         evaluation = evaluate_job_match(cv_summary, job)
@@ -236,7 +238,16 @@ def match_jobs_with_cv(cv_path, min_score=6, max_jobs=50, max_results=10):
         evaluation["company_name"] = job.get("Company Name", "N/A")
         evaluation["job_description"] = job.get("Job Description", "N/A")
         evaluation["location"] = job.get("Location", "N/A")
-        evaluation["application_url"] = job.get("Application URL", "N/A")
+        
+        # Normalize URL to full URL (Story 1.4: AC-2)
+        raw_url = job.get("Application URL", "N/A")
+        if raw_url and raw_url != "N/A":
+            evaluation["application_url"] = url_normalizer.to_full_url(raw_url)
+        else:
+            evaluation["application_url"] = raw_url
+        
+        # Store CV path for bridge service
+        evaluation["cv_path"] = cv_path
         
         matches.append(evaluation)
     

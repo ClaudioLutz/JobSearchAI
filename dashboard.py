@@ -199,12 +199,14 @@ def create_app():
     from blueprints.job_data_routes import job_data_bp
     from blueprints.job_matching_routes import job_matching_bp
     from blueprints.motivation_letter_routes import motivation_letter_bp
+    from blueprints.application_queue_routes import queue_bp
 
     app.register_blueprint(auth)
     app.register_blueprint(cv_bp)
     app.register_blueprint(job_data_bp)
     app.register_blueprint(job_matching_bp)
     app.register_blueprint(motivation_letter_bp)
+    app.register_blueprint(queue_bp)
 
     # --- Core Routes (kept in this file) ---
     @app.route('/operation_status/<operation_id>')
