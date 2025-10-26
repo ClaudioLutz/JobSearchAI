@@ -8,7 +8,7 @@
         "headless": true,
         "verbose": true,
         "output_format": "json",
-        "max_pages": 50,
+        "max_pages": 3,
         "wait_time": 5,
         "browser_config": {
             "args": [
@@ -49,7 +49,7 @@
         "load_wait": "networkidle"
     },
     "target_urls": [
-        "https://www.ostjob.ch/job/alle-jobs-nach-datum-seite-"
+        "https://www.ostjob.ch/job/suche-IT-typ-festanstellung-pensum-80-bis-100-seite-"
     ],
     "data_storage": {
         "output_directory": "job-data-acquisition/data",
