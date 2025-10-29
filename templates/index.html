@@ -52,32 +52,6 @@
             {% endif %}
         {% endwith %}
 
-        <!-- Quick Actions -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card bg-light">
-                    <div class="card-body">
-                        <h5 class="card-title mb-3">
-                            <i class="bi bi-lightning-charge"></i> Quick Actions
-                        </h5>
-                        <div class="d-flex gap-2 flex-wrap">
-                            <a href="{{ url_for('queue.queue_dashboard') }}" class="btn btn-primary btn-lg">
-                                <i class="bi bi-envelope-check"></i> Application Queue
-                                <span class="badge bg-light text-dark ms-2">NEW</span>
-                            </a>
-                            <button class="btn btn-outline-secondary btn-lg" disabled>
-                                <i class="bi bi-gear"></i> Settings
-                                <span class="badge bg-secondary ms-2">Coming Soon</span>
-                            </button>
-                        </div>
-                        <p class="mt-2 mb-0 text-muted small">
-                            <i class="bi bi-info-circle"></i> Manage your pending applications and send emails directly from the queue
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- Tab Navigation -->
         <ul class="nav nav-tabs mb-3" id="dashboardTabs" role="tablist">
             <li class="nav-item" role="presentation">

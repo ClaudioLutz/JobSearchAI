@@ -110,6 +110,7 @@ class ConfigManager:
             "job_data_acquisition": self.PROJECT_ROOT / "job-data-acquisition",
             "job_matches": self.PROJECT_ROOT / "job_matches",
             "motivation_letters": self.PROJECT_ROOT / "motivation_letters",
+            "applications": self.PROJECT_ROOT / "applications",
             "templates": self.PROJECT_ROOT / "templates",
             "static": self.PROJECT_ROOT / "static",
             "blueprints": self.PROJECT_ROOT / "blueprints",

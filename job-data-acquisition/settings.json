@@ -8,7 +8,7 @@
         "headless": true,
         "verbose": true,
         "output_format": "json",
-        "max_pages": 3,
+        "max_pages": 5,
         "wait_time": 5,
         "browser_config": {
             "args": [

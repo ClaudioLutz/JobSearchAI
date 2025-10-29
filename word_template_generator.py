@@ -40,12 +40,17 @@ def json_to_docx(motivation_letter_json, template_path='motivation_letters/templ
         
         # Determine output path
         if not output_path:
+            # NOTE: In checkpoint architecture, output_path should always be provided
+            # This fallback is for backward compatibility only
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning("No output_path provided - using legacy fallback. In checkpoint architecture, explicit output_path should be provided.")
             job_title = motivation_letter_json.get('company_name', 'company').replace(' ', '_')[:30]
             output_path = Path('motivation_letters') / f"motivation_letter_{job_title}.docx"
         else:
             output_path = Path(output_path)
         
-        # Ensure the directory exists
+        # Ensure the directory exists (handles checkpoint folder paths correctly)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Save the document

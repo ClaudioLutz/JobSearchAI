@@ -324,3 +324,260 @@ def load_text_file(
     except Exception as e:
         logger.error(f"Error loading text from {path}: {e}")
         return default
+
+
+# ============================================================================
+# CHECKPOINT INFRASTRUCTURE FUNCTIONS
+# ============================================================================
+
+def sanitize_folder_name(name: str, max_length: int = 50) -> str:
+    """
+    Sanitize a string to be safe for folder names.
+    
+    Removes or replaces unsafe characters, collapses multiple underscores,
+    and ensures the result is within the specified length.
+    
+    Args:
+        name: String to sanitize
+        max_length: Maximum length of output (default: 50)
+    
+    Returns:
+        Sanitized string safe for folder names
+    
+    Example:
+        sanitize_folder_name("Company/Name: Test*?", max_length=30)
+        # Returns: "Company_Name_Test"
+    """
+    if not name:
+        return "unknown"
+    
+    # Remove/replace unsafe characters
+    safe_chars = []
+    for c in name:
+        if c.isalnum() or c in [' ', '-', '_']:
+            safe_chars.append(c)
+        elif c in ['/', '\\', ':', '*', '?', '"', '<', '>', '|']:
+            safe_chars.append('_')
+    
+    # Join and clean up
+    safe_name = ''.join(safe_chars)
+    safe_name = safe_name.replace(' ', '_')
+    
+    # Remove multiple consecutive underscores
+    while '__' in safe_name:
+        safe_name = safe_name.replace('__', '_')
+    
+    # Trim to max length
+    safe_name = safe_name[:max_length]
+    
+    # Remove leading/trailing underscores
+    safe_name = safe_name.strip('_')
+    
+    return safe_name or 'unknown'
+
+
+def create_application_folder(
+    job_details: Dict[str, Any], 
+    base_dir: str = 'applications'
+) -> Path:
+    """
+    Create a checkpoint folder for an application package.
+    
+    Folder naming: {sequential_id}_{company}_{jobtitle}/
+    Example: 001_Google_Switzerland_Software_Engineer/
+    
+    Sequential IDs are determined by counting existing folders with pattern
+    [0-9][0-9][0-9]_* in the base directory.
+    
+    Args:
+        job_details: Dictionary with job information containing at least
+                    'Company Name' and 'Job Title' keys
+        base_dir: Base directory for applications (default: 'applications')
+    
+    Returns:
+        Path object to the created folder
+    
+    Example:
+        job_details = {
+            'Company Name': 'Google Switzerland',
+            'Job Title': 'Software Engineer'
+        }
+        folder = create_application_folder(job_details)
+        # Creates: applications/001_Google_Switzerland_Software_Engineer/
+    """
+    base_path = Path(base_dir)
+    base_path.mkdir(parents=True, exist_ok=True)
+    
+    # Get next sequential ID
+    existing_folders = sorted(base_path.glob('[0-9][0-9][0-9]_*'))
+    next_id = len(existing_folders) + 1
+    id_str = f"{next_id:03d}"  # Format as 001, 002, etc.
+    
+    # Extract and sanitize company name
+    company = job_details.get('Company Name', 'Unknown_Company')
+    company_clean = sanitize_folder_name(company, max_length=30)
+    
+    # Extract and sanitize job title
+    job_title = job_details.get('Job Title', 'Position')
+    job_title_clean = sanitize_folder_name(job_title, max_length=40)
+    
+    # Create folder name: ID_Company_JobTitle
+    folder_name = f"{id_str}_{company_clean}_{job_title_clean}"
+    
+    # Create full path
+    folder_path = base_path / folder_name
+    folder_path.mkdir(parents=True, exist_ok=True)
+    
+    logger.info(f"📁 Created application folder: {folder_path}")
+    
+    return folder_path
+
+
+def create_metadata_file(
+    folder_path: Path, 
+    job_details: Dict[str, Any], 
+    cv_filename: Optional[str] = None
+) -> None:
+    """
+    Create metadata.json file in checkpoint folder.
+    
+    The metadata file provides quick reference information for System C
+    without needing to parse full job details or application data files.
+    
+    Args:
+        folder_path: Path to application folder
+        job_details: Dictionary with job information
+        cv_filename: Name of CV file (default: 'Lebenslauf.pdf')
+    
+    Example:
+        create_metadata_file(
+            folder_path=Path('applications/001_Company_Job'),
+            job_details={'Company Name': 'Company', 'Job Title': 'Job'},
+            cv_filename='Lebenslauf.pdf'
+        )
+    """
+    # Extract folder name to get ID
+    folder_name = folder_path.name
+    app_id = folder_name.split('_')[0]  # First part is the ID
+    
+    metadata = {
+        "id": app_id,
+        "company": job_details.get('Company Name', ''),
+        "job_title": job_details.get('Job Title', ''),
+        "date_generated": datetime.now().isoformat(),
+        "application_url": job_details.get('Application URL', ''),
+        "application_email": job_details.get('Email', ''),
+        "contact_name": job_details.get('Contact Person', ''),
+        "cv_filename": cv_filename or "Lebenslauf.pdf",
+        "system_b_version": "1.0",
+        "checkpoint_version": "1.0"
+    }
+    
+    metadata_path = folder_path / 'metadata.json'
+    with open(metadata_path, 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=2, ensure_ascii=False)
+    
+    logger.info(f"✅ Created metadata.json: {metadata_path}")
+
+
+def create_status_file(folder_path: Path) -> None:
+    """
+    Create initial status.json file in checkpoint folder.
+    
+    The status file enables basic application tracking before System C
+    is implemented. Users can manually update this file to track progress.
+    
+    Status values:
+        - draft: Generated but not yet sent (default)
+        - sent: Email sent to company
+        - responded: Company responded
+        - interview: Interview scheduled
+        - rejected: Application rejected
+        - accepted: Offer received
+        - withdrawn: User withdrew application
+    
+    Args:
+        folder_path: Path to application folder
+    
+    Example:
+        create_status_file(Path('applications/001_Company_Job'))
+    """
+    status = {
+        "status": "draft",
+        "sent_date": None,
+        "last_updated": datetime.now().isoformat(),
+        "notes": "",
+        "response_received": False,
+        "interview_scheduled": None
+    }
+    
+    status_path = folder_path / 'status.json'
+    with open(status_path, 'w', encoding='utf-8') as f:
+        json.dump(status, f, indent=2, ensure_ascii=False)
+    
+    logger.info(f"✅ Created status.json: {status_path}")
+
+
+def copy_cv_to_folder(
+    folder_path: Path, 
+    cv_source_dir: str = 'process_cv/cv-data/input'
+) -> None:
+    """
+    Copy CV PDF to application folder with standardized name.
+    
+    Finds the most recent PDF in the CV source directory and copies it
+    to the application folder as 'lebenslauf.pdf'. If no CV is found,
+    logs a warning but does not raise an error.
+    
+    Args:
+        folder_path: Path to application folder
+        cv_source_dir: Directory where CV PDFs are stored
+                      (default: 'process_cv/cv-data/input')
+    
+    Example:
+        copy_cv_to_folder(Path('applications/001_Company_Job'))
+    """
+    import shutil
+    
+    cv_dir = Path(cv_source_dir)
+    
+    # Find the most recent PDF (assumes one CV per user)
+    pdf_files = list(cv_dir.glob('*.pdf'))
+    
+    if not pdf_files:
+        logger.warning(f"⚠️ No CV PDF found in {cv_dir}")
+        return
+    
+    # Get most recent PDF by modification time
+    most_recent_pdf = max(pdf_files, key=lambda p: p.stat().st_mtime)
+    
+    # Copy to application folder with standard name
+    dest_path = folder_path / 'lebenslauf.pdf'
+    shutil.copy2(most_recent_pdf, dest_path)
+    
+    logger.info(f"✅ Copied CV to: {dest_path}")
+
+
+def export_email_text(folder_path: Path, email_text: str) -> None:
+    """
+    Export email text to standalone .txt file.
+    
+    Creates an email-text.txt file that users can easily open and
+    copy/paste into their email client.
+    
+    Args:
+        folder_path: Path to application folder
+        email_text: Generated email text to save
+    
+    Example:
+        export_email_text(
+            Path('applications/001_Company_Job'),
+            "Dear Hiring Manager,\n\n..."
+        )
+    """
+    email_path = folder_path / 'email-text.txt'
+    
+    with open(email_path, 'w', encoding='utf-8') as f:
+        f.write(email_text)
+    
+    logger.info(f"✅ Created email-text.txt: {email_path}")

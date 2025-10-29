@@ -13,7 +13,15 @@ from pathlib import Path
 from config import config, get_openai_api_key, get_openai_defaults
 
 # Import utilities
-from utils.file_utils import save_json_file, ensure_output_directory
+from utils.file_utils import (
+    save_json_file, 
+    ensure_output_directory,
+    create_application_folder,
+    create_metadata_file,
+    copy_cv_to_folder,
+    export_email_text,
+    create_status_file
+)
 from utils.api_utils import openai_client, generate_json_from_prompt
 from utils.decorators import handle_exceptions, log_execution_time
 
@@ -138,37 +146,52 @@ def generate_motivation_letter(cv_summary, job_details):
     # Generate HTML from the JSON
     html_content = json_to_html(motivation_letter_json)
 
-    # --- File Saving Logic ---
-    job_title = job_details.get('Job Title', 'job')
-    # Basic sanitization
-    sanitized_title = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in job_title)
-    sanitized_title = sanitized_title.replace(' ', '_')[:30]  # Limit length
+    # --- CHECKPOINT ARCHITECTURE FILE SAVING ---
+    # Create checkpoint folder with structured naming
+    app_folder = create_application_folder(job_details, base_dir='applications')
+    logger.info(f"📁 Created checkpoint folder: {app_folder}")
 
-    # Define output directory using config
-    motivation_letters_dir = config.get_path("motivation_letters")
-    ensure_output_directory(motivation_letters_dir)
-
-    # Define file paths
-    html_filename = f"motivation_letter_{sanitized_title}.html"
-    html_file_path = motivation_letters_dir / html_filename
-    json_filename = f"motivation_letter_{sanitized_title}.json"
-    json_file_path = motivation_letters_dir / json_filename
-    scraped_data_filename = f"motivation_letter_{sanitized_title}_scraped_data.json"
-    scraped_data_path = motivation_letters_dir / scraped_data_filename
+    # Define file paths in checkpoint folder
+    html_file_path = app_folder / 'bewerbungsschreiben.html'
+    json_file_path = app_folder / 'application-data.json'
+    scraped_data_path = app_folder / 'job-details.json'
 
     # Save HTML
-    logger.info(f"Saving HTML motivation letter to file: {html_file_path}")
+    logger.info(f"Saving HTML motivation letter to: {html_file_path}")
     with open(html_file_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
 
-    # Save JSON (now including the greeting)
-    logger.info(f"Saving JSON motivation letter to file: {json_file_path}")
+    # Save JSON (application data)
+    logger.info(f"Saving JSON motivation letter to: {json_file_path}")
     save_json_file(motivation_letter_json, json_file_path, ensure_ascii=False, indent=2)
 
-    # Save scraped job details (passed into this function)
-    logger.info(f"Saving scraped job details to file: {scraped_data_path}")
+    # Save job details
+    logger.info(f"Saving job details to: {scraped_data_path}")
     save_json_file(job_details, scraped_data_path, ensure_ascii=False, indent=2)
-    # --- End File Saving Logic ---
+
+    # Create checkpoint infrastructure files
+    create_metadata_file(app_folder, job_details)
+    copy_cv_to_folder(app_folder)
+    create_status_file(app_folder)
+
+    # Generate DOCX file in checkpoint folder
+    from word_template_generator import json_to_docx
+    docx_file_path = app_folder / 'bewerbungsschreiben.docx'
+    logger.info(f"Generating DOCX file: {docx_file_path}")
+    docx_result = json_to_docx(motivation_letter_json, output_path=str(docx_file_path))
+    if not docx_result:
+        logger.warning("Failed to generate DOCX file")
+
+    # Generate email text and save to checkpoint folder
+    logger.info("Generating email text...")
+    email_text = generate_email_text_only(cv_summary, job_details)
+    if email_text:
+        export_email_text(app_folder, email_text)
+    else:
+        logger.warning("Failed to generate email text")
+
+    logger.info(f"🎯 Checkpoint package ready at: {app_folder}")
+    # --- End CHECKPOINT ARCHITECTURE FILE SAVING ---
 
     # Return dictionary with results and paths
     return {
