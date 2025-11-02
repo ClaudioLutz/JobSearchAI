@@ -51,12 +51,10 @@ python dashboard.py
 
 3. **Match Jobs to Your Profile** (Run Process tab)
    - Select your CV from dropdown
-   - Set matching parameters:
-     - Minimum Match Score: 3 (1-10 scale)
-     - Max Jobs to Process: 50
-     - Max Results to Return: 10
+   - Set "Max Jobs to Process" (default: 50)
    - Click "Run Job Matcher"
    - AI analyzes each job against your CV
+   - **All matches are saved to database** regardless of score
    - Results saved to `job_matches/`
 
 4. **Generate Motivation Letters** (View Files tab → Motivation Letters section)
@@ -71,6 +69,40 @@ python dashboard.py
    - **Preview email** before sending
    - **Send applications** directly from dashboard
    - **Track sent/failed** applications automatically
+
+---
+
+## 🔍 Filtering Job Matches
+
+**Important Change:** The job matcher now saves **ALL matching jobs** to the database regardless of score. This gives you maximum flexibility to explore results without re-running expensive API calls.
+
+### How to Filter Results
+
+1. **Run the job matcher** from the dashboard
+2. Wait for matching to complete
+3. Navigate to **"View Files" → "Job Match Reports"**
+4. Click "View" on any report to see all matches
+5. Use filtering options (coming in Story 3.3) to refine results by:
+   - Minimum match score (1-10)
+   - Search term
+   - Date range
+   - Location
+   - Company name
+
+### Why This Approach?
+
+- **No re-running needed**: Filter results multiple times without API costs
+- **Explore thoroughly**: Review lower-scored matches that might be hidden gems
+- **Faster workflow**: Filter instantly instead of waiting for new match runs
+- **Better insights**: Compare different scoring thresholds side-by-side
+
+### Deprecated Parameters
+
+⚠️ **Note:** The following parameters have been removed from the matcher forms:
+- ~~Minimum Match Score~~ (filtering now happens post-match)
+- ~~Max Results to Return~~ (all matches saved, filter in results view)
+
+These parameters no longer affect the matching process. All job matches are saved to the database for post-match filtering and analysis.
 
 ---
 

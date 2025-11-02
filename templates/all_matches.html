@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All Job Matches - JobSearchAI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>All Job Matches</h1>
+            <p>View and filter all job matches across all search terms and CV versions</p>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">← Back to Dashboard</a>
+        </header>
+
+        <!-- Filter Panel -->
+        <div class="filter-panel">
+            <h2>Filters</h2>
+            <form id="filter-form" method="GET" action="{{ url_for('job_matching.view_all_matches') }}">
+                <div class="filter-row">
+                    <div class="filter-field">
+                        <label for="search_term">Search Term:</label>
+                        <select id="search_term" name="search_term">
+                            <option value="">All Search Terms</option>
+                            {% for term in available_search_terms %}
+                            <option value="{{ term }}" {% if filters.search_term == term %}selected{% endif %}>
+                                {{ term }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="filter-field">
+                        <label for="cv_key">CV Version:</label>
+                        <select id="cv_key" name="cv_key">
+                            <option value="">All CV Versions</option>
+                            {% for cv in available_cvs %}
+                            <option value="{{ cv.cv_key }}" {% if filters.cv_key == cv.cv_key %}selected{% endif %}>
+                                {{ cv.file_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="filter-field">
+                        <label for="min_score">Min Score:</label>
+                        <input type="number" id="min_score" name="min_score" 
+                               min="0" max="10" step="1" 
+                               value="{{ filters.min_score }}" 
+                               placeholder="0-10">
+                    </div>
+                </div>
+
+                <div class="filter-row">
+                    <div class="filter-field">
+                        <label for="location">Location:</label>
+                        <input type="text" id="location" name="location" 
+                               value="{{ filters.location }}" 
+                               placeholder="e.g., Zürich">
+                    </div>
+
+                    <div class="filter-field">
+                        <label for="date_from">From Date:</label>
+                        <input type="date" id="date_from" name="date_from" 
+                               value="{{ filters.date_from }}">
+                    </div>
+
+                    <div class="filter-field">
+                        <label for="date_to">To Date:</label>
+                        <input type="date" id="date_to" name="date_to" 
+                               value="{{ filters.date_to }}">
+                    </div>
+
+                    <div class="filter-field">
+                        <label for="sort_by">Sort By:</label>
+                        <select id="sort_by" name="sort_by">
+                            <option value="overall_match DESC" {% if filters.sort_by == 'overall_match DESC' %}selected{% endif %}>
+                                Score (High to Low)
+                            </option>
+                            <option value="overall_match ASC" {% if filters.sort_by == 'overall_match ASC' %}selected{% endif %}>
+                                Score (Low to High)
+                            </option>
+                            <option value="matched_at DESC" {% if filters.sort_by == 'matched_at DESC' %}selected{% endif %}>
+                                Date (Newest First)
+                            </option>
+                            <option value="matched_at ASC" {% if filters.sort_by == 'matched_at ASC' %}selected{% endif %}>
+                                Date (Oldest First)
+                            </option>
+                            <option value="company_name ASC" {% if filters.sort_by == 'company_name ASC' %}selected{% endif %}>
+                                Company Name (A-Z)
+                            </option>
+                            <option value="job_title ASC" {% if filters.sort_by == 'job_title ASC' %}selected{% endif %}>
+                                Job Title (A-Z)
+                            </option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="filter-actions">
+                    <button type="submit" class="btn btn-primary">Apply Filters</button>
+                    <button type="button" class="btn btn-secondary" onclick="resetFilters()">Reset</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Results Summary -->
+        <div class="results-summary">
+            <p>Showing {{ results|length }} of {{ total_count }} matches (Page {{ current_page }} of {{ total_pages }})</p>
+            <div class="bulk-actions">
+                <button id="btn-select-all" class="btn btn-secondary" onclick="selectAll()">Select All</button>
+                <button id="btn-deselect-all" class="btn btn-secondary" onclick="deselectAll()">Deselect All</button>
+                <button id="btn-generate-letters" class="btn btn-primary" onclick="generateLetters()" disabled>
+                    Generate Letters for Selected (0)
+                </button>
+            </div>
+        </div>
+
+        <!-- Results Table -->
+        {% if results %}
+        <div class="results-table-container">
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>
+                            <input type="checkbox" id="select-all-header" onchange="toggleAllCheckboxes()">
+                        </th>
+                        <th>Job Title</th>
+                        <th>Company</th>
+                        <th>Location</th>
+                        <th>Score</th>
+                        <th>Search Term</th>
+                        <th>Date Matched</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for match in results %}
+                    <tr>
+                        <td>
+                            <input type="checkbox" class="job-checkbox" value="{{ match.job_url }}" onchange="updateBulkActions()">
+                        </td>
+                        <td>
+                            <a href="{{ match.job_url }}" target="_blank" rel="noopener noreferrer">
+                                {{ match.job_title or 'N/A' }}
+                            </a>
+                        </td>
+                        <td>{{ match.company_name or 'N/A' }}</td>
+                        <td>{{ match.location or 'N/A' }}</td>
+                        <td>
+                            <span class="score-badge score-{{ match.score_class }}">
+                                {{ match.overall_match }}/10
+                            </span>
+                        </td>
+                        <td>
+                            <span class="search-term-badge">{{ match.search_term }}</span>
+                        </td>
+                        <td>{{ match.matched_at[:10] if match.matched_at else 'N/A' }}</td>
+                        <td>
+                            <button class="btn btn-small" onclick="viewDetails('{{ match.job_url }}')">
+                                View
+                            </button>
+                            <button class="btn btn-small btn-primary" onclick="generateSingle('{{ match.job_url }}')">
+                                Letter
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination">
+            {% if current_page > 1 %}
+            <a href="?{% for key, value in filters.items() %}{% if value %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ current_page - 1 }}" 
+               class="btn btn-secondary">← Previous</a>
+            {% else %}
+            <button class="btn btn-secondary" disabled>← Previous</button>
+            {% endif %}
+
+            <span class="page-info">Page {{ current_page }} of {{ total_pages }}</span>
+
+            {% if current_page < total_pages %}
+            <a href="?{% for key, value in filters.items() %}{% if value %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ current_page + 1 }}" 
+               class="btn btn-secondary">Next →</a>
+            {% else %}
+            <button class="btn btn-secondary" disabled>Next →</button>
+            {% endif %}
+        </div>
+
+        <!-- Export Section -->
+        <div class="export-section">
+            <h3>Export Options</h3>
+            <button class="btn btn-secondary" onclick="exportToCSV()">Export to CSV</button>
+            <button class="btn btn-secondary" onclick="exportToMarkdown()">Export to Markdown</button>
+        </div>
+        {% else %}
+        <div class="no-results">
+            <p>No job matches found. Try adjusting your filters.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <script src="{{ url_for('static', filename='js/all_matches.js') }}"></script>
+</body>
+</html>

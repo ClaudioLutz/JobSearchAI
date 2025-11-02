@@ -78,9 +78,7 @@ def get_job_details_for_url(job_url):
 def run_job_matcher():
     """Run the job matcher with the selected CV"""
     cv_path_rel = request.form.get('cv_path') # This is the relative path from the form
-    min_score = int(request.form.get('min_score', 3))
     max_jobs = int(request.form.get('max_jobs', 50))
-    max_results = int(request.form.get('max_results', 10))
 
     if not cv_path_rel:
         flash('No CV selected')
@@ -105,14 +103,14 @@ def run_job_matcher():
         operation_id = start_operation('job_matching')
 
         # Define a function to run the job matcher in a background thread
-        def run_job_matcher_task(app, op_id, cv_full_path_task, cv_path_rel_task, min_score_task, max_jobs_task, max_results_task):
+        def run_job_matcher_task(app, op_id, cv_full_path_task, cv_path_rel_task, max_jobs_task):
              with app.app_context(): # Establish app context for the thread
                 try:
                     # Update status
                     update_operation_progress(op_id, 10, 'processing', 'Loading job data...')
 
-                    # Match jobs with CV - pass both max_jobs and max_results
-                    matches = match_jobs_with_cv(cv_full_path_task, min_score=min_score_task, max_jobs=max_jobs_task, max_results=max_results_task)
+                    # Match jobs with CV - ALL matches saved to database
+                    matches = match_jobs_with_cv(cv_full_path_task, max_jobs=max_jobs_task)
 
                     if not matches:
                         update_operation_progress(op_id, 100, 'completed', 'No job matches found')
@@ -136,7 +134,7 @@ def run_job_matcher():
                     complete_operation(op_id, 'failed', f'Error running job matcher: {str(e)}')
 
         # Start the background thread, passing app instance and args
-        thread_args = (app_instance, operation_id, full_cv_path, cv_path_rel, min_score, max_jobs, max_results)
+        thread_args = (app_instance, operation_id, full_cv_path, cv_path_rel, max_jobs)
         thread = threading.Thread(target=run_job_matcher_task, args=thread_args)
         thread.daemon = True
         thread.start()
@@ -158,9 +156,7 @@ def run_combined_process():
         # Get parameters from the form
         cv_path_rel = request.form.get('cv_path')
         max_pages = int(request.form.get('max_pages', 50))
-        min_score = int(request.form.get('min_score', 3))
         max_jobs = int(request.form.get('max_jobs', 50))
-        max_results = int(request.form.get('max_results', 10))
 
         if not cv_path_rel:
             flash('No CV selected')
@@ -186,7 +182,7 @@ def run_combined_process():
 
         # Define a function to run the combined process in a background thread
         # Pass necessary variables and app instance
-        def run_combined_process_task(app, op_id, cv_full_path_task, cv_path_rel_task, max_pages_task, min_score_task, max_jobs_task, max_results_task):
+        def run_combined_process_task(app, op_id, cv_full_path_task, cv_path_rel_task, max_pages_task, max_jobs_task):
             with app.app_context(): # Establish app context for the thread
                 try:
                     # Access operation status via app extensions now that context exists
@@ -235,8 +231,8 @@ def run_combined_process():
                     # Update status
                     update_operation_progress(op_id, 60, 'processing', 'Job data acquisition completed. Starting job matcher...')
 
-                    # Step 3: Run the job matcher with the newly acquired data
-                    matches = match_jobs_with_cv(cv_full_path_task, min_score=min_score_task, max_jobs=max_jobs_task, max_results=max_results_task) # Use passed variables
+                    # Step 3: Run the job matcher with the newly acquired data - ALL matches saved
+                    matches = match_jobs_with_cv(cv_full_path_task, max_jobs=max_jobs_task) # Use passed variables
 
                     if not matches:
                         complete_operation(op_id, 'completed', 'No job matches found after scraping')
@@ -265,7 +261,7 @@ def run_combined_process():
                     complete_operation(op_id, 'failed', f'Error running combined process: {str(e)}')
 
         # Start the background thread, passing necessary arguments including app instance
-        thread_args = (app_instance, operation_id, full_cv_path, cv_path_rel, max_pages, min_score, max_jobs, max_results)
+        thread_args = (app_instance, operation_id, full_cv_path, cv_path_rel, max_pages, max_jobs)
         thread = threading.Thread(target=run_combined_process_task, args=thread_args)
         thread.daemon = True
         thread.start()
@@ -525,6 +521,169 @@ def delete_report(report_file):
 
     # Redirect back to the main dashboard after deletion
     return redirect(url_for('index'))
+
+
+@job_matching_bp.route('/view_all_matches', methods=['GET'])
+@login_required
+def view_all_matches():
+    """
+    View all job matches with filtering and pagination
+    
+    Query parameters:
+        - search_term: Filter by search term
+        - cv_key: Filter by CV version
+        - min_score: Minimum match score (0-10)
+        - location: Filter by location (partial match)
+        - date_from: Filter by match date (from)
+        - date_to: Filter by match date (to)
+        - sort_by: Sort field and direction
+        - page: Page number (default 1)
+        - per_page: Results per page (default 50)
+    """
+    import math
+    from utils.db_utils import JobMatchDatabase
+    
+    # Extract filter parameters
+    filters = {
+        'search_term': request.args.get('search_term', ''),
+        'cv_key': request.args.get('cv_key', ''),
+        'min_score': request.args.get('min_score', 0, type=int),
+        'location': request.args.get('location', ''),
+        'date_from': request.args.get('date_from', ''),
+        'date_to': request.args.get('date_to', ''),
+        'sort_by': request.args.get('sort_by', 'overall_match DESC')
+    }
+    
+    # Pagination
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = request.args.get('per_page', 50, type=int)
+    offset = (page - 1) * per_page
+    
+    # Query database
+    db = JobMatchDatabase()
+    try:
+        db.connect()
+        
+        # Build WHERE clause
+        where_clauses = []
+        params = []
+        
+        if filters['search_term']:
+            where_clauses.append("search_term = ?")
+            params.append(filters['search_term'])
+        
+        if filters['cv_key']:
+            where_clauses.append("cv_key = ?")
+            params.append(filters['cv_key'])
+        
+        if filters['min_score'] > 0:
+            where_clauses.append("overall_match >= ?")
+            params.append(filters['min_score'])
+        
+        if filters['location']:
+            where_clauses.append("location LIKE ?")
+            params.append(f"%{filters['location']}%")
+        
+        if filters['date_from']:
+            where_clauses.append("DATE(matched_at) >= ?")
+            params.append(filters['date_from'])
+        
+        if filters['date_to']:
+            where_clauses.append("DATE(matched_at) <= ?")
+            params.append(filters['date_to'])
+        
+        where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+        
+        # Validate sort_by to prevent SQL injection
+        valid_sorts = [
+            'overall_match DESC', 'overall_match ASC',
+            'matched_at DESC', 'matched_at ASC',
+            'company_name ASC', 'job_title ASC'
+        ]
+        if filters['sort_by'] not in valid_sorts:
+            filters['sort_by'] = 'overall_match DESC'
+        
+        # Count total results
+        count_sql = f"SELECT COUNT(*) FROM job_matches WHERE {where_sql}"
+        assert db.conn is not None, "Database connection not established"
+        cursor = db.conn.cursor()
+        cursor.execute(count_sql, params)
+        total_count = cursor.fetchone()[0]
+        
+        # Get paginated results
+        query_sql = f"""
+            SELECT 
+                job_url, job_title, company_name, location,
+                overall_match, search_term, matched_at, cv_key
+            FROM job_matches
+            WHERE {where_sql}
+            ORDER BY {filters['sort_by']}
+            LIMIT ? OFFSET ?
+        """
+        cursor.execute(query_sql, params + [per_page, offset])
+        
+        results = []
+        for row in cursor.fetchall():
+            score = row[4]
+            results.append({
+                'job_url': row[0],
+                'job_title': row[1],
+                'company_name': row[2],
+                'location': row[3],
+                'overall_match': score,
+                'score_class': get_score_class(score),
+                'search_term': row[5],
+                'matched_at': row[6],
+                'cv_key': row[7]
+            })
+        
+        # Get available filter options
+        cursor.execute("SELECT DISTINCT search_term FROM job_matches ORDER BY search_term")
+        available_search_terms = [row[0] for row in cursor.fetchall()]
+        
+        cursor.execute("""
+            SELECT cv_key, file_name, upload_date 
+            FROM cv_versions 
+            ORDER BY upload_date DESC
+        """)
+        available_cvs = [
+            {'cv_key': row[0], 'file_name': row[1], 'upload_date': row[2]}
+            for row in cursor.fetchall()
+        ]
+        
+        # Calculate pagination
+        total_pages = math.ceil(total_count / per_page) if total_count > 0 else 1
+        page = min(page, total_pages)  # Ensure page doesn't exceed total_pages
+        
+        return render_template(
+            'all_matches.html',
+            results=results,
+            total_count=total_count,
+            current_page=page,
+            total_pages=total_pages,
+            per_page=per_page,
+            filters=filters,
+            available_search_terms=available_search_terms,
+            available_cvs=available_cvs
+        )
+    
+    except Exception as e:
+        logger.error(f"Error in view_all_matches: {e}", exc_info=True)
+        flash(f'Error loading job matches: {str(e)}')
+        return redirect(url_for('index'))
+    
+    finally:
+        db.close()
+
+
+def get_score_class(score):
+    """Return CSS class based on score"""
+    if score >= 8:
+        return 'high'
+    elif score >= 6:
+        return 'medium'
+    else:
+        return 'low'
 
 
 @job_matching_bp.route('/api/job-matches', methods=['GET'])
