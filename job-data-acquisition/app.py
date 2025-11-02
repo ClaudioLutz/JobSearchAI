@@ -4,6 +4,7 @@ import sys
 import json
 import re
 import logging
+import time
 from datetime import datetime
 from flask import Flask, jsonify, request
 from scrapegraphai.graphs import SmartScraperGraph
@@ -26,6 +27,17 @@ try:
         logging.error("No OpenAI API key found in configuration")
 except Exception as e:
     logging.error(f"Failed to load config manager: {e}")
+
+# Import database and utilities for deduplication
+try:
+    from utils.db_utils import JobMatchDatabase
+    from utils.cv_utils import generate_cv_key
+    from utils.url_utils import URLNormalizer
+except ImportError as e:
+    logging.warning(f"Could not import deduplication utilities: {e}")
+    JobMatchDatabase = None
+    generate_cv_key = None
+    URLNormalizer = None
 
 def substitute_env_vars(config_str):
     """
@@ -337,6 +349,189 @@ def run_scraper():
 
     logger.info(f"Scraping completed. Results saved to: {output_file}")
     return output_file
+
+
+def run_scraper_with_deduplication(search_term, cv_path, max_pages=None):
+    """
+    Run scraper with database deduplication and early exit optimization.
+    
+    Args:
+        search_term: Search term to use in URL (e.g., "IT", "Data-Analyst")
+        cv_path: Path to CV file for generating CV key
+        max_pages: Maximum pages to scrape (defaults to CONFIG max_pages)
+        
+    Returns:
+        List of new (non-duplicate) jobs found
+        
+    Features:
+        - Checks each job against database before adding
+        - Early exit when entire page is duplicates
+        - Logs scrape history to database
+        - URL normalization for accurate matching
+    """
+    logger = setup_logging()
+    
+    # Validate configuration
+    if CONFIG is None:
+        logger.error("Configuration not loaded. Cannot run scraper.")
+        return []
+    
+    # Validate dependencies
+    if not all([JobMatchDatabase, generate_cv_key, URLNormalizer]):
+        logger.error("Required utilities not available. Cannot use deduplication.")
+        return []
+    
+    # Check if base_url is configured
+    if "base_url" not in CONFIG:
+        logger.error("base_url not configured in settings.json")
+        return []
+    
+    # Initialize
+    logger.info(f"Starting scraper with deduplication for search term: {search_term}")
+    
+    try:
+        # Generate CV key
+        cv_key = generate_cv_key(cv_path)
+        logger.info(f"Generated CV key: {cv_key}")
+    except Exception as e:
+        logger.error(f"Failed to generate CV key from {cv_path}: {e}")
+        return []
+    
+    # Initialize database
+    db = JobMatchDatabase()
+    try:
+        db.connect()
+        db.init_database()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        return []
+    
+    # Initialize URL normalizer
+    normalizer = URLNormalizer()
+    
+    # Build base URL
+    base_url = CONFIG["base_url"].format(search_term=search_term)
+    logger.info(f"Base URL: {base_url}")
+    
+    # Get max pages
+    if max_pages is None:
+        max_pages = CONFIG["scraper"].get("max_pages", 10)
+    
+    logger.info(f"Max pages to scrape: {max_pages}")
+    
+    all_new_jobs = []
+    
+    # Page scraping loop
+    for page in range(1, max_pages + 1):
+        page_start_time = time.time()
+        
+        try:
+            logger.info(f"Scraping page {page}...")
+            
+            # Configure and run scraper for this page
+            scraper = configure_scraper(base_url, page)
+            page_results = scraper.run()
+            
+            # Handle different result formats
+            if not isinstance(page_results, list):
+                logger.warning(f"Page {page}: Unexpected result format: {type(page_results)}")
+                page_results = []
+            
+            jobs_found = len(page_results)
+            new_jobs = []
+            duplicate_count = 0
+            
+            # Check each job for duplicates
+            for job in page_results:
+                if not isinstance(job, dict):
+                    logger.warning(f"Skipping non-dict job: {type(job)}")
+                    continue
+                
+                # Get and normalize job URL
+                raw_url = job.get('Application URL', '')
+                if not raw_url:
+                    logger.warning(f"Job missing Application URL: {job.get('Job Title', 'Unknown')}")
+                    continue
+                
+                # Clean and normalize URL
+                cleaned_url = normalizer.clean_malformed_url(raw_url)
+                normalized_url = normalizer.to_full_url(cleaned_url)
+                
+                # Check for duplicate
+                try:
+                    if db.job_exists(normalized_url, search_term, cv_key):
+                        duplicate_count += 1
+                        logger.debug(f"Duplicate job: {job.get('Job Title', 'Unknown')} - {normalized_url}")
+                    else:
+                        # Update job with normalized URL
+                        job['Application URL'] = normalized_url
+                        new_jobs.append(job)
+                        logger.info(f"New job: {job.get('Job Title', 'Unknown')} - {normalized_url}")
+                except Exception as e:
+                    logger.error(f"Error checking duplicate for {normalized_url}: {e}")
+                    # On error, treat as new to avoid losing data
+                    new_jobs.append(job)
+            
+            # Add new jobs to results
+            all_new_jobs.extend(new_jobs)
+            
+            # Calculate page duration
+            page_duration = time.time() - page_start_time
+            
+            # Log scrape history
+            try:
+                db.insert_scrape_history({
+                    'search_term': search_term,
+                    'page_number': page,
+                    'jobs_found': jobs_found,
+                    'new_jobs': len(new_jobs),
+                    'duplicate_jobs': duplicate_count,
+                    'duration_seconds': page_duration
+                })
+            except Exception as e:
+                logger.warning(f"Failed to log scrape history for page {page}: {e}")
+            
+            # Log page summary
+            logger.info(
+                f"Page {page} summary: {jobs_found} jobs found, "
+                f"{len(new_jobs)} new, {duplicate_count} duplicates, "
+                f"{page_duration:.2f}s"
+            )
+            
+            # Early exit check: if all jobs are duplicates, stop scraping
+            if len(new_jobs) == 0 and duplicate_count > 0:
+                logger.info(
+                    f"Early exit at page {page}: All {duplicate_count} jobs are duplicates. "
+                    f"No need to scrape further pages."
+                )
+                break
+            
+            # If page returned no jobs at all, we may have reached the end
+            if jobs_found == 0:
+                logger.info(f"Page {page} returned no jobs. Reached end of results.")
+                break
+                
+        except Exception as e:
+            logger.error(f"Error scraping page {page}: {e}")
+            # Continue to next page rather than failing completely
+            continue
+    
+    # Close database connection
+    try:
+        db.close()
+        logger.info("Database connection closed")
+    except Exception as e:
+        logger.warning(f"Error closing database: {e}")
+    
+    # Log final summary
+    logger.info(
+        f"Scraping completed for '{search_term}': "
+        f"{len(all_new_jobs)} new jobs found across {page} pages"
+    )
+    
+    return all_new_jobs
+
 
 # Main execution
 if __name__ == "__main__":

@@ -23,6 +23,8 @@ from utils.file_utils import (
 from utils.api_utils import openai_client, generate_json_from_prompt
 from utils.decorators import handle_exceptions, retry, log_execution_time
 from utils.url_utils import URLNormalizer
+from utils.db_utils import JobMatchDatabase
+from utils.cv_utils import generate_cv_key
 
 # Set up logging
 logging.basicConfig(
@@ -257,6 +259,143 @@ def match_jobs_with_cv(cv_path, min_score=6, max_jobs=50, max_results=10):
     
     # Return top matches
     return sorted_matches[:max_results]
+
+@log_execution_time()
+def match_jobs_with_cv_dedup(cv_path, search_term, min_score=6, max_jobs=50):
+    """
+    Match jobs with a CV using database deduplication to prevent duplicate OpenAI API calls
+    
+    Args:
+        cv_path (str): Path to the CV file
+        search_term (str): Search term used to find these jobs (e.g., "IT", "Data-Analyst")
+        min_score (int): Minimum overall match score (default: 6)
+        max_jobs (int): Maximum number of job listings to process (default: 50)
+    
+    Returns:
+        list: List of job matches that meet the minimum score threshold
+    """
+    import sqlite3
+    
+    db = None
+    try:
+        # Initialize database
+        db = JobMatchDatabase()
+        db.connect()
+        db.init_database()
+        logger.info("Database initialized")
+        
+        # Generate CV key
+        cv_key = generate_cv_key(cv_path)
+        logger.info(f"Generated CV key: {cv_key}")
+        
+        # Extract and summarize CV
+        logger.info(f"Processing CV: {cv_path}")
+        cv_path_obj = Path(cv_path)
+        if not cv_path_obj.exists():
+            logger.error(f"CV file does not exist: {cv_path_obj.absolute()}")
+            return []
+            
+        cv_text = extract_cv_text(cv_path)
+        logger.info(f"Successfully extracted text from CV, length: {len(cv_text)} characters")
+        
+        cv_summary = summarize_cv(cv_text)
+        logger.info(f"Successfully summarized CV, length: {len(cv_summary)} characters")
+        
+        # Load job data
+        job_listings = load_latest_job_data(max_jobs=max_jobs)
+        if not job_listings:
+            logger.error("No job listings found")
+            return []
+        
+        logger.info(f"Processing {len(job_listings)} jobs for search term: {search_term}")
+        
+        # Initialize URL normalizer and counters
+        normalizer = URLNormalizer()
+        matches = []
+        skipped_count = 0
+        new_count = 0
+        
+        # Process each job with deduplication check
+        for job in job_listings:
+            job_title = job.get('Job Title', 'Unknown')
+            raw_url = job.get('Application URL', '')
+            
+            # Normalize URL before database operations
+            job_url = normalizer.normalize(raw_url)
+            
+            # Check if job already matched
+            if db.job_exists(job_url, search_term, cv_key):
+                skipped_count += 1
+                logger.debug(f"Already matched: {job_url}")
+                continue
+            
+            # Evaluate with OpenAI (only for new jobs)
+            try:
+                logger.info(f"Evaluating new job: {job_title}")
+                evaluation = evaluate_job_match(cv_summary, job)
+                
+                # Structure match data for database
+                match_data = {
+                    'job_url': job_url,
+                    'search_term': search_term,
+                    'cv_key': cv_key,
+                    'job_title': job_title,
+                    'company_name': job.get('Company Name', ''),
+                    'location': job.get('Location', ''),
+                    'posting_date': job.get('Posting Date'),
+                    'salary_range': job.get('Salary Range'),
+                    'overall_match': evaluation.get('overall_match', 0),
+                    'skills_match': evaluation.get('skills_match'),
+                    'experience_match': evaluation.get('experience_match'),
+                    'education_fit': evaluation.get('education_fit'),
+                    'career_trajectory_alignment': evaluation.get('career_trajectory_alignment'),
+                    'preference_match': evaluation.get('preference_match'),
+                    'potential_satisfaction': evaluation.get('potential_satisfaction'),
+                    'location_compatibility': evaluation.get('location_compatibility'),
+                    'reasoning': evaluation.get('reasoning', ''),
+                    'scraped_data': json.dumps(job),  # Store complete job data as JSON string
+                    'scraped_at': datetime.now().isoformat()
+                }
+                
+                # Save to database
+                try:
+                    db.insert_job_match(match_data)
+                    logger.debug(f"Saved match: {job_title}")
+                    new_count += 1
+                    
+                    # Add to results if meets min_score
+                    if match_data['overall_match'] >= min_score:
+                        # Create result dict with additional fields for compatibility
+                        result = match_data.copy()
+                        result['job_description'] = job.get('Job Description', 'N/A')
+                        result['application_url'] = job_url
+                        result['cv_path'] = cv_path
+                        matches.append(result)
+                        
+                except sqlite3.IntegrityError:
+                    # Race condition: Another process inserted this job
+                    logger.debug(f"Race condition: {job_url} already inserted")
+                    skipped_count += 1
+                    
+            except Exception as e:
+                logger.error(f"Error evaluating {job_url}: {e}")
+                # Continue processing other jobs
+                continue
+        
+        # Log summary statistics
+        logger.info(f"Matched {new_count} new jobs (total evaluated)")
+        logger.info(f"Returned {len(matches)} jobs with score >= {min_score}")
+        logger.info(f"Skipped {skipped_count} already-matched jobs")
+        logger.info(f"Saved {skipped_count} OpenAI API calls")
+        
+        return matches
+        
+    except Exception as e:
+        logger.error(f"Error in match_jobs_with_cv_dedup: {e}", exc_info=True)
+        return []
+    finally:
+        if db:
+            db.close()
 
 # Renamed to avoid conflict with the imported function
 def ensure_output_dir(output_dir="job_matches"):

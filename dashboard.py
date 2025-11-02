@@ -20,18 +20,71 @@ sys.path.append('.')
 # --- Helper Functions ---
 # Note: get_job_details_for_url is complex and used by multiple blueprints.
 # It's kept here for now but ideally refactored into a shared utils module.
-def get_job_details_for_url(job_url):
-    """Get job details for a URL from the latest job data file."""
+def get_job_details_for_url(job_url, cv_key=None):
+    """
+    Get job details from database with JSON fallback.
+    
+    Args:
+        job_url: URL of the job
+        cv_key: Optional CV key for specific match lookup
+        
+    Returns:
+        dict: Job details
+    """
+    import sqlite3
+    from utils.db_utils import JobMatchDatabase
+    from utils.url_utils import URLNormalizer
+    
+    temp_logger = logging.getLogger("dashboard.get_job_details")
     job_details = {}
-    # Use the logger defined later in create_app if possible, or a temporary one
-    temp_logger = logging.getLogger("dashboard.get_job_details") # Temporary logger
+    
+    # Normalize URL
+    normalizer = URLNormalizer()
+    normalized_url = normalizer.normalize(job_url)
+    
+    # Try database first
+    db = JobMatchDatabase()
+    try:
+        db.connect()
+        cursor = db.conn.cursor()
+        cursor.row_factory = sqlite3.Row  # Dict-like access
+        
+        if cv_key:
+            # Get specific match for this CV
+            query = """
+                SELECT scraped_data FROM job_matches 
+                WHERE job_url = ? AND cv_key = ?
+                ORDER BY matched_at DESC LIMIT 1
+            """
+            cursor.execute(query, (normalized_url, cv_key))
+        else:
+            # Get any match (most recent)
+            query = """
+                SELECT scraped_data FROM job_matches 
+                WHERE job_url = ?
+                ORDER BY matched_at DESC LIMIT 1
+            """
+            cursor.execute(query, (normalized_url,))
+        
+        row = cursor.fetchone()
+        if row:
+            job_details = json.loads(row['scraped_data'])
+            temp_logger.info(f"Retrieved from database: {job_details.get('Job Title', 'N/A')}")
+            return job_details
+            
+    except Exception as e:
+        temp_logger.warning(f"Database lookup failed for {job_url}: {e}")
+    finally:
+        db.close()
+    
+    # Fallback to JSON files (backward compatibility)
+    temp_logger.info("Using JSON fallback for job details lookup")
     try:
         # Extract the job ID from the URL
         job_id = job_url.split('/')[-1]
         temp_logger.info(f"Extracted job ID: {job_id}")
 
         # Find the job data file (relative to current working directory)
-        # Corrected path
         job_data_dir = Path('job-data-acquisition/data')
         temp_logger.info(f"Job data directory: {job_data_dir}")
 
@@ -57,7 +110,7 @@ def get_job_details_for_url(job_url):
                         if isinstance(job_data[0], list):
                             # It's an array of arrays - flatten it
                             for job_array in job_data:
-                                if isinstance(job_array, list): # Ensure inner item is a list
+                                if isinstance(job_array, list):
                                     job_listings.extend(job_array)
                             temp_logger.info(f"Found array of arrays structure with {len(job_listings)} total job listings")
                         elif isinstance(job_data[0], dict) and 'content' in job_data[0]:
@@ -70,38 +123,126 @@ def get_job_details_for_url(job_url):
                             # Assume it's a flat array of job listings
                             job_listings = job_data
                             temp_logger.info(f"Using flat job data structure with {len(job_listings)} job listings")
-                elif isinstance(job_data, dict) and 'content' in job_data: # Handle case where root is dict with content
+                elif isinstance(job_data, dict) and 'content' in job_data:
                      job_listings = job_data['content']
                      temp_logger.info(f"Found root dict structure with {len(job_listings)} job listings")
-
 
                 temp_logger.info(f"Processed job data with {len(job_listings)} total job listings")
 
                 # Find the job with the matching ID
                 for i, job in enumerate(job_listings):
-                     if not isinstance(job, dict): # Skip if item is not a dict
+                     if not isinstance(job, dict):
                          temp_logger.warning(f"Skipping non-dictionary item at index {i}")
                          continue
-                     # Extract the job ID from the Application URL
                      job_application_url = job.get('Application URL', '')
                      temp_logger.info(f"Job {i+1} Application URL: {job_application_url}")
 
-                     # More robust check for job ID within the URL path
                      if isinstance(job_application_url, str) and job_id in job_application_url.split('/')[-1]:
                          temp_logger.info(f"Found matching job: {job.get('Job Title', 'N/A')} at {job.get('Company Name', 'N/A')}")
                          job_details = job
                          break
 
-                # If no exact match found, use the first job as a fallback (if any jobs exist)
+                # If no exact match found, use the first job as a fallback
                 if not job_details and job_listings and isinstance(job_listings[0], dict):
                     temp_logger.info("No exact match found, using first job as fallback")
                     job_details = job_listings[0]
     except Exception as e:
-        temp_logger.error(f'Error getting job details: {str(e)}')
+        temp_logger.error(f'Error getting job details from JSON: {str(e)}')
         import traceback
         temp_logger.error(traceback.format_exc())
 
     return job_details
+
+
+def query_job_matches(filters=None, sort_by='overall_match', sort_order='DESC', limit=100, offset=0):
+    """
+    Query job matches with advanced filtering.
+    
+    Args:
+        filters: Dict with optional keys: search_term, cv_key, min_score, max_score, 
+                 date_from, date_to, location
+        sort_by: Column to sort by (overall_match, matched_at, company_name, job_title)
+        sort_order: ASC or DESC
+        limit: Max results to return
+        offset: Pagination offset
+        
+    Returns:
+        List of job match dicts
+    """
+    import sqlite3
+    from utils.db_utils import JobMatchDatabase
+    
+    temp_logger = logging.getLogger("dashboard.query_job_matches")
+    
+    db = JobMatchDatabase()
+    try:
+        db.connect()
+        
+        # Build query
+        query = "SELECT * FROM job_matches WHERE 1=1"
+        params = []
+        
+        if filters:
+            if filters.get('search_term'):
+                query += " AND search_term = ?"
+                params.append(filters['search_term'])
+            
+            if filters.get('cv_key'):
+                query += " AND cv_key = ?"
+                params.append(filters['cv_key'])
+            
+            if filters.get('min_score') is not None:
+                query += " AND overall_match >= ?"
+                params.append(filters['min_score'])
+            
+            if filters.get('max_score') is not None:
+                query += " AND overall_match <= ?"
+                params.append(filters['max_score'])
+            
+            if filters.get('date_from'):
+                query += " AND matched_at >= ?"
+                params.append(filters['date_from'])
+            
+            if filters.get('date_to'):
+                query += " AND matched_at <= ?"
+                params.append(filters['date_to'])
+            
+            if filters.get('location'):
+                query += " AND location LIKE ?"
+                params.append(f"%{filters['location']}%")
+        
+        # Add sorting
+        allowed_sorts = ['overall_match', 'matched_at', 'company_name', 'job_title']
+        if sort_by in allowed_sorts:
+            query += f" ORDER BY {sort_by} {sort_order}"
+        
+        # Add pagination
+        query += " LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        
+        # Execute query
+        cursor = db.conn.cursor()
+        cursor.row_factory = sqlite3.Row
+        cursor.execute(query, params)
+        
+        results = []
+        for row in cursor.fetchall():
+            match = dict(row)
+            # Parse scraped_data JSON
+            try:
+                match['scraped_data'] = json.loads(match['scraped_data'])
+            except (json.JSONDecodeError, TypeError):
+                temp_logger.warning(f"Failed to parse scraped_data for job {match.get('job_url')}")
+                match['scraped_data'] = {}
+            results.append(match)
+        
+        return results
+        
+    except Exception as e:
+        temp_logger.error(f"Error querying job matches: {e}")
+        return []
+    finally:
+        db.close()
 
 
 # --- Logging Setup ---

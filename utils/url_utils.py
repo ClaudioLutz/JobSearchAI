@@ -23,30 +23,78 @@ class URLNormalizer:
     DEFAULT_BASE_URL = "https://www.ostjob.ch"
     
     @staticmethod
-    def to_full_url(url: str, base_url: Optional[str] = None) -> str:
+    def normalize(url: str, base_url: Optional[str] = None) -> str:
         """
-        Convert relative URL to full URL.
+        Normalize URL for database storage and comparison.
+        
+        This is the primary method for URL normalization used throughout the application.
+        It ensures consistent URL format for deduplication and storage.
         
         Args:
             url: URL string (relative or full)
             base_url: Base URL to use (defaults to ostjob.ch)
             
         Returns:
-            Full URL with protocol and domain
+            Fully normalized URL
+            
+        Examples:
+            >>> URLNormalizer.normalize("/job/product-owner/1032053")
+            'https://www.ostjob.ch/job/product-owner/1032053'
+            
+            >>> URLNormalizer.normalize("ostjob.ch/job/title/123")
+            'https://www.ostjob.ch/job/title/123'
+        """
+        return URLNormalizer.to_full_url(url, base_url)
+    
+    @staticmethod
+    def to_full_url(url: str, base_url: Optional[str] = None) -> str:
+        """
+        Convert relative URL to full URL and normalize for consistent storage.
+        
+        Normalizes by:
+        - Adding protocol (https) if missing
+        - Adding www. prefix if missing (for ostjob.ch)
+        - Removing trailing slashes
+        
+        Args:
+            url: URL string (relative or full)
+            base_url: Base URL to use (defaults to ostjob.ch)
+            
+        Returns:
+            Fully normalized URL
             
         Examples:
             >>> URLNormalizer.to_full_url("/job/product-owner/1032053")
             'https://www.ostjob.ch/job/product-owner/1032053'
             
-            >>> URLNormalizer.to_full_url("https://www.ostjob.ch/job/title/123")
+            >>> URLNormalizer.to_full_url("ostjob.ch/job/title/123")
+            'https://www.ostjob.ch/job/title/123'
+            
+            >>> URLNormalizer.to_full_url("https://ostjob.ch/job/title/123/")
             'https://www.ostjob.ch/job/title/123'
         """
         if not url:
             return ""
+        
+        # Remove trailing slashes
+        url = url.rstrip('/')
             
-        # Already a full URL
+        # Already a full URL - normalize it
         if url.startswith(('http://', 'https://')):
-            return url
+            # Parse URL
+            parsed = urlparse(url)
+            
+            # Ensure https protocol
+            protocol = 'https'
+            
+            # Normalize domain (add www. for ostjob.ch if missing)
+            domain = parsed.netloc
+            if 'ostjob.ch' in domain and not domain.startswith('www.'):
+                domain = 'www.' + domain
+            
+            # Rebuild URL
+            path = parsed.path.rstrip('/')
+            return f"{protocol}://{domain}{path}"
             
         # Relative URL - add base
         base = base_url or URLNormalizer.DEFAULT_BASE_URL

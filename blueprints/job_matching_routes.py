@@ -525,3 +525,51 @@ def delete_report(report_file):
 
     # Redirect back to the main dashboard after deletion
     return redirect(url_for('index'))
+
+
+@job_matching_bp.route('/api/job-matches', methods=['GET'])
+@login_required
+def api_job_matches():
+    """API endpoint for filtered job matches"""
+    from dashboard import query_job_matches
+    
+    # Parse query parameters
+    filters = {
+        'search_term': request.args.get('search_term'),
+        'min_score': request.args.get('min_score', type=int),
+        'date_from': request.args.get('date_from'),
+        'date_to': request.args.get('date_to'),
+        'location': request.args.get('location')
+    }
+    
+    # Remove None values
+    filters = {k: v for k, v in filters.items() if v is not None}
+    
+    sort_by = request.args.get('sort_by', 'overall_match')
+    page = request.args.get('page', 1, type=int)
+    per_page = 50
+    offset = (page - 1) * per_page
+    
+    try:
+        matches = query_job_matches(
+            filters=filters,
+            sort_by=sort_by,
+            sort_order='DESC',
+            limit=per_page,
+            offset=offset
+        )
+        
+        return jsonify({
+            'success': True,
+            'matches': matches,
+            'page': page,
+            'per_page': per_page,
+            'total': len(matches)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error querying matches: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500

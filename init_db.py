@@ -11,6 +11,7 @@ from flask_migrate import Migrate, init, migrate, upgrade
 from sqlalchemy import text
 from config import get_database_config, get_secret_key
 from models import db, User
+from utils.db_utils import JobMatchDatabase
 
 
 def create_app():
@@ -171,6 +172,26 @@ def check_database_connection(app):
         return False
 
 
+def init_job_match_database(db_path: str = "instance/jobsearchai.db"):
+    """
+    Initialize the job matching database schema.
+    
+    Args:
+        db_path: Path to SQLite database file
+    """
+    print(f"Initializing job matching database at {db_path}...")
+    
+    try:
+        db = JobMatchDatabase(db_path)
+        db.connect()
+        db.init_database()
+        db.close()
+        print("Job matching database initialized successfully!")
+    except Exception as e:
+        print(f"Failed to initialize job matching database: {e}")
+        sys.exit(1)
+
+
 def main():
     """Main initialization function."""
     print("JobSearchAI Database Initialization")
@@ -221,6 +242,11 @@ def main():
             create_admin_user(app)
             print("Full setup completed!")
             
+        elif command == "init-job-db":
+            # Initialize job matching database
+            db_path = sys.argv[2] if len(sys.argv) > 2 else "instance/jobsearchai.db"
+            init_job_match_database(db_path)
+            
         else:
             print(f"Unknown command: {command}")
             print_usage()
@@ -238,12 +264,15 @@ def print_usage():
     print("  create-tables          - Create tables without migrations")
     print("  create-admin [u] [e] [p] - Create admin user")
     print("  full-setup             - Complete database setup")
+    print("  init-job-db [path]     - Initialize job matching database (default: instance/jobsearchai.db)")
     print("\nExamples:")
     print("  python init_db.py init")
     print("  python init_db.py migrate 'Add user table'")
     print("  python init_db.py upgrade")
     print("  python init_db.py create-admin myuser user@example.com mypassword")
     print("  python init_db.py full-setup")
+    print("  python init_db.py init-job-db")
+    print("  python init_db.py init-job-db instance/custom.db")
 
 
 if __name__ == "__main__":

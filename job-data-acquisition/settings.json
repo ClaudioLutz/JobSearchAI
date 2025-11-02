@@ -51,6 +51,12 @@
     "target_urls": [
         "https://www.ostjob.ch/job/suche-IT-typ-festanstellung-pensum-80-bis-100-seite-"
     ],
+    "search_terms": [
+        "IT-typ-festanstellung-pensum-80-bis-100",
+        "Data-Analyst-typ-festanstellung-pensum-80-bis-100"
+    ],
+    "base_url": "https://www.ostjob.ch/job/suche-{search_term}-seite-",
+    "cv_path": "process_cv/cv-data/input/Lebenslauf.pdf",
     "data_storage": {
         "output_directory": "job-data-acquisition/data",
         "file_prefix": "job_data_"
