@@ -5,7 +5,9 @@ import json
 import re
 import logging
 import time
+import warnings
 from datetime import datetime
+from functools import wraps
 from flask import Flask, jsonify, request
 from scrapegraphai.graphs import SmartScraperGraph
 
@@ -287,9 +289,37 @@ def home():
         "timestamp": datetime.now().isoformat()
     })
 
+def deprecated(alternative=None):
+    """Decorator to mark functions as deprecated"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            message = f"{func.__name__} is deprecated and will be removed in v3.0."
+            if alternative:
+                message += f" Use {alternative} instead."
+            warnings.warn(message, DeprecationWarning, stacklevel=2)
+            logger = logging.getLogger("job_scraper")
+            logger.warning(message)
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
 # Function to run the scraper and save results
+@deprecated(alternative="run_scraper_with_deduplication")
 def run_scraper():
+    """
+    Legacy scraper function - DEPRECATED
+    
+    This function is deprecated and will be removed in version 3.0.
+    Use run_scraper_with_deduplication() instead for:
+    - Database-backed deduplication
+    - Early exit optimization  
+    - Correct search term handling
+    - Better performance and cost efficiency
+    """
     logger = setup_logging()
+    logger.warning("Using deprecated run_scraper() function")
     
     if CONFIG is None:
         logger.error("Configuration not loaded. Cannot run scraper.")
@@ -351,6 +381,24 @@ def run_scraper():
     return output_file
 
 
+def log_deduplication_metrics(metrics):
+    """Log deduplication metrics for analysis"""
+    logger = logging.getLogger("job_scraper")
+    logger.info(f"=== Deduplication Metrics ===")
+    logger.info(f"Search Term: {metrics['search_term']}")
+    logger.info(f"Pages Scraped: {metrics['pages_scraped']}")
+    logger.info(f"New Jobs: {metrics['new_jobs']}")
+    logger.info(f"Duplicates: {metrics['duplicate_jobs']}")
+    logger.info(f"Early Exit: {metrics['early_exit']}")
+    if metrics['early_exit']:
+        logger.info(f"Early Exit at Page: {metrics['early_exit_page']}")
+        logger.info(f"Pages Saved: {metrics['estimated_pages_saved']}")
+        logger.info(f"API Calls Saved: {metrics['estimated_api_calls_saved']}")
+        logger.info(f"Estimated Cost Saved: ${metrics['estimated_cost_saved_usd']:.4f}")
+    logger.info(f"Duration: {metrics['duration_seconds']:.2f}s")
+    logger.info(f"============================")
+
+
 def run_scraper_with_deduplication(search_term, cv_path, max_pages=None):
     """
     Run scraper with database deduplication and early exit optimization.
@@ -368,8 +416,24 @@ def run_scraper_with_deduplication(search_term, cv_path, max_pages=None):
         - Early exit when entire page is duplicates
         - Logs scrape history to database
         - URL normalization for accurate matching
+        - Comprehensive metrics tracking and logging
     """
     logger = setup_logging()
+    
+    # Initialize metrics
+    metrics = {
+        'search_term': search_term,
+        'start_time': datetime.now(),
+        'pages_scraped': 0,
+        'total_jobs_found': 0,
+        'new_jobs': 0,
+        'duplicate_jobs': 0,
+        'early_exit': False,
+        'early_exit_page': None,
+        'estimated_pages_saved': 0,
+        'estimated_api_calls_saved': 0,
+        'estimated_cost_saved_usd': 0
+    }
     
     # Validate configuration
     if CONFIG is None:
@@ -442,6 +506,10 @@ def run_scraper_with_deduplication(search_term, cv_path, max_pages=None):
             new_jobs = []
             duplicate_count = 0
             
+            # Update metrics
+            metrics['pages_scraped'] = page
+            metrics['total_jobs_found'] += jobs_found
+            
             # Check each job for duplicates
             for job in page_results:
                 if not isinstance(job, dict):
@@ -476,6 +544,10 @@ def run_scraper_with_deduplication(search_term, cv_path, max_pages=None):
             # Add new jobs to results
             all_new_jobs.extend(new_jobs)
             
+            # Update metrics with new jobs and duplicates
+            metrics['new_jobs'] += len(new_jobs)
+            metrics['duplicate_jobs'] += duplicate_count
+            
             # Calculate page duration
             page_duration = time.time() - page_start_time
             
@@ -501,6 +573,15 @@ def run_scraper_with_deduplication(search_term, cv_path, max_pages=None):
             
             # Early exit check: if all jobs are duplicates, stop scraping
             if len(new_jobs) == 0 and duplicate_count > 0:
+                # Track early exit metrics
+                metrics['early_exit'] = True
+                metrics['early_exit_page'] = page
+                metrics['estimated_pages_saved'] = max_pages - page
+                # Estimate ~50 jobs per page average
+                metrics['estimated_api_calls_saved'] = metrics['estimated_pages_saved'] * 50
+                # Estimate cost: $0.10 per 1000 API calls for gpt-4o-mini
+                metrics['estimated_cost_saved_usd'] = metrics['estimated_api_calls_saved'] * 0.0001
+                
                 logger.info(
                     f"Early exit at page {page}: All {duplicate_count} jobs are duplicates. "
                     f"No need to scrape further pages."
@@ -523,6 +604,13 @@ def run_scraper_with_deduplication(search_term, cv_path, max_pages=None):
         logger.info("Database connection closed")
     except Exception as e:
         logger.warning(f"Error closing database: {e}")
+    
+    # Finalize metrics
+    metrics['end_time'] = datetime.now()
+    metrics['duration_seconds'] = (metrics['end_time'] - metrics['start_time']).total_seconds()
+    
+    # Log comprehensive metrics
+    log_deduplication_metrics(metrics)
     
     # Log final summary
     logger.info(

@@ -5,6 +5,7 @@ import threading
 import urllib.parse
 import importlib.util
 from pathlib import Path
+from datetime import datetime
 from flask import (
     Blueprint, request, redirect, url_for, flash, render_template,
     send_file, jsonify, current_app
@@ -76,7 +77,16 @@ def get_job_details_for_url(job_url):
 @login_required
 @admin_required
 def run_job_matcher():
-    """Run the job matcher with the selected CV"""
+    """Run the job matcher with the selected CV
+    
+    DEPRECATED: This route is deprecated as of Story 4.1.
+    Please use the Run Combined Process workflow instead.
+    This route is maintained for backward compatibility only.
+    """
+    # Log deprecation warning
+    logger.warning("DEPRECATED: /job_matching/run_matcher route accessed. Please use /job_matching/run_combined_process instead.")
+    flash('Note: This endpoint is deprecated. Please use "Run Combined Process" for the complete workflow.', 'warning')
+    
     cv_path_rel = request.form.get('cv_path') # This is the relative path from the form
     max_jobs = int(request.form.get('max_jobs', 50))
 
@@ -155,11 +165,16 @@ def run_combined_process():
     try:
         # Get parameters from the form
         cv_path_rel = request.form.get('cv_path')
+        search_term = request.form.get('search_term')
         max_pages = int(request.form.get('max_pages', 50))
         max_jobs = int(request.form.get('max_jobs', 50))
 
         if not cv_path_rel:
             flash('No CV selected')
+            return redirect(url_for('index'))
+        
+        if not search_term:
+            flash('Search term is required')
             return redirect(url_for('index'))
 
         # Construct the full path to the CV
@@ -182,7 +197,7 @@ def run_combined_process():
 
         # Define a function to run the combined process in a background thread
         # Pass necessary variables and app instance
-        def run_combined_process_task(app, op_id, cv_full_path_task, cv_path_rel_task, max_pages_task, max_jobs_task):
+        def run_combined_process_task(app, op_id, cv_full_path_task, cv_path_rel_task, search_term_task, max_pages_task, max_jobs_task):
             with app.app_context(): # Establish app context for the thread
                 try:
                     # Access operation status via app extensions now that context exists
@@ -191,22 +206,39 @@ def run_combined_process():
                     # Update status (use op_id passed to function)
                     update_operation_progress(op_id, 5, 'processing', 'Updating settings...')
 
-                    # Step 1: Update the settings.json file with the max_pages parameter
+                    # Step 1: Update the settings.json file with the search_term and max_pages parameters
                     settings_path = os.path.join(app.root_path, 'job-data-acquisition', 'settings.json') # Use app.root_path
                     try:
                         with open(settings_path, 'r', encoding='utf-8') as f: settings = json.load(f)
+                        
+                        # Update max_pages
                         settings['scraper']['max_pages'] = max_pages_task # Use passed variable
+                        
+                        # Update search terms - make selected term the first/primary term
+                        if 'search_terms' not in settings:
+                            settings['search_terms'] = []
+                        
+                        # Remove the selected term from its current position (if it exists)
+                        search_terms_list = settings['search_terms']
+                        if search_term_task in search_terms_list:
+                            search_terms_list.remove(search_term_task)
+                        
+                        # Insert the selected term at the beginning (primary position)
+                        search_terms_list.insert(0, search_term_task)
+                        settings['search_terms'] = search_terms_list
+                        
                         with open(settings_path, 'w', encoding='utf-8') as f: json.dump(settings, f, indent=4, ensure_ascii=False)
+                        logger.info(f"Updated settings with search term '{search_term_task}' as primary term")
                     except Exception as settings_e:
                         logger.error(f"Error updating settings for combined run: {settings_e}")
                         complete_operation(op_id, 'failed', f'Error updating scraper settings: {settings_e}')
                         return
 
                     # Update status
-                    update_operation_progress(op_id, 10, 'processing', 'Starting job scraper...')
+                    update_operation_progress(op_id, 10, 'processing', 'Starting job scraper with deduplication...')
 
-                    # Step 2: Run the job scraper
-                    output_file = None
+                    # Step 2: Run the job scraper WITH DEDUPLICATION
+                    new_jobs = None
                     try:
                         app_path = os.path.join(app.root_path, 'job-data-acquisition', 'app.py') # Use app.root_path
                         if not os.path.exists(app_path):
@@ -214,43 +246,201 @@ def run_combined_process():
                         spec = importlib.util.spec_from_file_location("app_module", app_path)
                         app_module = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(app_module)
-                        run_scraper = getattr(app_module, 'run_scraper', None)
-                        if run_scraper:
-                            output_file = run_scraper() # run_scraper should return the output file path
-                        else:
-                             raise ModuleNotFoundError("run_scraper function not found in job-data-acquisition/app.py")
+                        
+                        # Get deduplicated scraper function
+                        run_scraper_dedup = getattr(app_module, 'run_scraper_with_deduplication', None)
+                        
+                        if not run_scraper_dedup:
+                            raise ModuleNotFoundError(
+                                "run_scraper_with_deduplication not found in job-data-acquisition/app.py. "
+                                "This function is required for database-backed deduplication."
+                            )
+                        
+                        # Call with explicit parameters (solves search term and deduplication issues)
+                        logger.info(f"Running scraper with deduplication for term: {search_term_task}")
+                        new_jobs = run_scraper_dedup(
+                            search_term=search_term_task,  # ✅ Explicit parameter
+                            cv_path=cv_full_path_task,     # ✅ For CV key generation
+                            max_pages=max_pages_task       # ✅ Configurable limit
+                        )
+                        
                     except Exception as scraper_e:
                          logger.error(f"Error running scraper in combined process: {scraper_e}", exc_info=True)
                          complete_operation(op_id, 'failed', f'Job data acquisition failed: {scraper_e}')
                          return
 
-                    if output_file is None:
-                        complete_operation(op_id, 'failed', 'Job data acquisition failed (no output file). Check logs.')
+                    if new_jobs is None:
+                        complete_operation(op_id, 'failed', 'Job data acquisition failed (no new jobs returned). Check logs.')
+                        return
+                    
+                    if len(new_jobs) == 0:
+                        complete_operation(op_id, 'completed', 'No new jobs found (all duplicates or no results)')
+                        return
+                    
+                    logger.info(f"Found {len(new_jobs)} new jobs after deduplication")
+
+                    # Update status
+                    update_operation_progress(op_id, 60, 'processing', f'Evaluating and matching {len(new_jobs)} new jobs...')
+                    
+                    # CRITICAL FIX: Evaluate new jobs with CV and save matches to database
+                    from process_cv.cv_processor import extract_cv_text, summarize_cv
+                    from job_matcher import evaluate_job_match
+                    from utils.url_utils import URLNormalizer
+                    from utils.db_utils import JobMatchDatabase
+                    from utils.cv_utils import generate_cv_key
+                    
+                    try:
+                        # Generate CV key
+                        cv_key = generate_cv_key(cv_full_path_task)
+                        logger.info(f"Using CV key: {cv_key} for search term: {search_term_task}")
+                        
+                        # Extract and summarize CV once
+                        cv_text = extract_cv_text(cv_full_path_task)
+                        cv_summary = summarize_cv(cv_text)
+                        logger.info(f"CV summarized for matching ({len(cv_summary)} chars)")
+                        
+                        # Initialize database and normalizer
+                        db = JobMatchDatabase()
+                        db.connect()
+                        normalizer = URLNormalizer()
+                        
+                        matched_count = 0
+                        
+                        # Evaluate each new job and save to database
+                        for job in new_jobs:
+                            try:
+                                job_title = job.get('Job Title', 'Unknown')
+                                logger.info(f"Evaluating: {job_title}")
+                                
+                                # Evaluate job match
+                                evaluation = evaluate_job_match(cv_summary, job)
+                                
+                                # Normalize URL
+                                raw_url = job.get('Application URL', '')
+                                job_url = normalizer.normalize(raw_url)
+                                
+                                # Prepare match data for database
+                                match_data = {
+                                    'job_url': job_url,
+                                    'search_term': search_term_task,
+                                    'cv_key': cv_key,
+                                    'job_title': job_title,
+                                    'company_name': job.get('Company Name', ''),
+                                    'location': job.get('Location', ''),
+                                    'posting_date': job.get('Posting Date'),
+                                    'salary_range': job.get('Salary Range'),
+                                    'overall_match': evaluation.get('overall_match', 0),
+                                    'skills_match': evaluation.get('skills_match'),
+                                    'experience_match': evaluation.get('experience_match'),
+                                    'education_fit': evaluation.get('education_fit'),
+                                    'career_trajectory_alignment': evaluation.get('career_trajectory_alignment'),
+                                    'preference_match': evaluation.get('preference_match'),
+                                    'potential_satisfaction': evaluation.get('potential_satisfaction'),
+                                    'location_compatibility': evaluation.get('location_compatibility'),
+                                    'reasoning': evaluation.get('reasoning', ''),
+                                    'scraped_data': json.dumps(job),
+                                    'scraped_at': datetime.now().isoformat()
+                                }
+                                
+                                # Insert into database
+                                db.insert_job_match(match_data)
+                                matched_count += 1
+                                logger.info(f"Matched and saved: {job_title} (score: {match_data['overall_match']}/10)")
+                                
+                            except Exception as job_e:
+                                logger.error(f"Error evaluating job {job.get('Job Title', 'Unknown')}: {job_e}")
+                                continue
+                        
+                        db.close()
+                        logger.info(f"Successfully evaluated and saved {matched_count}/{len(new_jobs)} new jobs")
+                        
+                    except Exception as match_e:
+                        logger.error(f"Error in job matching: {match_e}", exc_info=True)
+                        complete_operation(op_id, 'failed', f'Failed to match jobs: {match_e}')
                         return
 
                     # Update status
-                    update_operation_progress(op_id, 60, 'processing', 'Job data acquisition completed. Starting job matcher...')
+                    update_operation_progress(op_id, 80, 'processing', 'Reading all matches from database...')
 
-                    # Step 3: Run the job matcher with the newly acquired data - ALL matches saved
-                    matches = match_jobs_with_cv(cv_full_path_task, max_jobs=max_jobs_task) # Use passed variables
-
-                    if not matches:
-                        complete_operation(op_id, 'completed', 'No job matches found after scraping')
+                    # Step 3: Read all matches from database (including newly evaluated ones)
+                    from utils.db_utils import JobMatchDatabase
+                    from utils.cv_utils import generate_cv_key
+                    
+                    try:
+                        # Generate CV key for querying
+                        cv_key = generate_cv_key(cv_full_path_task)
+                        
+                        db = JobMatchDatabase()
+                        db.connect()
+                        
+                        # Get ALL jobs from database for this CV and search term (both new and existing)
+                        # This query returns all jobs, not just the ones from this scrape
+                        cursor = db.conn.cursor()
+                        cursor.execute("""
+                            SELECT job_url, job_title, company_name, location, overall_match,
+                                   skills_match, experience_match, education_fit,
+                                   career_trajectory_alignment, preference_match,
+                                   potential_satisfaction, location_compatibility, reasoning,
+                                   scraped_data
+                            FROM job_matches
+                            WHERE cv_key = ? AND search_term = ?
+                            ORDER BY overall_match DESC
+                        """, (cv_key, search_term_task))
+                        
+                        rows = cursor.fetchall()
+                        db.close()
+                        
+                        if not rows:
+                            complete_operation(op_id, 'completed', f'No jobs found in database for CV key {cv_key[:8]}... and search term {search_term_task}')
+                            return
+                        
+                        logger.info(f"Retrieved {len(rows)} total job matches from database")
+                        
+                        # Convert database rows to match format for report generation
+                        matches = []
+                        for row in rows:
+                            # Parse scraped_data JSON if it exists
+                            scraped_data = {}
+                            try:
+                                if row[13]:  # scraped_data column
+                                    scraped_data = json.loads(row[13])
+                            except (json.JSONDecodeError, TypeError):
+                                logger.warning(f"Failed to parse scraped_data for {row[1]}")
+                            
+                            match = {
+                                'application_url': row[0],
+                                'job_title': row[1],
+                                'company_name': row[2],
+                                'location': row[3],
+                                'overall_match': row[4],
+                                'skills_match': row[5],
+                                'experience_match': row[6],
+                                'education_fit': row[7],
+                                'career_trajectory_alignment': row[8],
+                                'preference_match': row[9],
+                                'potential_satisfaction': row[10],
+                                'location_compatibility': row[11],
+                                'reasoning': row[12],
+                                'job_description': scraped_data.get('Job Description', 'N/A'),
+                                'cv_path': cv_path_rel_task
+                            }
+                            matches.append(match)
+                        
+                    except Exception as db_read_e:
+                        logger.error(f"Error reading from database: {db_read_e}", exc_info=True)
+                        complete_operation(op_id, 'failed', f'Failed to read jobs from database: {db_read_e}')
                         return
 
                     # Update status
-                    update_operation_progress(op_id, 90, 'processing', 'Generating report...')
+                    update_operation_progress(op_id, 90, 'processing', 'Generating backward-compatible file report...')
 
-                    # Add relative cv_path for identification
-                    for match in matches:
-                        match['cv_path'] = cv_path_rel_task # Use passed variable
-
-                    # Step 4: Generate report
+                    # Step 4: Generate report (BACKWARD COMPATIBILITY - for file-based workflows)
                     report_file_path = generate_report(matches)
                     report_filename = os.path.basename(report_file_path)
 
                     # Complete the operation
-                    complete_operation(op_id, 'completed', f'Combined process completed. Results saved to: {report_filename}')
+                    complete_operation(op_id, 'completed', 
+                        f'Combined process completed. {len(matches)} matches available in database. File report: {report_filename}')
 
                     # Store the report file in the operation status for retrieval (if needed elsewhere)
                     if op_id in operation_status_ctx:
@@ -261,7 +451,7 @@ def run_combined_process():
                     complete_operation(op_id, 'failed', f'Error running combined process: {str(e)}')
 
         # Start the background thread, passing necessary arguments including app instance
-        thread_args = (app_instance, operation_id, full_cv_path, cv_path_rel, max_pages, max_jobs)
+        thread_args = (app_instance, operation_id, full_cv_path, cv_path_rel, search_term, max_pages, max_jobs)
         thread = threading.Thread(target=run_combined_process_task, args=thread_args)
         thread.daemon = True
         thread.start()
@@ -625,7 +815,7 @@ def view_all_matches():
         results = []
         for row in cursor.fetchall():
             score = row[4]
-            results.append({
+            result_dict = {
                 'job_url': row[0],
                 'job_title': row[1],
                 'company_name': row[2],
@@ -635,7 +825,13 @@ def view_all_matches():
                 'search_term': row[5],
                 'matched_at': row[6],
                 'cv_key': row[7]
-            })
+            }
+            
+            # Add file existence checks
+            file_checks = check_for_generated_files(result_dict['job_url'])
+            result_dict.update(file_checks)
+            
+            results.append(result_dict)
         
         # Get available filter options
         cursor.execute("SELECT DISTINCT search_term FROM job_matches ORDER BY search_term")
@@ -676,6 +872,129 @@ def view_all_matches():
         db.close()
 
 
+def check_for_generated_files(job_url):
+    """
+    Check if generated files exist for given job URL in NEW checkpoint architecture
+    Post Epic-2: Files are now in applications/{folder}/ structure
+    
+    Args:
+        job_url: The job posting URL to check
+        
+    Returns:
+        dict: File existence flags (has_motivation_letter, has_docx, has_scraped_data, has_email_text)
+    """
+    from pathlib import Path
+    from utils.url_utils import URLNormalizer
+    import urllib.parse
+    
+    # NEW: Check applications directory (checkpoint architecture from Epic 2)
+    applications_dir = Path(current_app.root_path) / 'applications'
+    
+    # Clean and normalize URL
+    job_url = URLNormalizer.clean_malformed_url(job_url)
+    
+    # Handle relative URLs
+    if job_url.startswith('/'):
+        base_url = "https://www.ostjob.ch/"
+        job_url = urllib.parse.urljoin(base_url, job_url.lstrip('/'))
+    
+    norm_job_url = URLNormalizer.normalize_for_comparison(job_url)
+    
+    # Initialize flags
+    result = {
+        'has_motivation_letter': False,
+        'has_docx': False,
+        'has_scraped_data': False,
+        'has_email_text': False,
+        'motivation_letter_html_path': None,
+        'motivation_letter_json_path': None,
+        'motivation_letter_docx_path': None,
+        'scraped_data_filename': None
+    }
+    
+    # Check all application folders for matching job URL
+    if not applications_dir.exists():
+        logger.warning(f"Applications directory not found: {applications_dir}")
+        return result
+    
+    for app_folder in applications_dir.iterdir():
+        if not app_folder.is_dir():
+            continue
+        
+        # Check job-details.json in each folder
+        job_details_path = app_folder / 'job-details.json'
+        if not job_details_path.is_file():
+            continue
+        
+        try:
+            with open(job_details_path, 'r', encoding='utf-8') as f:
+                job_data = json.load(f)
+            
+            stored_url = job_data.get('Application URL')
+            if not stored_url or stored_url == 'N/A':
+                continue
+            
+            # Clean and normalize stored URL
+            stored_url = URLNormalizer.clean_malformed_url(stored_url)
+            stored_url = URLNormalizer.to_full_url(stored_url)
+            norm_stored_url = URLNormalizer.normalize_for_comparison(stored_url)
+            
+            # Compare normalized URLs
+            if norm_job_url == norm_stored_url or \
+               (norm_job_url and norm_stored_url and norm_job_url in norm_stored_url) or \
+               (norm_job_url and norm_stored_url and norm_stored_url in norm_job_url):
+                
+                logger.info(f"✅ Found matching application folder: {app_folder.name}")
+                result['has_scraped_data'] = True
+                result['scraped_data_filename'] = str(job_details_path.relative_to(current_app.root_path))
+                
+                # Check for letter files in checkpoint structure
+                html_file = app_folder / 'bewerbungsschreiben.html'
+                json_file = app_folder / 'application-data.json'
+                docx_file = app_folder / 'bewerbungsschreiben.docx'
+                email_file = app_folder / 'email-text.txt'
+                
+                if html_file.is_file():
+                    result['has_motivation_letter'] = True
+                    result['motivation_letter_html_path'] = str(html_file.relative_to(current_app.root_path))
+                    logger.info(f"Found HTML: {html_file.name}")
+                
+                if json_file.is_file():
+                    result['motivation_letter_json_path'] = str(json_file.relative_to(current_app.root_path))
+                    # Check for email text in JSON
+                    try:
+                        with open(json_file, 'r', encoding='utf-8') as f_json:
+                            letter_data = json.load(f_json)
+                        if letter_data.get('email_text') or email_file.is_file():
+                            result['has_email_text'] = True
+                            logger.info("Found email text")
+                    except Exception as e:
+                        logger.warning(f"Could not check email_text in {json_file}: {e}")
+                
+                if docx_file.is_file():
+                    result['has_docx'] = True
+                    result['motivation_letter_docx_path'] = str(docx_file.relative_to(current_app.root_path))
+                    logger.info(f"Found DOCX: {docx_file.name}")
+                
+                break  # Found match, stop searching
+                
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning(f"Error reading {job_details_path}: {e}")
+            continue
+    
+    if not result['has_scraped_data']:
+        logger.debug(f"No application folder found for URL: {norm_job_url}")
+    
+    return result
+
+
+def sanitize_filename(name, length=30):
+    """Sanitize filename by removing invalid characters"""
+    sanitized = ''.join(c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in name)
+    sanitized = sanitized.replace(' ', '_')
+    return sanitized[:length]
+
+
 def get_score_class(score):
     """Return CSS class based on score"""
     if score >= 8:
@@ -684,6 +1003,49 @@ def get_score_class(score):
         return 'medium'
     else:
         return 'low'
+
+
+@job_matching_bp.route('/api/job-reasoning', methods=['GET'])
+@login_required
+def api_job_reasoning():
+    """API endpoint to get job reasoning from database"""
+    from utils.db_utils import JobMatchDatabase
+    
+    job_url = request.args.get('url')
+    if not job_url:
+        return jsonify({'success': False, 'error': 'Job URL is required'}), 400
+    
+    db = JobMatchDatabase()
+    try:
+        db.connect()
+        assert db.conn is not None, "Database connection not established"
+        cursor = db.conn.cursor()
+        
+        # Query for the job match
+        cursor.execute("""
+            SELECT job_title, company_name, reasoning 
+            FROM job_matches 
+            WHERE job_url = ?
+            LIMIT 1
+        """, (job_url,))
+        
+        row = cursor.fetchone()
+        if row:
+            return jsonify({
+                'success': True,
+                'job_title': row[0],
+                'company_name': row[1],
+                'reasoning': row[2] or 'No reasoning available'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Job match not found'}), 404
+            
+    except Exception as e:
+        logger.error(f"Error fetching job reasoning: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+    
+    finally:
+        db.close()
 
 
 @job_matching_bp.route('/api/job-matches', methods=['GET'])

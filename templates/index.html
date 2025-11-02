@@ -63,12 +63,6 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="view-files-tab" data-bs-toggle="tab" data-bs-target="#view-files" type="button" role="tab" aria-controls="view-files" aria-selected="false">View Files</button>
             </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="view-results-tab" data-bs-toggle="tab" data-bs-target="#view-results" type="button" role="tab" aria-controls="view-results" aria-selected="false" aria-label="View job match results">
-                    <span class="tab-icon">📊</span> View Results
-                    <span id="match-count-badge" class="badge bg-primary ms-2" style="display:none;">0</span>
-                </button>
-            </li>
         </ul>
 
         <!-- Tab Content -->
@@ -76,7 +70,7 @@
             <!-- Setup & Data Tab -->
             <div class="tab-pane fade show active" id="setup-data" role="tabpanel" aria-labelledby="setup-data-tab">
                 <div class="row">
-                    <div class="col-md-6">
+                    <div class="col-md-12">
                         <!-- CV Upload Form -->
                         <div class="card mb-4">
                             <div class="card-header">
@@ -89,25 +83,6 @@
                                         <input type="file" class="form-control" id="cv_file" name="cv_file" accept=".pdf" required>
                                     </div>
                                     <button type="submit" class="btn btn-primary">Upload CV</button>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <!-- Job Data Acquisition -->
-                        <div class="card mb-4">
-                            <div class="card-header">
-                                <h2 class="h5 mb-0">Job Data Acquisition</h2>
-                            </div>
-                            <div class="card-body">
-                                <p>Run the job data acquisition component to scrape job listings from ostjob.ch.</p>
-                                <form action="{{ url_for('job_data.run_job_scraper') }}" method="post">
-                                    <div class="mb-3">
-                                        <label for="max_pages" class="form-label">Maximum Pages to Scrape</label>
-                                        <input type="number" class="form-control" id="max_pages" name="max_pages" min="1" max="500" value="50">
-                                        <div class="form-text">Maximum number of pages to scrape from the job listing website.</div>
-                                    </div>
-                                    <button type="submit" class="btn btn-primary">Run Job Scraper</button>
                                 </form>
                             </div>
                         </div>
@@ -158,47 +133,24 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Job Matches Database Link -->
+                <div class="card mb-4">
+                    <div class="card-body text-center">
+                        <h3><i class="bi bi-table"></i> Job Match Results</h3>
+                        <p class="text-muted">View and filter all job matches across all search terms and CV versions</p>
+                        <a href="{{ url_for('job_matching.view_all_matches') }}" 
+                           class="btn btn-primary btn-lg">
+                            <i class="bi bi-table"></i> Open Job Matches Database
+                        </a>
+                    </div>
+                </div>
             </div>
 
             <!-- Run Process Tab -->
             <div class="tab-pane fade" id="run-process" role="tabpanel" aria-labelledby="run-process-tab">
-                 <div class="row">
-                    <div class="col-md-6">
-                        <!-- Job Matcher Form -->
-                        <div class="card mb-4">
-                            <div class="card-header">
-                                <h2 class="h5 mb-0">Run Job Matcher</h2>
-                            </div>
-                            <div class="card-body">
-                                <form action="{{ url_for('job_matching.run_job_matcher') }}" method="post">
-                                    <div class="mb-3">
-                                        <label for="cv_path" class="form-label">Select CV</label>
-                                        <select class="form-select" id="cv_path" name="cv_path" required>
-                                            <option value="">Select a CV</option>
-                                            {% for cv_file_data in cv_files %}
-                                                <option value="{{ cv_file_data.name }}">{{ cv_file_data.name }}</option>
-                                            {% endfor %}
-                                        </select>
-                                    </div>
-                                    
-                                    <!-- Info Box -->
-                                    <div class="info-box">
-                                        <i class="icon-info-circle">ℹ️</i>
-                                        <p><strong>All matching jobs are saved to the database.</strong></p>
-                                        <p>After matching completes, view and filter your results in the <strong>View Results</strong> tab.</p>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label for="max_jobs" class="form-label">Max Jobs to Process</label>
-                                        <input type="number" class="form-control" id="max_jobs" name="max_jobs" min="1" max="500" value="50">
-                                        <div class="form-text">Maximum number of job listings to load and process from the data file.</div>
-                                    </div>
-                                    <button type="submit" class="btn btn-primary">Run Job Matcher</button>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
+                <div class="row">
+                    <div class="col-md-12">
                         <!-- Combined Process Form -->
                         <div class="card mb-4">
                             <div class="card-header bg-primary text-white">
@@ -215,6 +167,14 @@
                                                 <option value="{{ cv_file_data.name }}">{{ cv_file_data.name }}</option>
                                             {% endfor %}
                                         </select>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="combined_search_term" class="form-label">Search Term</label>
+                                        <select class="form-select" id="combined_search_term" name="search_term" required>
+                                            <option value="">Select a search term</option>
+                                        </select>
+                                        <div class="form-text">Select which search term to use for job scraping</div>
                                     </div>
                                     
                                     <!-- Info Box -->
@@ -419,17 +379,6 @@
                     <!-- End Generated Motivation Letters Accordion Item -->
 
                 </div> <!-- End Accordion -->
-            </div>
-
-            <!-- View Results Tab -->
-            <div class="tab-pane fade" id="view-results" role="tabpanel" aria-labelledby="view-results-tab">
-                <div id="results-container">
-                    <iframe src="{{ url_for('job_matching.view_all_matches') }}" 
-                            style="width:100%; height:calc(100vh - 180px); border:none;"
-                            title="Job Match Results"
-                            id="results-iframe">
-                    </iframe>
-                </div>
             </div>
         </div> <!-- End Tab Content -->
 

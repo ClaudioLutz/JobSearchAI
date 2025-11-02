@@ -20,7 +20,16 @@ logger = logging.getLogger("dashboard.job_data") # Use a child logger
 @login_required
 @admin_required
 def run_job_scraper():
-    """Run the job data acquisition component"""
+    """Run the job data acquisition component
+    
+    DEPRECATED: This route is deprecated as of Story 4.1.
+    Please use the Run Combined Process workflow instead.
+    This route is maintained for backward compatibility only.
+    """
+    # Log deprecation warning
+    logger.warning("DEPRECATED: /job_data/run_scraper route accessed. Please use /job_matching/run_combined_process instead.")
+    flash('Note: This endpoint is deprecated. Please use "Run Combined Process" for the complete workflow.', 'warning')
+    
     try:
         # Get max_pages parameter from the form
         max_pages = int(request.form.get('max_pages', 50))

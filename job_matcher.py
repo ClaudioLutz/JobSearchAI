@@ -40,14 +40,61 @@ logger = logging.getLogger("job_matcher")
 # OpenAI client is imported from api_utils and already initialized
 
 @handle_exceptions(default_return=[])
+def match_jobs(cv_summary, cv_key, search_term=None):
+    """
+    Match jobs from SQLite database instead of JSON files.
+    
+    This is the NEW primary function for job matching after Epic 2 migration.
+    Replaces the old load_latest_job_data() + match pattern.
+    
+    Args:
+        cv_summary (str): Summarized CV content for matching
+        cv_key (str): SHA256 hash of CV content
+        search_term (str, optional): Filter jobs by search term
+        
+    Returns:
+        list: List of job matches that have been evaluated
+    """
+    db = None
+    try:
+        # Initialize database
+        db = JobMatchDatabase()
+        db.connect()
+        
+        # Get jobs for this CV and optionally filter by search term
+        jobs = db.get_jobs_by_cv_key(cv_key, search_term=search_term)
+        
+        if not jobs:
+            logger.warning(f"No jobs found in database for cv_key: {cv_key}, search_term: {search_term}")
+            return []
+        
+        logger.info(f"Loaded {len(jobs)} jobs from database for matching")
+        
+        # The matching logic that follows works with the job list as before
+        # Jobs are already in the correct format from scraped_data
+        return jobs
+        
+    except Exception as e:
+        logger.error(f"Error in match_jobs: {e}", exc_info=True)
+        return []
+    finally:
+        if db:
+            db.close()
+
+
 @log_execution_time()
 def load_latest_job_data(max_jobs=50):
     """
     Load the most recent job data file
     
+    DEPRECATED: This function is maintained for backward compatibility only.
+    New code should use match_jobs() which reads from SQLite database.
+    
     Args:
         max_jobs (int): Maximum number of job listings to return (default: 50)
     """
+    logger.warning("load_latest_job_data() is deprecated. Use match_jobs() with database instead.")
+    
     # Get the latest job data file
     job_data_dir = config.get_path("job_data")
     logger.info(f"Looking for job data files in: {job_data_dir}")

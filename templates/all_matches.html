@@ -4,15 +4,38 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>All Job Matches - JobSearchAI</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>All Job Matches</h1>
-            <p>View and filter all job matches across all search terms and CV versions</p>
-            <a href="{{ url_for('index') }}" class="btn btn-secondary">← Back to Dashboard</a>
-        </header>
+    <div class="container-fluid mt-4">
+        <!-- Breadcrumb Navigation -->
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item">
+                    <a href="{{ url_for('index') }}">
+                        <i class="bi bi-house"></i> Dashboard
+                    </a>
+                </li>
+                <li class="breadcrumb-item active" aria-current="page">
+                    All Job Matches
+                </li>
+            </ol>
+        </nav>
+        
+        <!-- Page Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1><i class="bi bi-table"></i> All Job Matches</h1>
+                <p class="lead text-muted">Unified database of all job matches across search terms and CV versions</p>
+            </div>
+            <div>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+        </div>
 
         <!-- Filter Panel -->
         <div class="filter-panel">
@@ -136,7 +159,7 @@
                 </thead>
                 <tbody>
                     {% for match in results %}
-                    <tr>
+                    <tr {% if match.has_motivation_letter %}class="table-info"{% endif %}>
                         <td>
                             <input type="checkbox" class="job-checkbox" value="{{ match.job_url }}" onchange="updateBulkActions()">
                         </td>
@@ -144,6 +167,11 @@
                             <a href="{{ match.job_url }}" target="_blank" rel="noopener noreferrer">
                                 {{ match.job_title or 'N/A' }}
                             </a>
+                            {% if match.has_motivation_letter %}
+                                <i class="bi bi-envelope-check-fill text-success ms-1" 
+                                   title="Letter generated" 
+                                   style="font-size: 0.9em;"></i>
+                            {% endif %}
                         </td>
                         <td>{{ match.company_name or 'N/A' }}</td>
                         <td>{{ match.location or 'N/A' }}</td>
@@ -157,12 +185,56 @@
                         </td>
                         <td>{{ match.matched_at[:10] if match.matched_at else 'N/A' }}</td>
                         <td>
-                            <button class="btn btn-small" onclick="viewDetails('{{ match.job_url }}')">
-                                View
-                            </button>
-                            <button class="btn btn-small btn-primary" onclick="generateSingle('{{ match.job_url }}')">
-                                Letter
-                            </button>
+                            <!-- Actions Dropdown -->
+                            <div class="dropdown">
+                                <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" 
+                                        id="actionsDropdown{{ loop.index }}" 
+                                        data-bs-toggle="dropdown" 
+                                        aria-expanded="false">
+                                    Actions
+                                </button>
+                                <ul class="dropdown-menu" aria-labelledby="actionsDropdown{{ loop.index }}">
+                                    <!-- View Actions -->
+                                    <li><a class="dropdown-item" href="#" 
+                                           onclick="viewReasoning('{{ match.job_url }}'); return false;">
+                                        <i class="bi bi-eye"></i> View Reasoning
+                                    </a></li>
+                                    <li><a class="dropdown-item" href="{{ match.job_url }}" 
+                                           target="_blank" rel="noopener noreferrer">
+                                        <i class="bi bi-box-arrow-up-right"></i> View Job Ad
+                                    </a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    
+                                    <!-- Generation Actions -->
+                                    <li><a class="dropdown-item" href="#" 
+                                           onclick="generateLetter('{{ match.job_url }}', 'Lebenslauf_-_Lutz_Claudio'); return false;">
+                                        <i class="bi bi-file-earmark-text"></i> Generate Letter
+                                    </a></li>
+                                    <li><a class="dropdown-item" href="#" 
+                                           onclick="generateLetterManual('{{ match.job_url }}', 'Lebenslauf_-_Lutz_Claudio'); return false;">
+                                        <i class="bi bi-pencil-square"></i> Generate Letter (Manual Text)
+                                    </a></li>
+                                    
+                                    <!-- Document Actions (conditional) -->
+                                    {% if match.has_docx %}
+                                    <li><a class="dropdown-item" href="{{ url_for('motivation_letter.download_motivation_letter_docx', file_path=match.motivation_letter_docx_path) }}">
+                                        <i class="bi bi-file-word"></i> Download Word
+                                    </a></li>
+                                    {% endif %}
+                                    
+                                    {% if match.has_scraped_data %}
+                                    <li><a class="dropdown-item" href="{{ url_for('motivation_letter.view_scraped_data', scraped_data_filename=match.scraped_data_filename) }}">
+                                        <i class="bi bi-file-code"></i> View Scraped Data
+                                    </a></li>
+                                    {% endif %}
+                                    
+                                    {% if match.has_email_text %}
+                                    <li><a class="dropdown-item" href="{{ url_for('motivation_letter.view_email_text', json_path=match.motivation_letter_json_path) }}">
+                                        <i class="bi bi-envelope"></i> View Email Text
+                                    </a></li>
+                                    {% endif %}
+                                </ul>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -202,6 +274,54 @@
         {% endif %}
     </div>
 
+    <!-- View Reasoning Modal -->
+    <div class="modal fade" id="reasoningModal" tabindex="-1" aria-labelledby="reasoningModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="reasoningModalLabel">Match Reasoning</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <h6 id="reasoning-job-title" class="mb-3"></h6>
+                    <div id="reasoning-content" style="white-space: pre-wrap;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manual Text Input Modal -->
+    <div class="modal fade" id="manualTextModal" tabindex="-1" aria-labelledby="manualTextModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="manualTextModalLabel">Manual Job Text Input</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Paste the full job description text below. The system will attempt to structure this text and then generate the motivation letter.</p>
+                    <div class="mb-3">
+                        <label for="manualJobUrl" class="form-label">Job URL:</label>
+                        <input type="text" class="form-control" id="manualJobUrl" readonly>
+                    </div>
+                    <input type="hidden" id="manualCvFilename">
+                    <div class="mb-3">
+                        <label for="manualJobTextInput" class="form-label">Job Announcement Text:</label>
+                        <textarea class="form-control" id="manualJobTextInput" rows="15" placeholder="Paste the job description here..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="submitManualTextBtn">Generate from Text</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='js/all_matches.js') }}"></script>
 </body>
 </html>

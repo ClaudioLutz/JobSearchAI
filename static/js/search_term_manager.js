@@ -12,6 +12,7 @@ let baseUrl = '';
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     initializeSearchTermManager();
+    populateCombinedSearchTermDropdown();
 });
 
 /**
@@ -355,6 +356,54 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+/**
+ * Populate the combined process search term dropdown
+ */
+async function populateCombinedSearchTermDropdown() {
+    const dropdown = document.getElementById('combined_search_term');
+    if (!dropdown) {
+        return; // Not on the combined process form
+    }
+
+    try {
+        const response = await fetch('/api/settings/search_terms');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const terms = data.search_terms || [];
+        
+        // Clear existing options except the placeholder
+        dropdown.innerHTML = '<option value="">Select a search term</option>';
+        
+        // Add search terms as options
+        terms.forEach(term => {
+            const option = document.createElement('option');
+            option.value = term;
+            option.textContent = term;
+            dropdown.appendChild(option);
+        });
+        
+        // If no terms available, show message
+        if (terms.length === 0) {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'No search terms configured - add one in Setup & Data tab';
+            option.disabled = true;
+            dropdown.appendChild(option);
+        }
+    } catch (error) {
+        console.error('Error loading search terms for combined process:', error);
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Error loading search terms';
+        option.disabled = true;
+        dropdown.appendChild(option);
+    }
+}
+
 // Make functions globally available
 window.editSearchTerm = editSearchTerm;
 window.deleteSearchTerm = deleteSearchTerm;
@@ -362,3 +411,4 @@ window.showAddForm = showAddForm;
 window.hideAddForm = hideAddForm;
 window.saveSearchTerm = saveSearchTerm;
 window.applyTemplate = applyTemplate;
+window.populateCombinedSearchTermDropdown = populateCombinedSearchTermDropdown;

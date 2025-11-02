@@ -483,3 +483,50 @@ class JobMatchDatabase:
             return result
         
         return None
+    
+    def get_jobs_by_cv_key(self, cv_key: str, search_term: Optional[str] = None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """
+        Retrieve jobs for a specific CV key, optionally filtered by search term.
+        
+        Args:
+            cv_key: SHA256 hash of CV content
+            search_term: Optional search term filter
+            limit: Optional result limit
+            
+        Returns:
+            List of job dictionaries with scraped_data parsed
+        """
+        if not self.conn:
+            self.connect()
+        
+        assert self.conn is not None, "Database connection not established"
+        
+        query = """
+            SELECT scraped_data FROM job_matches 
+            WHERE cv_key = ?
+        """
+        params = [cv_key]
+        
+        if search_term:
+            query += " AND search_term = ?"
+            params.append(search_term)
+        
+        query += " ORDER BY overall_match DESC"
+        
+        if limit:
+            query += f" LIMIT {limit}"
+        
+        cursor = self.conn.cursor()
+        cursor.execute(query, params)
+        
+        jobs = []
+        for row in cursor.fetchall():
+            try:
+                # Parse the scraped_data JSON string to dictionary
+                job_data = json.loads(row['scraped_data'])
+                jobs.append(job_data)
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.warning(f"Failed to parse scraped_data: {e}")
+                continue
+        
+        return jobs

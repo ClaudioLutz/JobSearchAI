@@ -75,6 +75,120 @@ function getSelectedJobs() {
     return selected;
 }
 
+function viewReasoning(jobUrl) {
+    // Fetch reasoning from database and show in modal
+    fetch(`/job_matching/api/job-reasoning?url=${encodeURIComponent(jobUrl)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Populate modal with reasoning
+                document.getElementById('reasoning-job-title').textContent = 
+                    `${data.job_title} - ${data.company_name}`;
+                document.getElementById('reasoning-content').textContent = data.reasoning;
+                // Show modal
+                const modal = new bootstrap.Modal(document.getElementById('reasoningModal'));
+                modal.show();
+            } else {
+                alert('Failed to load reasoning: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching reasoning:', error);
+            alert('Failed to load reasoning');
+        });
+}
+
+function generateLetter(jobUrl, cvFilename) {
+    // Validate CV filename
+    if (!cvFilename) {
+        alert('Unable to determine CV filename. Please try again.');
+        return;
+    }
+    
+    // Create form and submit with POST
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/motivation_letter/generate';
+    
+    const urlInput = document.createElement('input');
+    urlInput.type = 'hidden';
+    urlInput.name = 'job_url';
+    urlInput.value = jobUrl;
+    form.appendChild(urlInput);
+    
+    const cvInput = document.createElement('input');
+    cvInput.type = 'hidden';
+    cvInput.name = 'cv_filename';
+    cvInput.value = cvFilename;
+    form.appendChild(cvInput);
+    
+    document.body.appendChild(form);
+    form.submit();
+}
+
+function generateLetterManual(jobUrl, cvFilename) {
+    // Validate CV filename
+    if (!cvFilename) {
+        alert('Unable to determine CV filename. Please try again.');
+        return;
+    }
+    
+    // Show manual text input modal
+    document.getElementById('manualJobUrl').value = jobUrl;
+    document.getElementById('manualCvFilename').value = cvFilename;
+    document.getElementById('manualJobTextInput').value = '';
+    const modal = new bootstrap.Modal(document.getElementById('manualTextModal'));
+    modal.show();
+}
+
+// Handle manual text submission
+document.addEventListener('DOMContentLoaded', function() {
+    const submitBtn = document.getElementById('submitManualTextBtn');
+    if (submitBtn) {
+        submitBtn.addEventListener('click', function() {
+            const jobUrl = document.getElementById('manualJobUrl').value;
+            const cvFilename = document.getElementById('manualCvFilename').value;
+            const manualText = document.getElementById('manualJobTextInput').value;
+            
+            if (!manualText.trim()) {
+                alert('Please enter job description text');
+                return;
+            }
+            
+            if (!cvFilename) {
+                alert('CV filename is missing');
+                return;
+            }
+            
+            // Create form and submit
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/motivation_letter/generate';
+            
+            const urlInput = document.createElement('input');
+            urlInput.type = 'hidden';
+            urlInput.name = 'job_url';
+            urlInput.value = jobUrl;
+            form.appendChild(urlInput);
+            
+            const cvInput = document.createElement('input');
+            cvInput.type = 'hidden';
+            cvInput.name = 'cv_filename';
+            cvInput.value = cvFilename;
+            form.appendChild(cvInput);
+            
+            const textInput = document.createElement('input');
+            textInput.type = 'hidden';
+            textInput.name = 'manual_job_text';
+            textInput.value = manualText;
+            form.appendChild(textInput);
+            
+            document.body.appendChild(form);
+            form.submit();
+        });
+    }
+});
+
 function viewDetails(jobUrl) {
     // Open job URL in new tab
     window.open(jobUrl, '_blank');
