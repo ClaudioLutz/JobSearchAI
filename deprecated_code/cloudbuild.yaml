@@ -1,0 +1,67 @@
+# Google Cloud Build configuration for JobSearchAI Dashboard
+# Automatically builds and deploys the Docker container when code is pushed
+
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/jobsearchai-dashboard:latest'
+      - '.'
+    timeout: 600s
+
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/jobsearchai-dashboard:latest'
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'jobsearchai-dashboard'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/jobsearchai-dashboard:latest'
+      - '--region'
+      - 'europe-west6'
+      - '--platform'
+      - 'managed'
+      - '--memory'
+      - '2Gi'
+      - '--cpu'
+      - '2'
+      - '--concurrency'
+      - '10'
+      - '--timeout'
+      - '300'
+      - '--max-instances'
+      - '5'
+      - '--allow-unauthenticated'
+
+# Store images in Container Registry
+images:
+  - 'gcr.io/$PROJECT_ID/jobsearchai-dashboard:latest'
+
+# Build timeout (20 minutes for complex Docker image)
+timeout: 1200s
+
+# Build options
+options:
+  # Use a high-performance machine for faster builds
+  machineType: 'E2_HIGHCPU_8'
+  
+  # Increase disk size for Docker layers
+  diskSizeGb: 100
+  
+  # Logging configuration
+  logging: CLOUD_LOGGING_ONLY
+
+
+# Tags for organizing builds
+tags:
+  - 'jobsearchai'
+  - 'dashboard'
+  - 'web-app'
