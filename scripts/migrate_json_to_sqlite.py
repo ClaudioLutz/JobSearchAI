@@ -28,7 +28,9 @@ def migrate_legacy_json_files(
     json_dir="job_matches",
     db_path="instance/jobsearchai.db",
     dry_run=False,
-    force=False
+    force=False,
+    default_search_term=None,
+    default_cv_path=None
 ):
     """
     Migrate existing JSON match files to SQLite database
@@ -40,6 +42,8 @@ def migrate_legacy_json_files(
         db_path: Path to SQLite database
         dry_run: If True, preview migration without making changes
         force: If True, overwrite duplicates instead of skipping
+        default_search_term: Default search term for all files (skips prompt)
+        default_cv_path: Default CV path for all files (skips prompt)
     """
     print("\n" + "="*60)
     print("Legacy JSON to SQLite Migration Tool")
@@ -89,33 +93,42 @@ def migrate_legacy_json_files(
         
         print(f"📊 File contains {len(matches)} job matches")
         
-        # Prompt for metadata
-        print("\n📝 Please provide metadata for this batch:")
-        search_term = input("  Search term (e.g., 'Python Developer', 'Data Scientist'): ").strip()
-        
-        if not search_term:
-            print("⚠️  Skipping file - no search term provided")
-            total_skipped_files += 1
-            continue
-        
-        # Try to extract CV path from first match
-        default_cv_path = None
-        if matches and 'cv_path' in matches[0]:
-            default_cv_path = matches[0]['cv_path']
-            # Convert relative path to absolute if needed
-            if not default_cv_path.startswith('process_cv/'):
-                default_cv_path = f"process_cv/cv-data/{default_cv_path}"
-        
-        if default_cv_path:
-            cv_path_input = input(f"  CV path (press Enter for '{default_cv_path}'): ").strip()
-            cv_path = cv_path_input if cv_path_input else default_cv_path
+        # Use default or prompt for metadata
+        if default_search_term:
+            search_term = default_search_term
+            print(f"\n📝 Using default search term: {search_term}")
         else:
-            cv_path = input("  CV path (e.g., 'process_cv/cv-data/input/Lebenslauf.pdf'): ").strip()
+            print("\n📝 Please provide metadata for this batch:")
+            search_term = input("  Search term (e.g., 'Python Developer', 'Data Scientist'): ").strip()
+            
+            if not search_term:
+                print("⚠️  Skipping file - no search term provided")
+                total_skipped_files += 1
+                continue
         
-        if not cv_path:
-            print("⚠️  Skipping file - no CV path provided")
-            total_skipped_files += 1
-            continue
+        # Use default or prompt for CV path
+        if default_cv_path:
+            cv_path = default_cv_path
+            print(f"   Using default CV path: {cv_path}")
+        else:
+            # Try to extract CV path from first match
+            extracted_cv_path = None
+            if matches and 'cv_path' in matches[0]:
+                extracted_cv_path = matches[0]['cv_path']
+                # Convert relative path to absolute if needed
+                if not extracted_cv_path.startswith('process_cv/'):
+                    extracted_cv_path = f"process_cv/cv-data/{extracted_cv_path}"
+            
+            if extracted_cv_path:
+                cv_path_input = input(f"  CV path (press Enter for '{extracted_cv_path}'): ").strip()
+                cv_path = cv_path_input if cv_path_input else extracted_cv_path
+            else:
+                cv_path = input("  CV path (e.g., 'process_cv/cv-data/input/Lebenslauf.pdf'): ").strip()
+            
+            if not cv_path:
+                print("⚠️  Skipping file - no CV path provided")
+                total_skipped_files += 1
+                continue
         
         # Generate CV key
         try:
@@ -297,6 +310,16 @@ Examples:
         help='Path to SQLite database (default: instance/jobsearchai.db)'
     )
     
+    parser.add_argument(
+        '--search-term',
+        help='Default search term for all files (batch mode)'
+    )
+    
+    parser.add_argument(
+        '--cv-path',
+        help='Default CV path for all files (batch mode)'
+    )
+    
     args = parser.parse_args()
     
     try:
@@ -304,7 +327,9 @@ Examples:
             json_dir=args.json_dir,
             db_path=args.db_path,
             dry_run=args.dry_run,
-            force=args.force
+            force=args.force,
+            default_search_term=args.search_term,
+            default_cv_path=args.cv_path
         )
     except KeyboardInterrupt:
         print("\n\n⚠️  Migration interrupted by user")
