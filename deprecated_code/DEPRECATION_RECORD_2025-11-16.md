@@ -4,9 +4,19 @@ This document records files deprecated and moved to `deprecated_code/` on Novemb
 
 ## Summary
 
-**Total Files Moved:** 7 Python files
-- **Root Level:** 4 files
+**Total Files Moved:** 6 Python files
+- **Root Level:** 3 files
 - **Scripts:** 3 files
+
+## Files Restored After Review
+
+### optimized_graph_scraper_utils.py
+- **Status:** RESTORED to root level (not deprecated)
+- **Reason for Initial Move:** No direct imports found in initial search
+- **Reason for Restoration:** User inquiry revealed this is an alternative/backup scraper implementation
+- **Current Status:** Keep as backup/alternative scraper utility
+- **Related File:** graph_scraper_utils.py (actively used by job_details_utils.py)
+- **Note:** While not currently imported, keeping both scraper implementations provides flexibility
 
 ## Files Moved to deprecated_code/
 
@@ -24,11 +34,6 @@ This document records files deprecated and moved to `deprecated_code/` on Novemb
 - **Impact:** None - mentioned in stories/docs but not imported by running app
 - **Future:** May be revived when CV template feature is implemented
 
-#### 3. optimized_graph_scraper_utils.py
-- **Reason:** Utility module with no code references
-- **Status:** Only mentioned in documentation
-- **Impact:** None - no imports found in codebase
-- **Notes:** Scraping approach no longer used
 
 #### 4. reset_admin_password.py
 - **Reason:** Manual admin fix script, not part of application runtime
@@ -105,16 +110,19 @@ Example:
 git mv deprecated_code/motivation_letter_generator.py ./motivation_letter_generator.py
 ```
 
-## Git Status at Time of Move
+## Git Status After Review
 
 ```
+# Final moves (after restoration of optimized_graph_scraper_utils.py):
 R  cv_template_generator.py -> deprecated_code/cv_template_generator.py
 R  motivation_letter_generator.py -> deprecated_code/motivation_letter_generator.py
-R  optimized_graph_scraper_utils.py -> deprecated_code/optimized_graph_scraper_utils.py
 R  reset_admin_password.py -> deprecated_code/reset_admin_password.py
 R  scripts/benchmark_performance.py -> deprecated_code/scripts/benchmark_performance.py
 R  scripts/migrate_json_to_sqlite.py -> deprecated_code/scripts/migrate_json_to_sqlite.py
 R  scripts/validate_migration.py -> deprecated_code/scripts/validate_migration.py
+
+# Restored (not deprecated):
+optimized_graph_scraper_utils.py - kept as alternative scraper implementation
 ```
 
 ## Verification Commands
@@ -124,11 +132,18 @@ To verify no broken imports:
 # Search for imports of deprecated files
 grep -r "import motivation_letter_generator" --include="*.py" .
 grep -r "import cv_template_generator" --include="*.py" .
-grep -r "import optimized_graph_scraper_utils" --include="*.py" .
 grep -r "import reset_admin_password" --include="*.py" .
 ```
 
 All searches should return no results (except possibly in deprecated_code/ itself).
+
+## Scraper Files Analysis
+
+The project has two scraper utility files:
+- **graph_scraper_utils.py** (ACTIVE) - Currently imported by job_details_utils.py
+- **optimized_graph_scraper_utils.py** (BACKUP) - Alternative implementation, not currently imported but kept for flexibility
+
+Both are similar in functionality but represent different approaches/optimizations. Keeping both provides options for future scraping needs.
 
 ## Next Steps
 
