@@ -118,3 +118,7 @@ web-bundles/
 bmad/
 nul
 applications/
+
+# Deprecated and legacy folders
+deprecated_code/
+docs/xx_leagacy_docs/
