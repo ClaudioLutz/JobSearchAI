@@ -1,9 +1,11 @@
 # Story 6.2: Integrate CV Generation into Letter Workflow
 
 **Epic:** Epic 6 - CV Template Generation  
-**Status:** Draft  
+**Status:** Complete  
 **Story Type:** Integration  
-**Estimate:** 5 Story Points
+**Estimate:** 5 Story Points  
+**Actual Effort:** 5 Story Points  
+**Completed:** 2025-11-02
 
 ---
 

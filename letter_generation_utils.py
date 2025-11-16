@@ -182,6 +182,53 @@ def generate_motivation_letter(cv_summary, job_details):
     if not docx_result:
         logger.warning("Failed to generate DOCX file")
 
+    # --- CV TEMPLATE GENERATION (Story 6.2) ---
+    # Generate customized CV template DOCX
+    from cv_template_generator import generate_cv_docx, get_cv_summary_path
+    
+    cv_docx_path = app_folder / 'Lebenslauf.docx'
+    cv_template_path = 'process_cv/cv-data/template/Lebenslauf_template.docx'
+    
+    # Get CV summary path
+    cv_summary_path = get_cv_summary_path()
+    
+    if cv_summary_path and cv_summary_path.exists():
+        try:
+            # Read CV summary
+            with open(cv_summary_path, 'r', encoding='utf-8') as f:
+                cv_summary_text = f.read()
+            
+            # Prepare job details dict for CV generation
+            cv_job_details = {
+                'company_name': job_details.get('Company Name', ''),
+                'job_title': job_details.get('Job Title', ''),
+                'job_description': job_details.get('Job Description', ''),
+                'language': job_details.get('Language', 'de')
+            }
+            
+            # Generate CV DOCX (non-blocking)
+            logger.info("Generating CV template...")
+            cv_result = generate_cv_docx(
+                cv_summary=cv_summary_text,
+                job_details=cv_job_details,
+                template_path=cv_template_path,
+                output_path=str(cv_docx_path)
+            )
+            
+            if cv_result:
+                logger.info(f"✓ CV template generated successfully: {cv_docx_path}")
+            else:
+                logger.warning(f"Failed to generate CV template at {cv_docx_path}")
+                # Continue execution - non-blocking
+                
+        except Exception as e:
+            logger.error(f"Error during CV template generation: {e}")
+            # Continue execution - non-blocking
+    else:
+        logger.warning("CV summary not found, skipping CV template generation")
+        # Continue execution
+    # --- End CV TEMPLATE GENERATION ---
+
     # Generate email text and save to checkpoint folder
     logger.info("Generating email text...")
     email_text = generate_email_text_only(cv_summary, job_details)

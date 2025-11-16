@@ -1,9 +1,11 @@
 # Story 6.1: Create CV Template Generator Module
 
 **Epic:** Epic 6 - CV Template Generation  
-**Status:** Draft  
+**Status:** Complete  
 **Story Type:** Implementation  
-**Estimate:** 8 Story Points
+**Estimate:** 8 Story Points  
+**Actual Effort:** 8 Story Points  
+**Completed:** 2025-11-02
 
 ---
 
