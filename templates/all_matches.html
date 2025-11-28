@@ -214,6 +214,10 @@
                                            onclick="generateLetterManual('{{ match.job_url }}', 'Lebenslauf_-_Lutz_Claudio'); return false;">
                                         <i class="bi bi-pencil-square"></i> Generate Letter (Manual Text)
                                     </a></li>
+                                    <li><a class="dropdown-item" href="#" 
+                                           onclick="generateLetterAndCVManual('{{ match.job_url }}', 'Lebenslauf_-_Lutz_Claudio'); return false;">
+                                        <i class="bi bi-file-earmark-text-fill"></i> Generate Letter and CV (Manual Text)
+                                    </a></li>
                                     
                                     <!-- Document Actions (conditional) -->
                                     {% if match.has_docx %}
@@ -308,6 +312,7 @@
                         <input type="text" class="form-control" id="manualJobUrl" readonly>
                     </div>
                     <input type="hidden" id="manualCvFilename">
+                    <input type="hidden" id="manualGenerateCV" value="false">
                     <div class="mb-3">
                         <label for="manualJobTextInput" class="form-label">Job Announcement Text:</label>
                         <textarea class="form-control" id="manualJobTextInput" rows="15" placeholder="Paste the job description here..."></textarea>

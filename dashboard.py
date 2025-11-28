@@ -340,6 +340,7 @@ def create_app():
     from blueprints.job_data_routes import job_data_bp
     from blueprints.job_matching_routes import job_matching_bp
     from blueprints.motivation_letter_routes import motivation_letter_bp
+    from blueprints.linkedin_routes import linkedin_bp
     from blueprints.settings_routes import bp as settings_bp
 
     app.register_blueprint(auth)
@@ -347,6 +348,7 @@ def create_app():
     app.register_blueprint(job_data_bp)
     app.register_blueprint(job_matching_bp)
     app.register_blueprint(motivation_letter_bp)
+    app.register_blueprint(linkedin_bp)
     app.register_blueprint(settings_bp)
 
     # --- Core Routes (kept in this file) ---

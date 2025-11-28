@@ -137,6 +137,23 @@ function generateLetterManual(jobUrl, cvFilename) {
     document.getElementById('manualJobUrl').value = jobUrl;
     document.getElementById('manualCvFilename').value = cvFilename;
     document.getElementById('manualJobTextInput').value = '';
+    document.getElementById('manualGenerateCV').value = 'false';
+    const modal = new bootstrap.Modal(document.getElementById('manualTextModal'));
+    modal.show();
+}
+
+function generateLetterAndCVManual(jobUrl, cvFilename) {
+    // Validate CV filename
+    if (!cvFilename) {
+        alert('Unable to determine CV filename. Please try again.');
+        return;
+    }
+    
+    // Show manual text input modal with CV generation flag
+    document.getElementById('manualJobUrl').value = jobUrl;
+    document.getElementById('manualCvFilename').value = cvFilename;
+    document.getElementById('manualJobTextInput').value = '';
+    document.getElementById('manualGenerateCV').value = 'true';
     const modal = new bootstrap.Modal(document.getElementById('manualTextModal'));
     modal.show();
 }
@@ -149,6 +166,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const jobUrl = document.getElementById('manualJobUrl').value;
             const cvFilename = document.getElementById('manualCvFilename').value;
             const manualText = document.getElementById('manualJobTextInput').value;
+            const generateCV = document.getElementById('manualGenerateCV').value;
             
             if (!manualText.trim()) {
                 alert('Please enter job description text');
@@ -182,6 +200,13 @@ document.addEventListener('DOMContentLoaded', function() {
             textInput.name = 'manual_job_text';
             textInput.value = manualText;
             form.appendChild(textInput);
+            
+            // Add generate_cv flag
+            const generateCVInput = document.createElement('input');
+            generateCVInput.type = 'hidden';
+            generateCVInput.name = 'generate_cv';
+            generateCVInput.value = generateCV;
+            form.appendChild(generateCVInput);
             
             document.body.appendChild(form);
             form.submit();

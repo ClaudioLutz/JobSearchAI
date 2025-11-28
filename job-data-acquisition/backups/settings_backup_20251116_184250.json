@@ -8,7 +8,7 @@
         "headless": true,
         "verbose": true,
         "output_format": "json",
-        "max_pages": 10,
+        "max_pages": 5,
         "wait_time": 5,
         "browser_config": {
             "args": [
@@ -52,7 +52,6 @@
         "https://www.ostjob.ch/job/suche-IT-typ-festanstellung-pensum-80-bis-100-seite-"
     ],
     "search_terms": [
-        "analyst",
         "IT-typ-festanstellung-pensum-80-bis-100",
         "Data-Analyst-typ-festanstellung-pensum-80-bis-100",
         "Verkauf-typ-festanstellung-pensum-80-bis-100",

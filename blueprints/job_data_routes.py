@@ -223,8 +223,21 @@ def view_job_data(filename):
         else:
              logger.warning(f"Unexpected job data structure in {secure_name}: {type(job_data)}")
 
+        # Find the latest CV filename
+        cv_dir = Path(current_app.root_path) / 'process_cv/cv-data/processed'
+        latest_cv_filename = None
+        if cv_dir.exists():
+            # Find all summary files
+            summary_files = list(cv_dir.glob('*_summary.txt'))
+            if summary_files:
+                # Get the most recent one
+                latest_summary = max(summary_files, key=os.path.getmtime)
+                # Extract the base filename (remove _summary.txt)
+                latest_cv_filename = latest_summary.name.replace('_summary.txt', '')
+                logger.info(f"Found latest CV for context: {latest_cv_filename}")
+
         # Render the template (ensure 'job_data_view.html' exists in templates/)
-        return render_template('job_data_view.html', jobs=job_listings, filename=secure_name)
+        return render_template('job_data_view.html', jobs=job_listings, filename=secure_name, cv_filename=latest_cv_filename)
 
     except FileNotFoundError:
         flash(f'Job data file not found: {filename}')
