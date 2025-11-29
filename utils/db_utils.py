@@ -17,6 +17,7 @@ from datetime import datetime
 from contextlib import contextmanager
 
 from utils.url_utils import URLNormalizer
+from models.application_status import ApplicationStatus
 
 # Set up logging
 logger = logging.getLogger("db_utils")
@@ -201,6 +202,19 @@ class JobMatchDatabase:
                     duration_seconds REAL
                 )
             """)
+
+            # Create applications table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS applications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_match_id INTEGER NOT NULL UNIQUE,
+                    status TEXT NOT NULL DEFAULT 'MATCHED',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    notes TEXT,
+                    FOREIGN KEY(job_match_id) REFERENCES job_matches(id) ON DELETE CASCADE
+                )
+            """)
             
             # Create indexes for query performance
             indexes = [
@@ -210,6 +224,7 @@ class JobMatchDatabase:
                 "CREATE INDEX IF NOT EXISTS idx_matched_at ON job_matches(matched_at)",
                 "CREATE INDEX IF NOT EXISTS idx_location ON job_matches(location)",
                 "CREATE INDEX IF NOT EXISTS idx_search_cv_match ON job_matches(search_term, cv_key, overall_match)",
+                "CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status)",
             ]
             
             for index_sql in indexes:
@@ -530,3 +545,149 @@ class JobMatchDatabase:
                 continue
         
         return jobs
+
+    def get_application_status(self, job_match_id: int) -> str:
+        """
+        Get the status of an application by job_match_id.
+        Returns 'MATCHED' if no application record exists.
+        
+        Args:
+            job_match_id: ID of the job match
+            
+        Returns:
+            Status string
+        """
+        if not self.conn:
+            self.connect()
+        
+        assert self.conn is not None, "Database connection not established"
+        
+        cursor = self.conn.cursor()
+        cursor.execute(
+            'SELECT status FROM applications WHERE job_match_id = ?',
+            (job_match_id,)
+        )
+        result = cursor.fetchone()
+        
+        return result['status'] if result else ApplicationStatus.MATCHED.value
+
+    def update_application_status(self, job_match_id: int, new_status: str, notes: Optional[str] = None) -> bool:
+        """
+        Update or create an application status.
+        Returns True on success, False on failure.
+        Automatically updates updated_at timestamp.
+        
+        Args:
+            job_match_id: ID of the job match
+            new_status: New status string
+            notes: Optional notes to update/add
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        # Validate status
+        if not ApplicationStatus.is_valid(new_status):
+            logger.error(f"Invalid status: {new_status}")
+            return False
+        
+        if not self.conn:
+            self.connect()
+        
+        assert self.conn is not None, "Database connection not established"
+        cursor = self.conn.cursor()
+        
+        try:
+            # Check if record exists
+            cursor.execute(
+                'SELECT id FROM applications WHERE job_match_id = ?',
+                (job_match_id,)
+            )
+            exists = cursor.fetchone()
+            
+            if exists:
+                # Update existing record
+                cursor.execute('''
+                    UPDATE applications 
+                    SET status = ?, 
+                        updated_at = CURRENT_TIMESTAMP,
+                        notes = COALESCE(?, notes)
+                    WHERE job_match_id = ?
+                ''', (new_status, notes, job_match_id))
+                logger.info(f"Updated status for job_match_id {job_match_id} to {new_status}")
+            else:
+                # Insert new record
+                cursor.execute('''
+                    INSERT INTO applications (job_match_id, status, notes)
+                    VALUES (?, ?, ?)
+                ''', (job_match_id, new_status, notes))
+                logger.info(f"Created application for job_match_id {job_match_id} with status {new_status}")
+            
+            self.conn.commit()
+            return True
+            
+        except sqlite3.Error as e:
+            logger.error(f"Database error updating application status: {e}")
+            return False
+
+    def add_application_note(self, job_match_id: int, note: str) -> bool:
+        """
+        Add or append a note to an application.
+        
+        Args:
+            job_match_id: ID of the job match
+            note: Note content to add
+            
+        Returns:
+            True if successful
+        """
+        if not self.conn:
+            self.connect()
+        
+        assert self.conn is not None, "Database connection not established"
+        
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                UPDATE applications 
+                SET notes = CASE 
+                    WHEN notes IS NULL THEN ?
+                    ELSE notes || '\n' || ?
+                END,
+                updated_at = CURRENT_TIMESTAMP
+                WHERE job_match_id = ?
+            ''', (note, note, job_match_id))
+            
+            self.conn.commit()
+            return cursor.rowcount > 0
+            
+        except sqlite3.Error as e:
+            logger.error(f"Database error adding note: {e}")
+            return False
+
+    def get_application_by_job_match_id(self, job_match_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get full application record.
+        
+        Args:
+            job_match_id: ID of the job match
+            
+        Returns:
+            Dictionary with application data or None
+        """
+        if not self.conn:
+            self.connect()
+        
+        assert self.conn is not None, "Database connection not established"
+        
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT id, job_match_id, status, created_at, updated_at, notes
+            FROM applications 
+            WHERE job_match_id = ?
+        ''', (job_match_id,))
+        
+        result = cursor.fetchone()
+        
+        if result:
+            return dict(result)
+        return None
