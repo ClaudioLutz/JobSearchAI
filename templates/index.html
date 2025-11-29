@@ -89,6 +89,71 @@
                     </div>
                 </div>
 
+                <!-- Pipeline Statistics Widget -->
+                {% if pipeline_stats %}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h2 class="h5 mb-0">
+                            <i class="bi bi-bar-chart"></i> Application Pipeline
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <!-- Active Stages -->
+                            <div class="col-md-2 col-sm-4 mb-3">
+                                <div class="stat-box">
+                                    <div class="stat-number text-secondary">{{ pipeline_stats.MATCHED }}</div>
+                                    <div class="stat-label">Matched</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 col-sm-4 mb-3">
+                                <div class="stat-box">
+                                    <div class="stat-number text-primary">{{ pipeline_stats.INTERESTED }}</div>
+                                    <div class="stat-label">Interested</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 col-sm-4 mb-3">
+                                <div class="stat-box">
+                                    <div class="stat-number text-warning">{{ pipeline_stats.PREPARING }}</div>
+                                    <div class="stat-label">Preparing</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 col-sm-4 mb-3">
+                                <div class="stat-box">
+                                    <div class="stat-number text-success">{{ pipeline_stats.APPLIED }}</div>
+                                    <div class="stat-label">Applied</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 col-sm-4 mb-3">
+                                <div class="stat-box">
+                                    <div class="stat-number" style="color: #6f42c1;">{{ pipeline_stats.INTERVIEW }}</div>
+                                    <div class="stat-label">Interview</div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 col-sm-4 mb-3">
+                                <div class="stat-box">
+                                    <div class="stat-number" style="color: #20c997;">{{ pipeline_stats.OFFER }}</div>
+                                    <div class="stat-label">Offer</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Summary Row -->
+                        <div class="row text-center border-top pt-3 mt-2">
+                            <div class="col-4">
+                                <strong>Active:</strong> {{ pipeline_stats.TOTAL_ACTIVE }}
+                            </div>
+                            <div class="col-4">
+                                <strong>Closed:</strong> {{ pipeline_stats.TOTAL_CLOSED }}
+                            </div>
+                            <div class="col-4">
+                                <strong>Total:</strong> {{ pipeline_stats.TOTAL_ALL }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
                 <!-- Active Search Terms Widget -->
                 <div class="card mb-4" id="search-term-manager">
                     <div class="card-header">
@@ -134,15 +199,21 @@
                     </div>
                 </div>
 
-                <!-- Job Matches Database Link -->
+                <!-- Job Matches Database & Kanban Board Links -->
                 <div class="card mb-4">
                     <div class="card-body text-center">
-                        <h3><i class="bi bi-table"></i> Job Match Results</h3>
-                        <p class="text-muted">View and filter all job matches across all search terms and CV versions</p>
-                        <a href="{{ url_for('job_matching.view_all_matches') }}" 
-                           class="btn btn-primary btn-lg">
-                            <i class="bi bi-table"></i> Open Job Matches Database
-                        </a>
+                        <h3><i class="bi bi-clipboard-data"></i> Job Match Results</h3>
+                        <p class="text-muted">View and manage job matches across all search terms and CV versions</p>
+                        <div class="d-flex justify-content-center gap-3">
+                            <a href="{{ url_for('job_matching.view_all_matches') }}" 
+                               class="btn btn-primary btn-lg">
+                                <i class="bi bi-table"></i> List View
+                            </a>
+                            <a href="{{ url_for('job_matching.kanban_board') }}" 
+                               class="btn btn-success btn-lg">
+                                <i class="bi bi-kanban"></i> Kanban Board
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>

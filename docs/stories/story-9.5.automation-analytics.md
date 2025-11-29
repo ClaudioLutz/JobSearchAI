@@ -2,8 +2,9 @@
 
 ## Story Info
 **Epic:** [Epic 9: Job Stage Classification](epic-9-job-stage-classification.md)
-**Status:** Planned
+**Status:** Completed
 **Effort:** 3 Story Points
+**Completed:** 2025-11-29
 
 ## Goal
 Implement smart automations to reduce manual effort and provide basic analytics on the job search progress.

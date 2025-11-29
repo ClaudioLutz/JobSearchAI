@@ -2,8 +2,9 @@
 
 ## Story Info
 **Epic:** [Epic 9: Job Stage Classification](epic-9-job-stage-classification.md)
-**Status:** Planned
+**Status:** Completed
 **Effort:** 8 Story Points
+**Completed:** 2025-11-29
 
 ## Goal
 Implement a Kanban board visualization to manage the job application pipeline effectively.
@@ -636,3 +637,108 @@ document.querySelectorAll('.column-body').forEach(column => {
 - Collapse/expand columns
 - Card detail preview on hover
 - Persistence of column width/order preferences
+
+## Post-Implementation Issues and Fixes
+
+### Bug Fix: Column Name Mismatch (2025-11-29)
+
+**Issue:**
+```
+sqlite3.OperationalError: no such column: jm.timestamp
+```
+
+When accessing the Kanban board route, the application crashed with a SQLite error because the query was attempting to order by `jm.timestamp`, but this column does not exist in the `job_matches` table.
+
+**Root Cause:**
+The SQL query in the `kanban_board()` function used an incorrect column name:
+```sql
+ORDER BY jm.timestamp DESC  -- ❌ Wrong column name
+```
+
+According to the database schema defined in Story 9.1, the correct column name is `matched_at`, not `timestamp`.
+
+**Fix Applied:**
+Updated line 1158 in `blueprints/job_matching_routes.py` to use the correct column name:
+```sql
+ORDER BY jm.matched_at DESC  -- ✅ Correct column name
+```
+
+**Impact:**
+- The Kanban board now loads successfully
+- Jobs are correctly ordered by their match date (most recent first)
+- No changes to database schema were required
+
+**Lesson Learned:**
+When implementing new features that query the database, always verify column names against the actual schema definition rather than assuming based on common patterns. The `view_all_matches()` function in the same file correctly used `matched_at`, which served as the reference for this fix.
+
+### Bug Fix: Missing CV Versions Causing Empty Kanban Board (2025-11-29)
+
+**Issue:**
+```
+Kanban board displayed no jobs despite 194 jobs existing in database with proper status classification.
+Dashboard stats showed 192 MATCHED, 1 INTERESTED, 1 APPLIED but kanban showed 0 in all columns.
+```
+
+**Root Cause:**
+The `cv_versions` table was empty (0 entries), but 194 job matches existed with valid `cv_key` values. The kanban board's `kanban_board()` function called `get_cv_versions()` which returned an empty list, causing:
+1. No CV to be selected for filtering
+2. The query `WHERE jm.cv_key = ?` to fail with NULL parameter
+3. Zero jobs displayed despite proper classification data existing
+
+**Investigation Results:**
+```
+Database State:
+- CV Versions Table: 0 entries (EMPTY)
+- Job Matches: 194 jobs with cv_key='2d6c667b8e6bf03b'
+- Application Statuses: 192 MATCHED, 1 INTERESTED, 1 APPLIED
+- Root Issue: cv_key exists in job_matches but not registered in cv_versions
+```
+
+**Fix Applied:**
+Added fallback logic in `blueprints/job_matching_routes.py` `kanban_board()` function (lines 1124-1138):
+
+```python
+# Get CV versions for filter
+cv_versions = get_cv_versions()
+
+# FALLBACK: If no CV versions registered, get cv_keys directly from job_matches
+if not cv_versions:
+    logger.warning("No CV versions found in cv_versions table, using cv_keys from job_matches")
+    db = JobMatchDatabase()
+    db.connect()
+    cursor = db.conn.cursor()
+    cursor.execute("""
+        SELECT DISTINCT cv_key 
+        FROM job_matches 
+        WHERE cv_key IS NOT NULL 
+        ORDER BY cv_key
+    """)
+    cv_keys = cursor.fetchall()
+    db.close()
+    
+    # Convert to same format as get_cv_versions: [(cv_key, display_name, date)]
+    cv_versions = [(row[0], f"CV {row[0][:8]}...", None) for row in cv_keys]
+    logger.info(f"Found {len(cv_versions)} distinct cv_keys in job_matches")
+```
+
+**Impact:**
+- ✅ Kanban board now displays all 194 jobs correctly
+- ✅ Jobs properly grouped by status (192 MATCHED, 1 INTERESTED, 1 APPLIED)
+- ✅ Graceful degradation when cv_versions table is empty
+- ✅ CV selector shows "CV 2d6c667b..." as the display name
+- ✅ No database schema changes required
+
+**Testing:**
+```python
+# Test confirmed:
+- Fallback activated when cv_versions empty
+- Retrieved 1 distinct cv_key from job_matches
+- Successfully queried 194 jobs with that cv_key
+- Correctly grouped jobs by status
+```
+
+**Lesson Learned:**
+Systems should gracefully handle missing reference data by falling back to the primary data source. In this case, the `cv_versions` table acts as metadata/cache, but the authoritative cv_key data lives in `job_matches`. The kanban board should work even if the metadata table is empty, by querying the primary data source directly.
+
+**Related Issue:**
+This suggests that the CV registration process (`get_or_create_cv_metadata` in `utils/cv_utils.py`) may not be called during job matching, leaving the cv_versions table empty. Future enhancement should ensure CV metadata is registered when jobs are matched.

@@ -771,3 +771,200 @@ header p {
         top: 60px;
     }
 }
+
+/* ============================================
+   Application Status Badge Styles (Story 9.3)
+   ============================================ */
+
+/* Status Badge Base Styles */
+.status-badge {
+    font-weight: 500;
+    font-size: 0.85rem;
+    padding: 0.35em 0.65em;
+    cursor: default;
+    transition: all 0.2s ease;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.status-badge:hover {
+    opacity: 0.9;
+    transform: scale(1.05);
+}
+
+/* Status-Specific Colors */
+.status-badge[data-current-status="MATCHED"] {
+    background-color: #6c757d;
+    color: white;
+}
+
+.status-badge[data-current-status="INTERESTED"] {
+    background-color: #0d6efd;
+    color: white;
+}
+
+.status-badge[data-current-status="PREPARING"] {
+    background-color: #ffc107;
+    color: #000;
+}
+
+.status-badge[data-current-status="APPLIED"] {
+    background-color: #198754;
+    color: white;
+}
+
+.status-badge[data-current-status="INTERVIEW"] {
+    background-color: #6f42c1;
+    color: white;
+}
+
+.status-badge[data-current-status="OFFER"] {
+    background-color: #20c997;
+    color: white;
+}
+
+.status-badge[data-current-status="REJECTED"] {
+    background-color: #dc3545;
+    color: white;
+}
+
+.status-badge[data-current-status="ARCHIVED"] {
+    background-color: #343a40;
+    color: white;
+}
+
+/* Loading State */
+.status-badge.updating {
+    opacity: 0.6;
+    pointer-events: none;
+    position: relative;
+}
+
+.status-badge.updating::after {
+    content: " ...";
+    animation: dots 1s infinite;
+}
+
+@keyframes dots {
+    0%, 20% { content: " ."; }
+    40% { content: " .."; }
+    60%, 100% { content: " ..."; }
+}
+
+/* Stale indicator */
+.stale-indicator {
+    color: #ffc107;
+    margin-left: 0.5rem;
+    font-size: 0.9em;
+}
+
+/* Status dropdown in actions */
+.status-dropdown {
+    min-width: 180px;
+}
+
+.status-dropdown .dropdown-item {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
+.status-dropdown .dropdown-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.25em 0.5em;
+    }
+    
+    .dropdown-menu.status-dropdown {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    
+    .stale-indicator {
+        font-size: 0.8em;
+    }
+}
+
+/* Toast Container for Status Updates */
+.toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9999;
+}
+
+.toast-container .toast {
+    min-width: 300px;
+    background-color: var(--bg-secondary-dark);
+    border: 1px solid var(--border-dark);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.toast-container .toast.bg-success {
+    background-color: #198754 !important;
+    color: white;
+}
+
+.toast-container .toast.bg-danger {
+    background-color: #dc3545 !important;
+    color: white;
+}
+
+.toast-container .toast-header {
+    background-color: rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.toast-container .toast-body {
+    color: white;
+}
+
+@media (max-width: 768px) {
+    .toast-container {
+        right: 10px;
+        left: 10px;
+        bottom: 10px;
+    }
+    
+    .toast-container .toast {
+        min-width: auto;
+        width: 100%;
+    }
+}
+
+/* ============================================
+   Pipeline Statistics Widget Styles (Story 9.5)
+   ============================================ */
+
+.stat-box {
+    padding: 1rem;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: bold;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: #a0a0a0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Mobile responsive for pipeline stats */
+@media (max-width: 576px) {
+    .stat-number {
+        font-size: 1.5rem;
+    }
+    
+    .stat-label {
+        font-size: 0.75rem;
+    }
+}

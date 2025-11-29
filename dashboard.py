@@ -342,6 +342,7 @@ def create_app():
     from blueprints.motivation_letter_routes import motivation_letter_bp
     from blueprints.linkedin_routes import linkedin_bp
     from blueprints.settings_routes import bp as settings_bp
+    from blueprints.application_routes import application_bp
 
     app.register_blueprint(auth)
     app.register_blueprint(cv_bp)
@@ -350,6 +351,7 @@ def create_app():
     app.register_blueprint(motivation_letter_bp)
     app.register_blueprint(linkedin_bp)
     app.register_blueprint(settings_bp)
+    app.register_blueprint(application_bp)
 
     # --- Core Routes (kept in this file) ---
     @app.route('/operation_status/<operation_id>')
@@ -372,6 +374,15 @@ def create_app():
     @login_required
     def index():
         """Render the main dashboard page"""
+        # Get selected CV for stats (if available)
+        from flask import session
+        from services.application_service import get_application_pipeline_stats
+        
+        selected_cv = session.get('selected_cv')
+        
+        # Get pipeline statistics for selected CV
+        pipeline_stats = get_application_pipeline_stats(selected_cv)
+        
         # Get list of available CVs with timestamps
         cv_dir = Path('process_cv/cv-data')
         cv_files_data = []
@@ -513,7 +524,8 @@ def create_app():
                               cv_files=cv_files_data,
                               job_data_files=job_data_files_data,
                               report_files=report_files_data,
-                              generated_letters=generated_letters_data) # Pass new list
+                              generated_letters=generated_letters_data,
+                              pipeline_stats=pipeline_stats)
 
     @app.route('/delete_files', methods=['POST'])
     @login_required

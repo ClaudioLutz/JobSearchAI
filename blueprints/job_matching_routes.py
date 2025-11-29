@@ -800,12 +800,28 @@ def view_all_matches():
         cursor.execute(count_sql, params)
         total_count = cursor.fetchone()[0]
         
-        # Get paginated results
+        # Get paginated results with application status
         query_sql = f"""
             SELECT 
-                job_url, job_title, company_name, location,
-                overall_match, search_term, matched_at, cv_key
-            FROM job_matches
+                jm.id,
+                jm.job_url,
+                jm.job_title,
+                jm.company_name,
+                jm.location,
+                jm.overall_match,
+                jm.search_term,
+                jm.matched_at,
+                jm.cv_key,
+                COALESCE(app.status, 'MATCHED') as status,
+                app.updated_at,
+                CASE 
+                    WHEN app.status = 'PREPARING' 
+                        AND julianday('now') - julianday(app.updated_at) > 7 
+                    THEN 1 
+                    ELSE 0 
+                END as is_stale
+            FROM job_matches jm
+            LEFT JOIN applications app ON jm.id = app.job_match_id
             WHERE {where_sql}
             ORDER BY {filters['sort_by']}
             LIMIT ? OFFSET ?
@@ -814,17 +830,21 @@ def view_all_matches():
         
         results = []
         for row in cursor.fetchall():
-            score = row[4]
+            score = row[5]
             result_dict = {
-                'job_url': row[0],
-                'job_title': row[1],
-                'company_name': row[2],
-                'location': row[3],
+                'id': row[0],  # Include job_match_id for frontend API calls
+                'job_url': row[1],
+                'job_title': row[2],
+                'company_name': row[3],
+                'location': row[4],
                 'overall_match': score,
                 'score_class': get_score_class(score),
-                'search_term': row[5],
-                'matched_at': row[6],
-                'cv_key': row[7]
+                'search_term': row[6],
+                'matched_at': row[7],
+                'cv_key': row[8],
+                'status': row[9],  # Application status
+                'status_updated_at': row[10],  # Last status update timestamp
+                'is_stale': bool(row[11])  # Stale indicator (7+ days in PREPARING)
             }
             
             # Add file existence checks
@@ -1094,3 +1114,102 @@ def api_job_matches():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@job_matching_bp.route('/kanban')
+@login_required
+def kanban_board():
+    """Display Kanban board view of job applications."""
+    from utils.cv_utils import get_cv_versions
+    from utils.db_utils import JobMatchDatabase
+    
+    # Get CV versions for filter
+    cv_versions = get_cv_versions()
+    
+    # FALLBACK: If no CV versions registered, get cv_keys directly from job_matches
+    if not cv_versions:
+        logger.warning("No CV versions found in cv_versions table, using cv_keys from job_matches")
+        db = JobMatchDatabase()
+        db.connect()
+        cursor = db.conn.cursor()
+        cursor.execute("""
+            SELECT DISTINCT cv_key 
+            FROM job_matches 
+            WHERE cv_key IS NOT NULL 
+            ORDER BY cv_key
+        """)
+        cv_keys = cursor.fetchall()
+        db.close()
+        
+        # Convert to same format as get_cv_versions: [(cv_key, display_name, date)]
+        cv_versions = [(row[0], f"CV {row[0][:8]}...", None) for row in cv_keys]
+        logger.info(f"Found {len(cv_versions)} distinct cv_keys in job_matches")
+    
+    # Get selected CV from query param or session
+    selected_cv = request.args.get('cv_key')
+    
+    if not selected_cv and cv_versions:
+        selected_cv = cv_versions[0][0]  # Default to first CV
+    
+    # Fetch all jobs with status
+    db = JobMatchDatabase()
+    db.connect()
+    
+    query = '''
+        SELECT 
+            jm.id,
+            jm.job_url,
+            jm.job_title,
+            jm.company_name,
+            jm.overall_match,
+            COALESCE(app.status, 'MATCHED') as status,
+            app.updated_at,
+            CASE 
+                WHEN app.status = 'PREPARING' 
+                    AND julianday('now') - julianday(app.updated_at) > 7 
+                THEN 1 
+                ELSE 0 
+            END as is_stale
+        FROM job_matches jm
+        LEFT JOIN applications app ON jm.id = app.job_match_id
+        WHERE jm.cv_key = ?
+        ORDER BY jm.matched_at DESC
+    '''
+    
+    cursor = db.conn.cursor()
+    cursor.execute(query, (selected_cv,))
+    results = cursor.fetchall()
+    db.close()
+    
+    # Group jobs by status
+    pipeline = {
+        'MATCHED': [],
+        'INTERESTED': [],
+        'PREPARING': [],
+        'APPLIED': [],
+        'INTERVIEW': [],
+        'OFFER': [],
+        'REJECTED': [],
+        'ARCHIVED': []
+    }
+    
+    for row in results:
+        job = {
+            'id': row[0],
+            'url': row[1],
+            'title': row[2],
+            'company': row[3],
+            'match_score': row[4],
+            'status': row[5],
+            'updated_at': row[6],
+            'is_stale': bool(row[7])
+        }
+        pipeline[row[5]].append(job)
+    
+    return render_template(
+        'kanban.html',
+        pipeline=pipeline,
+        cv_versions=cv_versions,
+        selected_cv=selected_cv,
+        show_archived=request.args.get('show_archived', 'false') == 'true'
+    )

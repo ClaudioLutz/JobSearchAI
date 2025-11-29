@@ -1,0 +1,151 @@
+/* Kanban Board Layout */
+.kanban-board {
+    display: flex;
+    gap: 1rem;
+    overflow-x: auto;
+    padding: 1rem 0;
+    min-height: 600px;
+}
+
+.kanban-column {
+    flex: 0 0 280px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+}
+
+.column-header {
+    padding: 1rem;
+    background: #e9ecef;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.column-header h5 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.column-body {
+    flex: 1;
+    padding: 0.5rem;
+    overflow-y: auto;
+    min-height: 400px;
+}
+
+/* Drag States */
+.column-body.drag-over {
+    background: #d1ecf1;
+    border: 2px dashed #0dcaf0;
+}
+
+/* Kanban Cards */
+.kanban-card {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    cursor: move;
+    transition: all 0.2s ease;
+}
+
+.kanban-card:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+}
+
+.kanban-card.dragging {
+    opacity: 0.5;
+    transform: rotate(2deg);
+}
+
+.kanban-card .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.kanban-card .card-body {
+    font-size: 0.9rem;
+}
+
+.kanban-card .job-link {
+    text-decoration: none;
+    color: #212529;
+    display: block;
+}
+
+.kanban-card .job-link:hover {
+    color: #0d6efd;
+}
+
+.kanban-card .card-footer {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #e9ecef;
+    font-size: 0.85rem;
+}
+
+.kanban-card.archived {
+    opacity: 0.7;
+}
+
+.empty-column {
+    text-align: center;
+    padding: 2rem 1rem;
+}
+
+/* Archived Column Styling */
+.archived-column {
+    background: #f1f3f5;
+    border-left: 3px solid #6c757d;
+}
+
+/* Badge Styles */
+.badge-sm {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    .kanban-board {
+        flex-direction: column;
+    }
+    
+    .kanban-column {
+        flex: 1 1 auto;
+        width: 100%;
+    }
+    
+    .column-body {
+        max-height: 400px;
+    }
+}
+
+/* Toast Styles */
+.toast {
+    min-width: 250px;
+}
+
+.toast.bg-success {
+    background-color: #198754 !important;
+}
+
+.toast.bg-danger {
+    background-color: #dc3545 !important;
+}
+
+.toast.text-white .toast-header,
+.toast.text-white .toast-body {
+    color: white;
+}

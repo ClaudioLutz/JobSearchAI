@@ -22,6 +22,8 @@ from word_template_generator import json_to_docx, create_word_document_from_json
 from job_details_utils import structure_text_with_openai, has_sufficient_content, get_job_details
 from letter_generation_utils import generate_motivation_letter, generate_email_text_only # Import the correct generator functions
 from utils.decorators import admin_required
+from services.application_service import update_application_status, get_application_status
+from utils.db_utils import JobMatchDatabase
 
 motivation_letter_bp = Blueprint('motivation_letter', __name__, url_prefix='/motivation_letter')
 
@@ -72,6 +74,49 @@ def generate_motivation_letter_route():
         if not summary_path.exists():
             logger.error(f"CV summary file not found: {summary_path}")
             return jsonify({'success': False, 'error': f'CV summary file not found: {summary_path.name}'}), 400
+        
+        # --- Auto-transition status to PREPARING on letter generation ---
+        try:
+            from utils.url_utils import URLNormalizer
+            normalizer = URLNormalizer()
+            normalized_url = normalizer.normalize(job_url)
+            
+            # Get CV key from filename (remove _summary.txt)
+            cv_key = cv_filename
+            
+            # Find the job match
+            db = JobMatchDatabase()
+            db.create_connection()
+            cursor = db.conn.cursor()
+            
+            cursor.execute('''
+                SELECT id FROM job_matches 
+                WHERE job_url = ? AND cv_key = ?
+            ''', (normalized_url, cv_key))
+            
+            result = cursor.fetchone()
+            db.close_connection()
+            
+            if result:
+                job_match_id = result[0]
+                
+                # Check current status
+                current_status = get_application_status(job_match_id)
+                
+                # Only update if in early stages (MATCHED or INTERESTED)
+                if current_status in ['MATCHED', 'INTERESTED']:
+                    success = update_application_status(job_match_id, 'PREPARING')
+                    if success:
+                        logger.info(f"Auto-transitioned job {job_match_id} to PREPARING on letter generation")
+                    else:
+                        logger.warning(f"Failed to auto-transition job {job_match_id} to PREPARING")
+                else:
+                    logger.info(f"Skipped auto-transition for job {job_match_id} (current status: {current_status})")
+            else:
+                logger.warning(f"Could not find job match for auto-transition (URL: {job_url}, CV: {cv_key})")
+        except Exception as e:
+            # Don't fail letter generation if status update fails
+            logger.exception(f"Error during auto-transition on letter generation: {str(e)}")
 
         # --- Check if letter already exists --- ONLY if not using manual text input ---
         if not manual_job_text:

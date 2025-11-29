@@ -249,3 +249,50 @@ def validate_cv_file(cv_path: str) -> bool:
     except Exception as e:
         logger.error(f"CV file validation failed for {cv_path}: {e}")
         return False
+
+
+def get_cv_versions(db_conn: Optional[sqlite3.Connection] = None) -> list:
+    """
+    Get list of all CV versions from database.
+    
+    Args:
+        db_conn: Optional database connection. If not provided, creates a new connection.
+        
+    Returns:
+        List of tuples (cv_key, file_name, upload_date)
+        
+    Example:
+        >>> cvs = get_cv_versions()
+        >>> for cv_key, name, date in cvs:
+        ...     print(f"{name} ({cv_key[:8]}...) uploaded {date}")
+    """
+    close_conn = False
+    
+    try:
+        # Create connection if not provided
+        if db_conn is None:
+            from utils.db_utils import JobMatchDatabase
+            db = JobMatchDatabase()
+            db.connect()
+            db_conn = db.conn
+            close_conn = True
+        
+        cursor = db_conn.cursor()
+        cursor.execute("""
+            SELECT cv_key, file_name, upload_date
+            FROM cv_versions
+            ORDER BY upload_date DESC
+        """)
+        
+        results = cursor.fetchall()
+        logger.debug(f"Retrieved {len(results)} CV versions")
+        
+        return results
+        
+    except sqlite3.Error as e:
+        logger.error(f"Failed to retrieve CV versions: {e}")
+        return []
+        
+    finally:
+        if close_conn and db_conn:
+            db_conn.close()
