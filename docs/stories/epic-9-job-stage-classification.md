@@ -127,6 +127,22 @@ Transform JobSearchAI from a simple job discovery tool into a complete Applicant
 
 ---
 
+### 9.6: Open Application Folder from Job Title
+**Status:** Draft
+**Effort:** 3 Story Points (0.5 days)
+**Documentation:** [story-9.6.open-application-folder.md](story-9.6.open-application-folder.md)
+
+**Goal:** Allow users to quickly access the application folder by copying its path to clipboard.
+
+**Key Deliverables:**
+- API endpoint to find and return application folder path
+- Clickable job titles in All Matches view
+- Folder icon in Kanban cards
+- Clipboard copy with toast notifications
+- Smart folder matching (highest numbered folder)
+
+---
+
 ## Compatibility Requirements
 
 - [ ] Must be backward compatible with existing `job_matches`.
