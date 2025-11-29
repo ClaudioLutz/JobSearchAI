@@ -163,11 +163,18 @@ class ConfigManager:
                 "max_results": 500
             },
             
-            # OpenAI API defaults (from various files)
+            # OpenAI API defaults (supports both GPT-4 and GPT-5.1)
             "openai": {
-                "model": "gpt-4.1",
+                "model": self.get_env("OPENAI_MODEL", "gpt-4.1"),
                 "temperature": 0.1,
-                "max_tokens": 1600
+                "max_tokens": 1600,
+                # New GPT-5.1 parameters
+                "reasoning_effort": self.get_env("OPENAI_REASONING_EFFORT", None),
+                "verbosity": self.get_env("OPENAI_VERBOSITY", None),
+                # Model selection helpers
+                "fast_model": "gpt-5.1",  # With reasoning_effort="none"
+                "reasoning_model": "gpt-5.1",  # With reasoning_effort="high"
+                "mini_model": "gpt-5-mini"  # Cost-effective option
             },
             
             # ScrapeGraphAI defaults (from settings.json if available)
@@ -276,11 +283,23 @@ def get_job_matcher_defaults() -> Dict[str, Any]:
     }
 
 def get_openai_defaults() -> Dict[str, Any]:
-    """Get the OpenAI API default parameters"""
+    """Get the OpenAI API default parameters (updated for GPT-5.1)"""
     return {
+        # Primary model configuration
         "model": config.get_default("openai", "model"),
+        
+        # Legacy GPT-4 parameters
         "temperature": config.get_default("openai", "temperature"),
-        "max_tokens": config.get_default("openai", "max_tokens")
+        "max_tokens": config.get_default("openai", "max_tokens"),
+        
+        # New GPT-5.1 parameters
+        "reasoning_effort": config.get_default("openai", "reasoning_effort"),
+        "verbosity": config.get_default("openai", "verbosity"),
+        
+        # Model selection helpers
+        "fast_model": config.get_default("openai", "fast_model"),
+        "reasoning_model": config.get_default("openai", "reasoning_model"),
+        "mini_model": config.get_default("openai", "mini_model")
     }
 
 def get_database_url() -> Optional[str]:

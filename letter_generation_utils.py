@@ -85,22 +85,80 @@ def generate_motivation_letter(cv_summary, job_details):
     else:
          logger.info(f"Using extracted salutation: '{extracted_salutation}'")
 
-    # Updated prompt: Include Contact Person in input, request contact_person in output JSON.
+    # Updated prompt: Optimized for GPT-5.1's advanced language capabilities
     prompt = """
-    Schreibe ein Motivationsschreiben aus den Informationen von der Webseite IN DER GLEICHEN SPRACHE WIE DIE INFORMATIONEN VON DER WEBSEITE! und dem Lebenslauf:
+    Erstelle ein professionelles Bewerbungsschreiben aus den folgenden Informationen. WICHTIG: Verwende die EXAKT GLEICHE SPRACHE wie die Stellenbeschreibung.
     
-    IMPORTANT INSTRUCTION: Write the motivation letter in THE EXACT SAME LANGUAGE as the job description. If the job description is in English, write in English. If it's in German, write in German. MATCH THE LANGUAGE OF THE JOB POSTING EXACTLY!
-    ## Lebenslauf des Bewerbers:\n{}\n
-    ## Stellenangebot (von der Webseite):\nTitel: {}\nFirma: {}\nOrt: {}\nBeschreibung: \n{}\nErforderliche Fähigkeiten: \n{}\nVerantwortlichkeiten: \n{}\nUnternehmensinformationen: \n{}\nAnrede (Salutation): {}\nAnsprechpartner (Contact Person): {}\n
-    Das Motivationsschreiben sollte:\n1. Professionell und überzeugend sein\n2. Die Qualifikationen und Erfahrungen des Bewerbers KONKRET mit den Anforderungen der Stelle verknüpfen\n3. Die Motivation des Bewerbers für die Stelle und das Unternehmen zum Ausdruck bringen\n4. Etwa eine halbe Seite lang sein (ca. 150-200 Wörter)\n5. In der gleichen Sprache wie die Jobbeschreibung verfasst sein\n6. Im formalen Bewerbungsstil mit Einleitung, Hauptteil, Schluss und Grußformel sein (OHNE die Anrede/greeting selbst zu generieren)\n7. SPEZIFISCH auf die Stellenanforderungen und Verantwortlichkeiten eingehen, die aus der Webseite extrahiert wurden\n8. Die Stärken des Bewerbers hervorheben, die besonders relevant für diese Position sind\n9. Auf die Unternehmenskultur und -werte eingehen, wenn diese Informationen verfügbar sind\n10. KONKRETE BEISPIELE aus dem Lebenslauf des Bewerbers verwenden, die zeigen, wie er/sie die Anforderungen erfüllt\n
-    WICHTIG: Falls die Firma der ausgeschriebenen Stell die "Universal-Job AG" ist, behandle sie als Personalvermittler in deinem Schreiben und passe den Inhalt entsprechend an. In diesem Fall wissen wir nicht wer die Stelle schlussendlich ausgeschrieben hat.\n
-    WICHTIG: Verwende die detaillierten Informationen aus der Stellenbeschreibung, um ein personalisiertes und spezifisches Motivationsschreiben zu erstellen. Gehe auf konkrete Anforderungen und Verantwortlichkeiten ein und zeige, wie der Bewerber diese erfüllen kann.\n
-    WICHTIG: Der Motivations Text darf maximal 200-300 Wörter beinhalten.\n"ß" soll als "ss" geschrieben werden.\n
-    ACHTE AUF DIE RECHTSCHREIBUNG UND GRAMMATIK DENN DAS IST EIN BEWERBUNGSSCHREIBEN!  \n
-
-    WICHTIG: Die Sprache des Motivationsschreibens MUSS mit der Sprache der Jobbeschreibung übereinstimmen! \n
-
-    Gib das Motivationsschreiben als JSON-Objekt mit folgender Struktur zurück (das 'greeting'-Feld wird später hinzugefügt):\n```json\n{{\n  "candidate_name": "Vollständiger Name des Bewerbers",\n  "candidate_address": "Straße und Hausnummer",\n  "candidate_city": "PLZ und Ort",\n  "candidate_email": "E-Mail-Adresse",\n  "candidate_phone": "Telefonnummer",\n  "company_name": "Name des Unternehmens",\n  "company_department": "Abteilung (falls bekannt, sonst 'Personalabteilung')",\n  "company_street_number": "Strasse und Hausnummerdes Unternehmens (falls bekannt)",\n  "company_plz_city": "Postleitzahl und Stadt (falls bekannt)",\n  "contact_person": "Name des Ansprechpartners (falls bekannt, sonst null)",\n  "date": "Ort, den [aktuelles Datum]",\n  "subject": "Bewerbung als [Stellentitel]",\n  "introduction": "Einleitungsabsatz",\n  "body_paragraphs": [\n    "Erster Hauptabsatz",\n    "Zweiter Hauptabsatz",\n    "Dritter Hauptabsatz (falls nötig)"\n  ],\n  "closing": "Schlussabsatz",\n  "signature": "Grussformel (z.B. 'Mit freundlichen Grüssen')",\n  "full_name": "Vollständiger Name des Bewerbers"\n}}\n```\nStelle sicher, dass alle Felder korrekt befüllt sind und das JSON-Format gültig ist. Das Feld 'greeting' wird NICHT von dir generiert.
+    CRITICAL: Write the motivation letter in THE EXACT SAME LANGUAGE as the job description. If the job description is in English, write in English. If in German, write in German. MATCH THE LANGUAGE PERFECTLY!
+    
+    ## Lebenslauf des Bewerbers:
+    {}
+    
+    ## Stellenangebot:
+    Titel: {}
+    Firma: {}
+    Ort: {}
+    Beschreibung: {}
+    Erforderliche Fähigkeiten: {}
+    Verantwortlichkeiten: {}
+    Unternehmensinformationen: {}
+    Anrede (Salutation): {}
+    Ansprechpartner (Contact Person): {}
+    
+    ## Anforderungen an das Bewerbungsschreiben:
+    
+    **Sprache & Rechtschreibung:**
+    - Verwende perfekte Grammatik und korrekte Rechtschreibung in der Zielsprache
+    - Bei deutschen Texten: Verwende korrekte Umlaute (ä, ö, ü) und ß gemäß aktueller deutscher Rechtschreibung
+    - Bei Schweizer Unternehmen kannst du "ss" statt "ß" verwenden (aber Umlaute beibehalten)
+    
+    **Inhalt & Struktur:**
+    1. Professionell und überzeugend
+    2. Konkrete Verknüpfung der Bewerber-Qualifikationen mit den Stellenanforderungen
+    3. Klare Motivation für die Position und das Unternehmen
+    4. Umfang: 200-300 Wörter (prägnant und aussagekräftig)
+    5. Formaler Bewerbungsstil: Einleitung, Hauptteil, Schluss (OHNE Anrede - diese wird separat hinzugefügt)
+    6. Spezifisch auf Stellenanforderungen und Verantwortlichkeiten eingehen
+    7. Relevante Stärken des Bewerbers hervorheben
+    8. Unternehmenskultur und -werte berücksichtigen (falls verfügbar)
+    9. Konkrete Beispiele aus dem Lebenslauf verwenden
+    
+    **Besondere Hinweise:**
+    - Falls die Firma "Universal-Job AG" ist: Behandle sie als Personalvermittler, da der tatsächliche Arbeitgeber unbekannt ist
+    - Verwende detaillierte Informationen aus der Stellenbeschreibung für maximale Personalisierung
+    - Zeige konkret, wie der Bewerber die geforderten Anforderungen erfüllt
+    
+    ## JSON-Ausgabeformat:
+    
+    Gib das Bewerbungsschreiben als valides JSON-Objekt zurück (das 'greeting'-Feld wird separat hinzugefügt):
+    
+    ```json
+    {{
+      "candidate_name": "Vollständiger Name des Bewerbers",
+      "candidate_address": "Straße und Hausnummer",
+      "candidate_city": "PLZ und Ort",
+      "candidate_email": "E-Mail-Adresse",
+      "candidate_phone": "Telefonnummer",
+      "company_name": "Name des Unternehmens",
+      "company_department": "Abteilung (falls bekannt, sonst 'Personalabteilung')",
+      "company_street_number": "Straße und Hausnummer des Unternehmens (falls bekannt)",
+      "company_plz_city": "Postleitzahl und Stadt (falls bekannt)",
+      "contact_person": "Name des Ansprechpartners (falls bekannt, sonst null)",
+      "date": "Ort, den [aktuelles Datum]",
+      "subject": "Bewerbung als [Stellentitel]",
+      "introduction": "Einleitungsabsatz",
+      "body_paragraphs": [
+        "Erster Hauptabsatz",
+        "Zweiter Hauptabsatz",
+        "Dritter Hauptabsatz (falls nötig)"
+      ],
+      "closing": "Schlussabsatz",
+      "signature": "Grußformel (z.B. 'Mit freundlichen Grüßen')",
+      "full_name": "Vollständiger Name des Bewerbers"
+    }}
+    ```
+    
+    Stelle sicher, dass alle Felder korrekt ausgefüllt sind und das JSON-Format valide ist.
     """.format(
         cv_summary,
         job_details.get('Job Title', 'N/A'),
@@ -117,8 +175,17 @@ def generate_motivation_letter(cv_summary, job_details):
     # Get OpenAI defaults
     openai_defaults = get_openai_defaults()
     
-    # Use generate_json_from_prompt to get structured JSON result
-    system_prompt = "You are a professional job application consultant who creates motivation letters. Always use the SAME LANGUAGE as the job description provided in the prompt. Adapt your writing style and language to match the job posting language perfectly."
+    # Use generate_json_from_prompt with enhanced system prompt for GPT-5.1
+    system_prompt = """You are an expert job application consultant with native-level proficiency in German and English. 
+    
+    Your specialties:
+    - Creating compelling, professional motivation letters
+    - Perfect grammar and orthography in both German and English
+    - Matching the exact language and tone of job descriptions
+    - Using correct German special characters (ä, ö, ü, ß) when writing in German
+    - Adapting writing style to match company culture and job requirements
+    
+    Always match the language of the job description exactly and use proper orthography."""
     motivation_letter_json = generate_json_from_prompt(
         prompt=prompt,
         system_prompt=system_prompt,
@@ -259,43 +326,61 @@ def generate_email_text_only(cv_summary, job_details):
     greeting = f"Sehr geehrte/r Herr/Frau {contact_person.split()[-1]}" if contact_person else "Sehr geehrte Damen und Herren"
 
     prompt = f"""
-    Erstelle einen kurzen, kreativen E-Mail-Text (ca. 50-70 Wörter) basierend auf dem Lebenslauf und der Stellenbeschreibung. Dieser Text dient als Begleittext für eine E-Mail-Bewerbung, in der die Anhänge (Lebenslauf, Motivationsschreiben) gesendet werden.
+    Erstelle einen kurzen, professionellen E-Mail-Begleittext (50-70 Wörter) für eine Bewerbung per E-Mail.
     
-    IMPORTANT INSTRUCTION: Write the email text in THE EXACT SAME LANGUAGE as the job description. If the job description is in English, write in English. If it's in German, write in German. MATCH THE LANGUAGE OF THE JOB POSTING EXACTLY!
+    CRITICAL: Write the email text in THE EXACT SAME LANGUAGE as the job description. If the job description is in English, write in English. If in German, write in German. MATCH THE LANGUAGE PERFECTLY!
 
-    Der Text sollte:
-    - Professionell, aber ansprechend und nicht zu generisch sein.
-    - Kurz auf die beworbene Stelle ({job_details.get('Job Title', 'diese interessante Position')}) bei {job_details.get('Company Name', 'Ihrem Unternehmen')} eingehen.
-    - Die Motivation oder eine Schlüsselqualifikation des Bewerbers andeuten.
-    - Auf die angehängten Dokumente (Lebenslauf, Motivationsschreiben) hinweisen.
-    - Mit einer passenden Grußformel enden.
-    - In der gleichen Sprache wie die Jobbeschreibung verfasst sein.
-    - "ß" soll als "ss" geschrieben werden.
+    ## Anforderungen an den E-Mail-Text:
+    
+    **Sprache & Stil:**
+    - Verwende perfekte Grammatik und korrekte Rechtschreibung in der Zielsprache
+    - Bei deutschen Texten: Verwende korrekte Umlaute (ä, ö, ü) und ß gemäß deutscher Rechtschreibung
+    - Bei Schweizer Unternehmen kannst du "ss" statt "ß" verwenden (aber Umlaute beibehalten)
+    - Professionell, aber ansprechend und nicht generisch
+    
+    **Inhalt:**
+    - Bezug zur Position: {job_details.get('Job Title', 'diese interessante Position')} bei {job_details.get('Company Name', 'Ihrem Unternehmen')}
+    - Kurze Andeutung einer Schlüsselqualifikation oder Motivation
+    - Hinweis auf die angehängten Dokumente (Lebenslauf, Motivationsschreiben)
+    - Passende Grußformel
+    - Exakt in der Sprache der Jobbeschreibung verfasst
 
+    ## Kontext:
+    
     Lebenslauf-Zusammenfassung:
     {cv_summary}
 
-    Stellenbeschreibung (Auszug):
-    Titel: {job_details.get('Job Title', 'N/A')}
-    Firma: {job_details.get('Company Name', 'N/A')}
-    Beschreibung: {job_details.get('Job Description', 'N/A')[:200]}...
-    Ansprechpartner: {contact_person if contact_person else 'Nicht angegeben'}
+    Stellenbeschreibung:
+    - Titel: {job_details.get('Job Title', 'N/A')}
+    - Firma: {job_details.get('Company Name', 'N/A')}
+    - Beschreibung: {job_details.get('Job Description', 'N/A')[:200]}...
+    - Ansprechpartner: {contact_person if contact_person else 'Nicht angegeben'}
 
-    Gib NUR den E-Mail-Text als JSON-Objekt mit folgender Struktur zurück:
+    ## JSON-Ausgabe:
+    
+    Gib NUR den E-Mail-Text als JSON-Objekt zurück:
     ```json
     {{
-      "email_text": "Der generierte E-Mail-Text hier (ca. 50-70 Wörter)."
+      "email_text": "Der generierte E-Mail-Text hier (50-70 Wörter)"
     }}
     ```
-    Stelle sicher, dass das JSON-Format gültig ist und nur das Feld "email_text" enthält.
+    Stelle sicher, dass das JSON valide ist und nur das Feld "email_text" enthält.
     """
 
     # Get OpenAI defaults with slight adjustment for creativity
     openai_defaults = get_openai_defaults()
     temperature = 0.8  # Slightly higher temperature for creativity
     
-    # Use generate_json_from_prompt with a custom system message
-    system_prompt = "You are an assistant who creates concise and creative email texts for job applications. Always use the SAME LANGUAGE as the job description provided in the prompt. Adapt your writing style and language to match the job posting language perfectly."
+    # Use generate_json_from_prompt with enhanced system prompt for GPT-5.1
+    system_prompt = """You are an expert at crafting professional email texts for job applications with native-level proficiency in German and English.
+    
+    Your specialties:
+    - Creating concise, engaging email texts
+    - Perfect grammar and orthography in both German and English
+    - Matching the exact language and tone of job descriptions
+    - Using correct German special characters (ä, ö, ü, ß) when writing in German
+    
+    Always match the language of the job description exactly and use proper orthography."""
     email_json = generate_json_from_prompt(
         prompt=prompt,
         system_prompt=system_prompt, 

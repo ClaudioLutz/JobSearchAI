@@ -127,6 +127,20 @@
             </form>
         </div>
 
+        <!-- Feature Discovery Banner -->
+        <div class="alert alert-info alert-dismissible fade show" role="alert" id="linkedin-feature-banner">
+            <div class="d-flex align-items-center">
+                <div class="me-3">
+                    <i class="bi bi-linkedin" style="font-size: 2rem;"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <h5 class="alert-heading mb-1"><strong>🎉 New Feature:</strong> LinkedIn Outreach Generator!</h5>
+                    <p class="mb-0">Generate personalized LinkedIn messages instantly! Click the <i class="bi bi-linkedin"></i> button next to any job to create Connection Requests, Peer Networking messages, and InMail templates.</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        </div>
+
         <!-- Results Summary -->
         <div class="results-summary">
             <p>Showing {{ results|length }} of {{ total_count }} matches (Page {{ current_page }} of {{ total_pages }})</p>
@@ -185,25 +199,52 @@
                         </td>
                         <td>{{ match.matched_at[:10] if match.matched_at else 'N/A' }}</td>
                         <td>
-                            <!-- Actions Dropdown -->
-                            <div class="dropdown">
-                                <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" 
-                                        id="actionsDropdown{{ loop.index }}" 
-                                        data-bs-toggle="dropdown" 
-                                        aria-expanded="false">
-                                    Actions
+                            <div class="d-flex gap-1">
+                                <!-- LinkedIn Button - Direct Access -->
+                                <button class="btn btn-outline-primary btn-sm linkedin-btn" 
+                                        type="button"
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#linkedinModal"
+                                        data-job-url="{{ match.job_url }}"
+                                        data-job-title="{{ match.job_title }}"
+                                        data-company="{{ match.company_name }}"
+                                        title="Generate LinkedIn Outreach Messages">
+                                    <i class="bi bi-linkedin"></i>
                                 </button>
-                                <ul class="dropdown-menu" aria-labelledby="actionsDropdown{{ loop.index }}">
-                                    <!-- View Actions -->
-                                    <li><a class="dropdown-item" href="#" 
-                                           onclick="viewReasoning('{{ match.job_url }}'); return false;">
-                                        <i class="bi bi-eye"></i> View Reasoning
-                                    </a></li>
-                                    <li><a class="dropdown-item" href="{{ match.job_url }}" 
-                                           target="_blank" rel="noopener noreferrer">
-                                        <i class="bi bi-box-arrow-up-right"></i> View Job Ad
-                                    </a></li>
-                                    <li><hr class="dropdown-divider"></li>
+                                
+                                <!-- Actions Dropdown -->
+                                <div class="dropdown">
+                                    <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" 
+                                            id="actionsDropdown{{ loop.index }}" 
+                                            data-bs-toggle="dropdown" 
+                                            aria-expanded="false">
+                                        Actions
+                                    </button>
+                                    <ul class="dropdown-menu" aria-labelledby="actionsDropdown{{ loop.index }}">
+                                        <!-- LinkedIn Action (also in dropdown for discoverability) -->
+                                        <li>
+                                            <button class="dropdown-item linkedin-btn-dropdown" 
+                                                    type="button"
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#linkedinModal"
+                                                    data-job-url="{{ match.job_url }}"
+                                                    data-job-title="{{ match.job_title }}"
+                                                    data-company="{{ match.company_name }}">
+                                                <i class="bi bi-linkedin"></i> LinkedIn Outreach
+                                            </button>
+                                        </li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        
+                                        <!-- View Actions -->
+                                        <li><a class="dropdown-item" href="#" 
+                                               onclick="viewReasoning('{{ match.job_url }}'); return false;">
+                                            <i class="bi bi-eye"></i> View Reasoning
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="{{ match.job_url }}" 
+                                               target="_blank" rel="noopener noreferrer">
+                                            <i class="bi bi-box-arrow-up-right"></i> View Job Ad
+                                        </a></li>
+                                        <li><hr class="dropdown-divider"></li>
                                     
                                     <!-- Generation Actions -->
                                     <li><a class="dropdown-item" href="#" 
@@ -297,6 +338,70 @@
         </div>
     </div>
 
+    <!-- LinkedIn Outreach Modal -->
+    <div class="modal fade" id="linkedinModal" tabindex="-1" aria-labelledby="linkedinModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="linkedinModalLabel">LinkedIn Outreach Generator</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div id="linkedinLoading" class="text-center d-none">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Generating personalized messages...</p>
+            </div>
+
+            <div id="linkedinContent" class="d-none">
+                <ul class="nav nav-tabs" id="linkedinTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="connection-tab" data-bs-toggle="tab" data-bs-target="#connection" type="button" role="tab" aria-controls="connection" aria-selected="true">Connection Request</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="peer-tab" data-bs-toggle="tab" data-bs-target="#peer" type="button" role="tab" aria-controls="peer" aria-selected="false">Peer Networking</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="inmail-tab" data-bs-toggle="tab" data-bs-target="#inmail" type="button" role="tab" aria-controls="inmail" aria-selected="false">InMail</button>
+                    </li>
+                </ul>
+                <div class="tab-content p-3 border border-top-0 rounded-bottom" id="linkedinTabContent">
+                    <div class="tab-pane fade show active" id="connection" role="tabpanel" aria-labelledby="connection-tab">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-muted">Max 300 chars</small>
+                            <button class="btn btn-sm btn-outline-primary copy-btn" data-target="connection-text">Copy</button>
+                        </div>
+                        <textarea class="form-control" id="connection-text" rows="5" readonly></textarea>
+                        <div class="text-end mt-1"><small id="connection-count" class="text-muted">0/300</small></div>
+                    </div>
+                    <div class="tab-pane fade" id="peer" role="tabpanel" aria-labelledby="peer-tab">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-muted">Casual tone</small>
+                            <button class="btn btn-sm btn-outline-primary copy-btn" data-target="peer-text">Copy</button>
+                        </div>
+                        <textarea class="form-control" id="peer-text" rows="8" readonly></textarea>
+                    </div>
+                    <div class="tab-pane fade" id="inmail" role="tabpanel" aria-labelledby="inmail-tab">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-muted">Longer pitch</small>
+                            <button class="btn btn-sm btn-outline-primary copy-btn" data-target="inmail-text">Copy</button>
+                        </div>
+                        <textarea class="form-control" id="inmail-text" rows="10" readonly></textarea>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="linkedinError" class="alert alert-danger d-none mt-3"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-primary" id="regenerateBtn">Regenerate</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Manual Text Input Modal -->
     <div class="modal fade" id="manualTextModal" tabindex="-1" aria-labelledby="manualTextModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
@@ -328,5 +433,109 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='js/all_matches.js') }}"></script>
+    
+    <script>
+        // LinkedIn Modal Functionality
+        let currentJobUrl = '';
+        let currentCvFilename = 'Lebenslauf_-_Lutz_Claudio'; // Default CV filename
+
+        var linkedinModal = document.getElementById('linkedinModal');
+        linkedinModal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget;
+            var jobUrl = button.getAttribute('data-job-url');
+            var jobTitle = button.getAttribute('data-job-title');
+            var company = button.getAttribute('data-company');
+            
+            currentJobUrl = jobUrl;
+            
+            // Update title
+            var modalTitle = linkedinModal.querySelector('.modal-title');
+            modalTitle.textContent = 'LinkedIn Outreach: ' + company;
+            
+            // Reset state
+            document.getElementById('linkedinContent').classList.add('d-none');
+            document.getElementById('linkedinError').classList.add('d-none');
+            document.getElementById('linkedinLoading').classList.remove('d-none');
+            
+            // Call API
+            generateLinkedInMessages(jobUrl, currentCvFilename);
+        });
+
+        document.getElementById('regenerateBtn').addEventListener('click', function() {
+            document.getElementById('linkedinContent').classList.add('d-none');
+            document.getElementById('linkedinLoading').classList.remove('d-none');
+            document.getElementById('linkedinError').classList.add('d-none');
+            generateLinkedInMessages(currentJobUrl, currentCvFilename);
+        });
+
+        function generateLinkedInMessages(jobUrl, cvFilename) {
+            fetch('/linkedin/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    job_url: jobUrl,
+                    cv_filename: cvFilename
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('linkedinLoading').classList.add('d-none');
+                
+                if (data.success) {
+                    document.getElementById('linkedinContent').classList.remove('d-none');
+                    
+                    // Populate fields
+                    const msgs = data.data;
+                    document.getElementById('connection-text').value = msgs.connection_request_hiring_manager;
+                    document.getElementById('peer-text').value = msgs.peer_networking;
+                    document.getElementById('inmail-text').value = msgs.inmail_message;
+                    
+                    // Update char count
+                    const charCount = msgs.connection_request_hiring_manager.length;
+                    document.getElementById('connection-count').textContent = charCount + '/300';
+                    if (charCount > 300) {
+                        document.getElementById('connection-count').classList.add('text-danger');
+                    } else {
+                        document.getElementById('connection-count').classList.remove('text-danger');
+                    }
+                } else {
+                    showLinkedInError(data.error || 'Unknown error occurred');
+                }
+            })
+            .catch(error => {
+                document.getElementById('linkedinLoading').classList.add('d-none');
+                showLinkedInError('Network error: ' + error.message);
+            });
+        }
+
+        function showLinkedInError(msg) {
+            var errorDiv = document.getElementById('linkedinError');
+            errorDiv.textContent = msg;
+            errorDiv.classList.remove('d-none');
+        }
+
+        // Copy functionality
+        document.querySelectorAll('.copy-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                var targetId = this.getAttribute('data-target');
+                var text = document.getElementById(targetId).value;
+                
+                navigator.clipboard.writeText(text).then(() => {
+                    var originalText = this.textContent;
+                    this.textContent = 'Copied!';
+                    this.classList.remove('btn-outline-primary');
+                    this.classList.add('btn-success');
+                    
+                    setTimeout(() => {
+                        this.textContent = originalText;
+                        this.classList.add('btn-outline-primary');
+                        this.classList.remove('btn-success');
+                    }, 2000);
+                });
+            });
+        });
+    </script>
 </body>
 </html>

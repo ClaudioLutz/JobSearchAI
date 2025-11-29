@@ -8,7 +8,6 @@ using the OpenAI API.
 import logging
 from typing import Dict, Optional, Any
 from utils.api_utils import generate_json_from_prompt
-from config import get_openai_defaults
 
 logger = logging.getLogger("linkedin_generator")
 
@@ -17,6 +16,13 @@ CONNECTION_REQUEST_MAX_CHARS = 300
 PEER_NETWORKING_MAX_CHARS = 500
 INMAIL_MAX_WORDS = 150
 JOB_DESCRIPTION_SNIPPET_LENGTH = 500
+
+def _normalize_sharp_s(text: str) -> str:
+    """
+    Replace German sharp s characters with their 'ss'/'SS' equivalents.
+    Applied before length validations to ensure character limits are checked after normalization.
+    """
+    return text.replace("ß", "ss").replace("ẞ", "SS")
 
 def generate_linkedin_messages(cv_summary: str, job_details: Dict[str, Any]) -> Optional[Dict[str, str]]:
     """
@@ -127,6 +133,12 @@ def generate_linkedin_messages(cv_summary: str, job_details: Dict[str, Any]) -> 
             logger.error(f"Generated JSON missing required keys: {missing_keys}")
             return None
             
+        # Normalize German sharp s -> 'ss'/'SS' as required
+        for key in required_keys:
+            val = messages_json.get(key, '')
+            if isinstance(val, str) and ('ß' in val or 'ẞ' in val):
+                messages_json[key] = _normalize_sharp_s(val)
+
         # Post-processing to ensure character limits
         # Connection request validation (CRITICAL - must be < 300 chars)
         connection_request = messages_json.get('connection_request_hiring_manager', '')
