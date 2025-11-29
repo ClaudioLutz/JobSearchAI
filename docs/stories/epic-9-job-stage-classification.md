@@ -139,16 +139,47 @@ Transform JobSearchAI from a simple job discovery tool into a complete Applicant
 
 **Primary Risks:**
 1.  **Data Consistency**: Ensuring the `applications` table stays in sync with `job_matches`.
-    *   *Mitigation*: Use Foreign Keys and ensure application records are created lazily or via migration for existing matches.
+    *   *Mitigation*: Use Foreign Keys with ON DELETE CASCADE, ensure application records are created lazily on first status update, treat missing records as MATCHED state.
 2.  **UI Clutter**: Adding too many buttons/badges to the job card.
     *   *Mitigation*: Use a clean dropdown or a subtle status indicator that expands on hover.
+3.  **Concurrency**: Multiple simultaneous updates to the same job status.
+    *   *Mitigation*: SQLite handles our single-user scenario well; unique constraint on job_match_id prevents duplicates.
+4.  **Performance**: Large number of jobs could slow down Kanban board.
+    *   *Mitigation*: Initially render all jobs; add pagination/filtering if needed based on user feedback.
 
 ---
 
 ## Definition of Done
 
-- [ ] Database schema updated with `applications` table.
-- [ ] API endpoints for status updates are functional and tested.
-- [ ] UI allows changing status on individual jobs.
-- [ ] Kanban board is functional (drag-and-drop works).
+- [ ] Database schema updated with `applications` table with proper indexes and constraints.
+- [ ] API endpoints for status updates are functional, secured, and tested.
+- [ ] UI allows changing status on individual jobs with visual feedback.
+- [ ] Kanban board is functional (drag-and-drop works on desktop and is usable on mobile).
+- [ ] Auto-transition on letter generation works correctly.
+- [ ] Analytics dashboard widget displays accurate counts.
+- [ ] Stale application detection is implemented and visible.
+- [ ] All changes are logged appropriately.
 - [ ] Documentation updated.
+- [ ] End-to-end testing completed.
+
+---
+
+## Implementation Notes
+
+**Testing Strategy:**
+- Unit tests for database functions (CRUD operations)
+- API endpoint tests (valid/invalid inputs, authentication)
+- Integration tests for auto-transitions
+- Manual UI testing for drag-and-drop across browsers
+- End-to-end scenario: Match → Interested → Generate Letter → Applied → Interview
+
+**Logging Strategy:**
+- Log all status changes with timestamp and job_match_id
+- Log auto-transitions separately for audit trail
+- Include user context in logs for multi-user scenarios (future)
+
+**Future Considerations:**
+- Multi-user support would require adding user_id to applications table
+- Could add application_history table for full audit trail
+- Consider notifications/reminders for stale applications
+- Calendar integration for interview stages
