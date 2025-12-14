@@ -29,7 +29,7 @@ After cloning this repository, follow these steps to get started:
 
 3. **Initialize Database**:
    ```bash
-   python init_db.py
+   python init_db.py full-setup
    ```
 
 4. **Run the Application**:
@@ -38,9 +38,7 @@ After cloning this repository, follow these steps to get started:
    ```
 
 5. **Access the Dashboard**:
-   Open your browser to `http://localhost:5000` and register a new account.
-
-That's it! The application should now run without any critical errors.
+   Open your browser to `http://localhost:5000` and login with the admin credentials (default: admin / admin123 - change this immediately!).
 
 ## Overview
 
@@ -57,24 +55,12 @@ The system consists of the following main components:
 3.  **CV Processor**: Extracts and summarizes CV information using OpenAI.
 4.  **Job Matcher**: Matches jobs with CVs using semantic understanding via OpenAI.
 5.  **Motivation Letter Generator**: Creates personalized motivation letters and email texts.
-6.  **Word Template Generator**: Converts letters to Word documents.
-7.  **Dashboard**: Web interface for system interaction.
-8.  **Centralized Configuration**: (`config.py`) Provides a single source of truth for configuration settings.
-9.  **Utility Modules**: (`utils/`) Collection of utility modules for common operations with improved error handling.
-
-For detailed information on each component, please refer to the files in the `Documentation/` directory:
-
--   [Authentication System](./Documentation/Authentication_System.md) - **NEW** Complete security implementation
--   [Job Data Acquisition](./Documentation/Job_Data_Acquisition.md)
--   [CV Processor](./Documentation/CV_Processor.md)
--   [Job Matcher](./Documentation/Job_Matcher.md) - Fully optimized
--   [Motivation Letter Generator](./Documentation/Motivation_Letter_Generator.md) - Fully optimized
--   [Word Template Generator](./Documentation/Word_Template_Generator.md)
--   [Dashboard](./Documentation/Dashboard.md) - Updated with authentication integration
--   [System Overview](./Documentation/System.md) - Updated with authentication workflow
-
-For details on the code optimization, refer to:
--   [Code Optimization](./deprecated_20250427_211727/README_OPTIMIZATION.md)
+6.  **LinkedIn Integration**: Generates personalized LinkedIn connection messages.
+7.  **Word Template Generator**: Converts letters to Word documents.
+8.  **Dashboard**: Web interface for system interaction.
+9.  **Centralized Configuration**: (`config.py`) Provides a single source of truth for configuration settings.
+10. **Utility Modules**: (`utils/`) Collection of utility modules for common operations.
+11. **Services**: (`services/`) Business logic services for application handling and LinkedIn generation.
 
 ## Code Optimization
 
@@ -95,28 +81,21 @@ Key benefits of these optimizations:
 - Centralized configuration management
 - Type hints for better IDE support and code quality
 
-Currently optimized components:
-- `job_matcher.py`: Fully optimized
-- `job_details_utils.py`: Fully optimized
-- `letter_generation_utils.py`: Fully optimized
-
-See [README_OPTIMIZATION.md](./deprecated_20250427_211727/README_OPTIMIZATION.md) for detailed examples and usage.
-
 ## Basic Usage
 
 ### Authentication Setup
 
-Before using the system, you need to set up the database and create user accounts:
+Before using the system, you need to set up the database and create user accounts. The `init_db.py` script handles this:
 
 ```bash
-# Initialize the database
-python init_db.py
+# Full setup (Initialize, Migrate, Create Admin)
+python init_db.py full-setup
 
-# Create an admin user (follow prompts)
-python init_db.py --create-admin
+# Create an admin user manually if needed
+python init_db.py create-admin <username> <email> <password>
 
-# Test database connection
-python init_db.py --test-connection
+# Initialize just the job matching database
+python init_db.py init-job-db
 ```
 
 ### Running the Dashboard
@@ -156,16 +135,17 @@ Once logged in, the dashboard allows you to:
 - CSRF protection on all forms
 - Professional login/registration interface
 
-### Running Components Manually
-
-You can also run individual components via the command line. See the respective files in the `Documentation/` folder for specific instructions.
-
 ## System Requirements
 
 Ensure you have Python installed and the required dependencies:
 
 ```bash
 pip install -r requirements.txt
+```
+
+For MCP server support, install the additional requirements:
+```bash
+pip install -r mcp_requirements.txt
 ```
 
 API keys are required:
@@ -183,44 +163,36 @@ Configure ScrapeGraphAI in `job-data-acquisition/settings.json`.
 
 Key directories and their purposes:
 
--   `Documentation/`: Detailed component documentation
--   `models/`: Authentication system database models
-    - `user.py`: User model with password hashing and validation
-    - `__init__.py`: Database and Flask-Login initialization
--   `forms/`: Authentication forms with validation
-    - `auth_forms.py`: Login and registration forms
-    - `__init__.py`: Forms package initialization
--   `templates/auth/`: Authentication UI templates
-    - `base_auth.html`: Base template for authentication pages
-    - `login.html`: Professional login page
-    - `register.html`: Interactive registration page
 -   `blueprints/`: Flask blueprint modules (all protected by authentication)
-    - `auth_routes.py`: Authentication routes (login, register, logout)
-    - `cv_routes.py`, `job_data_routes.py`, etc.: Feature blueprints
+    -   `auth_routes.py`: Authentication routes
+    -   `cv_routes.py`: CV management routes
+    -   `linkedin_routes.py`: LinkedIn generation routes
+    -   `application_routes.py`: Application pipeline routes
+-   `models/`: Authentication system database models
+-   `forms/`: Authentication forms with validation
+-   `templates/`: HTML templates
+-   `static/`: Static files (CSS, JS)
 -   `instance/`: Database files (SQLite)
-    - `jobsearchai.db`: User database (created automatically)
+    -   `jobsearchai.db`: User and job match database
 -   `job-data-acquisition/`: Job scraping component
-    - `data/`: Scraped job data (JSON)
-    - `settings.json`: Scraper configuration
+    -   `data/`: Scraped job data (JSON)
+    -   `settings.json`: Scraper configuration
 -   `process_cv/`: CV processing component
-    - `cv-data/input/`: Uploaded CVs
-    - `cv-data/processed/`: CV summaries
-    - `.env`: Environment variables (OpenAI API key, database config)
+    -   `cv-data/input/`: Uploaded CVs
+    -   `cv-data/processed/`: CV summaries
+    - `.env`: Environment variables
 -   `motivation_letters/`: Generated letters and templates
-    - `template/`: Word document templates
-    - Generated files: HTML, DOCX, JSON structure, scraped data
+    -   `template/`: Word document templates
 -   `job_matches/`: Job match reports (MD and JSON)
--   `static/`: Dashboard static files (CSS, JS)
--   `templates/`: Dashboard HTML templates
--   `logs/`: Component-specific log files
+-   `services/`: Business logic services
+    -   `linkedin_generator.py`: Generates LinkedIn messages
+    -   `application_service.py`: Application pipeline service
+-   `scripts/`: Utility scripts
+    -   `backup_database.py`: Database backup script
+-   `tests/`: Automated tests
 -   `utils/`: Utility modules for common operations
-    - `__init__.py`: Package initialization
-    - `decorators.py`: Error handling and performance decorators
-    - `file_utils.py`: File operation utilities
-    - `api_utils.py`: OpenAI API wrappers
 -   `config.py`: Centralized configuration module
 -   `init_db.py`: Database initialization and user management script
--   No automated tests are included in this repository at present.
 
 ## Logging
 
@@ -238,10 +210,6 @@ The system provides comprehensive logging:
 - **Session Management**: Flask-Login integration with "remember me" functionality
 - **Route Protection**: All application functionality protected by authentication
 - **CSRF Protection**: Cross-site request forgery protection on all forms
-- **Professional UI**: Modern, responsive login and registration pages
-- **Dual Login Methods**: Support for both username and email authentication
-- **Account Management**: User account status control (active/inactive)
-- **Database Integration**: SQLAlchemy-based user management with proper indexing
 
 ### CV Processing
 - PDF text extraction and AI-powered summarization
@@ -271,33 +239,23 @@ The system provides comprehensive logging:
   - Word documents
   - Email texts
 - Bulk operations support
-- File management and organization
+
+### LinkedIn Integration
+- Generates personalized connection messages for recruiters
+- Uses CV summary and job details context
+- Available via the dashboard for matched jobs
 
 ### Email Automation Pipeline
 - **Application Queue Dashboard**: Visual queue for reviewing and sending job applications
 - **Smart Validation**: Automatic validation of application data with completeness scores
-- **User-Friendly Error Messages**: Clear, actionable error messages for all failures
-- **Batch Sending**: Send multiple applications at once with detailed results
-- **File Management**: Automatic organization of sent/failed applications
 - **Gmail Integration**: Secure email sending via Gmail with app password authentication
-- **Toast Notifications**: Real-time feedback for all user actions
-- **Loading States**: Visual indicators during async operations
-- **Responsive Design**: Mobile-friendly interface for review on any device
+- **Batch Sending**: Send multiple applications at once with detailed results
+- **Progress Tracking**: Real-time feedback for all user actions
 
-**Morning Review Workflow**:
-1. Navigate to the Queue Dashboard (`/queue`)
-2. Review pending applications with validation status indicators
-3. Click "Review" to see full application details and email preview
-4. Send individual applications or batch-send all ready applications
-5. Successfully sent applications are moved to "Sent" tab
-6. Failed applications are logged with error details for troubleshooting
+## Testing
 
-### Dashboard Interface
-- **Secure Access**: All features protected behind authentication
-- **User Information**: Welcome message with username and last login display
-- **Session Control**: Easy logout functionality and session management
-- Tabbed interface for logical organization
-- File management capabilities
-- Progress tracking for background tasks
-- Bulk operations support
-- Dark theme
+Automated tests are included in the `tests/` directory. To run them:
+
+```bash
+pytest
+```
