@@ -10,15 +10,16 @@ After cloning this repository, follow these steps to get started:
    ```
 
 2. **Set up Environment Variables**:
-   Create/update `process_cv/.env` with your OpenAI API key and Gmail credentials:
+   Create/update `process_cv/.env` with your OpenAI API key and optionally your Gmail credentials:
    ```
    OPENAI_API_KEY=your_openai_api_key_here
    SECRET_KEY=your_secret_key_here
+   # Optional: Only required if you intend to send emails via the application
    GMAIL_ADDRESS=your_gmail@gmail.com
    GMAIL_APP_PASSWORD=your_16_character_app_password
    ```
    
-   **Gmail App Password Setup**:
+   **Gmail App Password Setup (Optional)**:
    To send emails via Gmail, you need to create an App Password:
    1. Go to your Google Account settings: https://myaccount.google.com/
    2. Navigate to Security → 2-Step Verification (must be enabled)
@@ -167,7 +168,7 @@ Key directories and their purposes:
     -   `auth_routes.py`: Authentication routes
     -   `cv_routes.py`: CV management routes
     -   `linkedin_routes.py`: LinkedIn generation routes
-    -   `application_routes.py`: Application pipeline routes
+    -   `application_routes.py`: Application status API
 -   `models/`: Authentication system database models
 -   `forms/`: Authentication forms with validation
 -   `templates/`: HTML templates
@@ -189,7 +190,7 @@ Key directories and their purposes:
     -   `application_service.py`: Application pipeline service
 -   `scripts/`: Utility scripts
     -   `backup_database.py`: Database backup script
--   `tests/`: Automated tests
+-   `tests/`: Test files (currently primarily manual tests)
 -   `utils/`: Utility modules for common operations
 -   `config.py`: Centralized configuration module
 -   `init_db.py`: Database initialization and user management script
@@ -227,7 +228,7 @@ The system provides comprehensive logging:
 - Detailed match evaluation across multiple criteria
 - Combined process option (scraping + matching)
 
-### Motivation Letter Generation
+### Motivation Letter & Email Generation
 - Personalized letter generation using AI
 - Multiple input methods:
   - Automatic job detail extraction
@@ -240,22 +241,17 @@ The system provides comprehensive logging:
   - Email texts
 - Bulk operations support
 
+### Application Package
+- **Package Generation**: Generates comprehensive application packages (CV, Cover Letter, Email Text).
+- **Email Sending**: Capability to send applications directly (requires Gmail credentials). *Note: Full queue management dashboard is planned.*
+- **Validation**: Smart validation utility (Smart Validation) calculates completeness scores, currently available as a backend utility.
+
 ### LinkedIn Integration
 - Generates personalized connection messages for recruiters
 - Uses CV summary and job details context
 - Available via the dashboard for matched jobs
 
-### Email Automation Pipeline
-- **Application Queue Dashboard**: Visual queue for reviewing and sending job applications
-- **Smart Validation**: Automatic validation of application data with completeness scores
-- **Gmail Integration**: Secure email sending via Gmail with app password authentication
-- **Batch Sending**: Send multiple applications at once with detailed results
-- **Progress Tracking**: Real-time feedback for all user actions
-
 ## Testing
 
-Automated tests are included in the `tests/` directory. To run them:
-
-```bash
-pytest
-```
+Automated testing framework is set up in `tests/` (using `pytest`), but comprehensive automated test coverage is currently planned.
+Manual test scripts (e.g., `manual_test_linkedin.py`) are available in the `tests/` directory.
