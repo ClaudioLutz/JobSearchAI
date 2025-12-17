@@ -10,6 +10,11 @@ sys.path.append('.')
 # Import from existing modules
 from process_cv.cv_processor import extract_cv_text, summarize_cv
 
+# Import necessary utilities
+from utils.url_utils import URLNormalizer
+from utils.db_utils import JobMatchDatabase
+from utils.cv_utils import generate_cv_key
+
 # Import from centralized configuration and utilities
 from config import config, get_job_matcher_defaults
 from utils.file_utils import (
@@ -522,6 +527,91 @@ def generate_report(matches, output_file=None, output_dir="job_matches"):
     
     logger.info(f"Report generated: {report_file}")
     return report_file
+
+@log_execution_time()
+def evaluate_and_save_matches(cv_path, new_jobs, search_term):
+    """
+    Evaluate new jobs with CV and save matches to database.
+
+    Args:
+        cv_path (str): Path to the CV file
+        new_jobs (list): List of job dictionaries to evaluate
+        search_term (str): Search term used for these jobs
+
+    Returns:
+        int: Number of jobs successfully evaluated and saved
+    """
+    try:
+        # Generate CV key
+        cv_key = generate_cv_key(cv_path)
+        logger.info(f"Using CV key: {cv_key} for search term: {search_term}")
+
+        # Extract and summarize CV once
+        cv_text = extract_cv_text(cv_path)
+        cv_summary = summarize_cv(cv_text)
+        logger.info(f"CV summarized for matching ({len(cv_summary)} chars)")
+
+        # Initialize database and normalizer
+        db = JobMatchDatabase()
+        db.connect()
+        normalizer = URLNormalizer()
+
+        matched_count = 0
+
+        try:
+            # Evaluate each new job and save to database
+            for job in new_jobs:
+                try:
+                    job_title = job.get('Job Title', 'Unknown')
+                    logger.info(f"Evaluating: {job_title}")
+
+                    # Evaluate job match
+                    evaluation = evaluate_job_match(cv_summary, job)
+
+                    # Normalize URL
+                    raw_url = job.get('Application URL', '')
+                    job_url = normalizer.normalize(raw_url)
+
+                    # Prepare match data for database
+                    match_data = {
+                        'job_url': job_url,
+                        'search_term': search_term,
+                        'cv_key': cv_key,
+                        'job_title': job_title,
+                        'company_name': job.get('Company Name', ''),
+                        'location': job.get('Location', ''),
+                        'posting_date': job.get('Posting Date'),
+                        'salary_range': job.get('Salary Range'),
+                        'overall_match': evaluation.get('overall_match', 0),
+                        'skills_match': evaluation.get('skills_match'),
+                        'experience_match': evaluation.get('experience_match'),
+                        'education_fit': evaluation.get('education_fit'),
+                        'career_trajectory_alignment': evaluation.get('career_trajectory_alignment'),
+                        'preference_match': evaluation.get('preference_match'),
+                        'potential_satisfaction': evaluation.get('potential_satisfaction'),
+                        'location_compatibility': evaluation.get('location_compatibility'),
+                        'reasoning': evaluation.get('reasoning', ''),
+                        'scraped_data': json.dumps(job),
+                        'scraped_at': datetime.now().isoformat()
+                    }
+
+                    # Insert into database
+                    db.insert_job_match(match_data)
+                    matched_count += 1
+                    logger.info(f"Matched and saved: {job_title} (score: {match_data['overall_match']}/10)")
+
+                except Exception as job_e:
+                    logger.error(f"Error evaluating job {job.get('Job Title', 'Unknown')}: {job_e}")
+                    continue
+        finally:
+            db.close()
+
+        logger.info(f"Successfully evaluated and saved {matched_count}/{len(new_jobs)} new jobs")
+        return matched_count
+
+    except Exception as match_e:
+        logger.error(f"Error in evaluate_and_save_matches: {match_e}", exc_info=True)
+        raise match_e
 
 if __name__ == "__main__":
     # Path to the CV using centralized configuration
