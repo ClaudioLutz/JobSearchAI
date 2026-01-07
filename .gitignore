@@ -22,6 +22,7 @@ var/
 test.py
 # Logs
 *.log
+_bmad/
 
 # Environment variables
 .env

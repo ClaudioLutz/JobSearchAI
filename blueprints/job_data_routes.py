@@ -4,17 +4,133 @@ import logging
 import threading
 import importlib.util
 from pathlib import Path
-from flask import Blueprint, request, redirect, url_for, flash, render_template, current_app
+from flask import Blueprint, request, redirect, url_for, flash, render_template, current_app, jsonify
 from flask_login import login_required
 from werkzeug.utils import secure_filename
 
 # Assuming operation tracking functions are accessible, e.g., via current_app or a shared module
 # from dashboard import start_operation, update_operation_progress, complete_operation, logger # Example
 from utils.decorators import admin_required
+from utils.job_text_extractor import get_job_details_from_text
+from job_details_utils import get_job_details_automatic
 
 job_data_bp = Blueprint('job_data', __name__, url_prefix='/job_data')
 
 logger = logging.getLogger("dashboard.job_data") # Use a child logger
+
+
+@job_data_bp.route('/extract-from-text', methods=['POST'])
+@login_required
+def extract_job_from_text():
+    """
+    Extract job details from pasted text using LLM.
+
+    This endpoint provides a fallback when web scraping fails, allowing users
+    to manually paste job posting content for extraction.
+
+    Request JSON:
+        {
+            "text": "Raw job posting text...",
+            "url": "Optional source URL"
+        }
+
+    Returns:
+        JSON with extracted job details or error message
+    """
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+
+        pasted_text = data.get('text', '').strip()
+        source_url = data.get('url', '').strip() or None
+
+        # Validate input
+        if not pasted_text:
+            return jsonify({'error': 'No text provided'}), 400
+
+        if len(pasted_text) < 100:
+            return jsonify({
+                'error': 'Insufficient text provided',
+                'detail': 'Please provide at least 100 characters of job posting text'
+            }), 400
+
+        logger.info(f"Extracting job details from pasted text ({len(pasted_text)} chars)")
+
+        # Extract job details
+        job_details = get_job_details_from_text(pasted_text, source_url)
+
+        if job_details:
+            logger.info(f"Successfully extracted: {job_details.get('Job Title', 'Unknown')} at {job_details.get('Company Name', 'Unknown')}")
+            return jsonify(job_details), 200
+
+        logger.warning("Failed to extract job details from pasted text")
+        return jsonify({
+            'error': 'Failed to extract job details',
+            'detail': 'The LLM could not extract structured data from the provided text'
+        }), 500
+
+    except Exception as e:
+        logger.error(f"Error in extract_job_from_text: {e}", exc_info=True)
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+@job_data_bp.route('/extract-from-url', methods=['POST'])
+@login_required
+def extract_job_from_url():
+    """
+    Fully automatic job extraction from URL.
+
+    This endpoint:
+    1. Fetches page content via Jina Reader (handles JS, PDF, dynamic content)
+    2. Extracts structured job details using LLM with Pydantic validation
+
+    Request JSON:
+        {
+            "url": "https://example.com/job/123"
+        }
+
+    Returns:
+        JSON with extracted job details or error message
+    """
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+
+        job_url = data.get('url', '').strip()
+
+        # Validate input
+        if not job_url:
+            return jsonify({'error': 'No URL provided'}), 400
+
+        if not job_url.startswith(('http://', 'https://')):
+            return jsonify({
+                'error': 'Invalid URL',
+                'detail': 'URL must start with http:// or https://'
+            }), 400
+
+        logger.info(f"Automatic extraction from URL: {job_url}")
+
+        # Extract job details
+        job_details = get_job_details_automatic(job_url)
+
+        if job_details:
+            logger.info(f"Successfully extracted: {job_details.get('Job Title', 'Unknown')} at {job_details.get('Company Name', 'Unknown')}")
+            return jsonify(job_details), 200
+
+        logger.warning(f"Failed to extract job details from URL: {job_url}")
+        return jsonify({
+            'error': 'Failed to extract job details',
+            'detail': 'Could not fetch or extract structured data from the provided URL'
+        }), 500
+
+    except Exception as e:
+        logger.error(f"Error in extract_job_from_url: {e}", exc_info=True)
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
 
 @job_data_bp.route('/run_scraper', methods=['POST'])
 @login_required

@@ -35,6 +35,21 @@ except ImportError:
          logger.error("Failed to import function from graph_scraper_utils.", exc_info=True)
          get_job_details_with_graphscrapeai = None
 
+# Import the text extractor for pasted text fallback
+try:
+    from utils.job_text_extractor import get_job_details_from_text as _get_job_details_from_text
+except ImportError:
+    logger.warning("Failed to import job_text_extractor - pasted text extraction unavailable")
+    _get_job_details_from_text = None
+
+# Import the web content fetcher for automatic URL fetching
+try:
+    from utils.web_content_fetcher import fetch_page_content, get_job_page_content
+except ImportError:
+    logger.warning("Failed to import web_content_fetcher - automatic URL extraction unavailable")
+    fetch_page_content = None
+    get_job_page_content = None
+
 
 # Helper function to check quality of extracted details
 def has_sufficient_content(details_dict):
@@ -252,3 +267,93 @@ def get_job_details(job_url):
         'Location': 'Unknown_Location', 'Job Description': 'No description available',
         'Required Skills': 'No specific skills listed', 'Application URL': job_url
     }
+
+
+@handle_exceptions(default_return=None)
+@log_execution_time()
+def get_job_details_from_pasted_text(pasted_text, source_url=None):
+    """
+    Extract job details from manually pasted text using Instructor.
+
+    This is a fallback when web scraping fails to capture complete data.
+    Uses LLM-based extraction with Pydantic validation.
+
+    Args:
+        pasted_text (str): Raw text copied from job posting website
+        source_url (str, optional): Original URL of the job posting
+
+    Returns:
+        dict: Job details in standard format for compatibility, or None if extraction fails
+    """
+    if _get_job_details_from_text is None:
+        logger.error("Text extraction module not available")
+        return None
+
+    if not pasted_text or len(pasted_text.strip()) < 50:
+        logger.warning("Insufficient text provided for extraction")
+        return None
+
+    logger.info(f"Extracting job details from pasted text ({len(pasted_text)} chars)")
+
+    try:
+        job_details = _get_job_details_from_text(pasted_text, source_url)
+
+        if job_details and has_sufficient_content(job_details):
+            logger.info(f"Successfully extracted job from pasted text: {job_details.get('Job Title', 'Unknown')}")
+            return job_details
+
+        logger.warning("Extraction from pasted text returned insufficient content")
+        return None
+
+    except Exception as e:
+        logger.error(f"Error extracting from pasted text: {e}", exc_info=True)
+        return None
+
+
+@handle_exceptions(default_return=None)
+@log_execution_time()
+def get_job_details_automatic(job_url):
+    """
+    Fully automatic job extraction: fetch page content + extract details.
+
+    This function combines:
+    1. Jina Reader for content fetching (handles JS, PDF, dynamic content)
+    2. Instructor-based LLM extraction with Pydantic validation
+
+    Use this when you have a URL and want complete automatic extraction
+    without any manual intervention.
+
+    Args:
+        job_url (str): URL of the job posting
+
+    Returns:
+        dict: Job details in standard format, or None if extraction fails
+    """
+    if get_job_page_content is None or _get_job_details_from_text is None:
+        logger.error("Required modules not available for automatic extraction")
+        return None
+
+    if not job_url:
+        logger.warning("No URL provided for automatic extraction")
+        return None
+
+    logger.info(f"Starting automatic extraction for: {job_url}")
+
+    # Step 1: Fetch page content (Jina Reader → Playwright → requests)
+    page_content = get_job_page_content(job_url)
+
+    if not page_content or len(page_content.strip()) < 100:
+        logger.warning(f"Failed to fetch sufficient content from: {job_url}")
+        return None
+
+    logger.info(f"Fetched {len(page_content)} chars of content")
+
+    # Step 2: Extract structured data using Instructor
+    job_details = _get_job_details_from_text(page_content, job_url)
+
+    if job_details and has_sufficient_content(job_details):
+        logger.info(f"Automatic extraction successful: {job_details.get('Job Title', 'Unknown')}")
+        return job_details
+
+    logger.warning("Automatic extraction returned insufficient content")
+    return None
