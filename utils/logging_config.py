@@ -28,7 +28,7 @@ _logging_initialized = False
 
 def setup_logging(
     log_dir: str = "logs",
-    log_level: int = logging.DEBUG,
+    log_level: int = logging.INFO,
     log_filename: str = "jobsearchai.log"
 ) -> None:
     """
@@ -36,7 +36,7 @@ def setup_logging(
 
     Args:
         log_dir: Directory for log files (relative to project root or absolute)
-        log_level: Logging level (default: DEBUG)
+        log_level: Logging level (default: INFO)
         log_filename: Name of the log file (default: jobsearchai.log)
     """
     global _logging_initialized
