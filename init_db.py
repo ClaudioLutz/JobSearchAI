@@ -6,6 +6,12 @@ This script handles database creation, migrations, and initial setup.
 
 import os
 import sys
+
+# Initialize centralized logging
+from utils.logging_config import setup_logging, get_logger
+setup_logging()
+logger = get_logger("init_db")
+
 from flask import Flask
 from flask_migrate import Migrate, init, migrate, upgrade
 from sqlalchemy import text

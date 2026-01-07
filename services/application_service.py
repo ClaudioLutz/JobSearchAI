@@ -1,8 +1,9 @@
 from utils.db_utils import JobMatchDatabase
 from models.application_status import ApplicationStatus
-import logging
 
-logger = logging.getLogger(__name__)
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("application_service")
 
 def get_application_status(job_match_id):
     """

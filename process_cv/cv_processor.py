@@ -4,18 +4,15 @@ from pathlib import Path
 import fitz
 import openai
 import os
-import logging
+import sys
 from dotenv import load_dotenv
 
-# Set up logging for Cloud Run compatibility
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler()  # Only console logging for Cloud Run
-    ]
-)
-logger = logging.getLogger("cv_processor")
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("cv_processor")
 
 def extract_text_from_pdf(pdf_path):
     """Extract text from a PDF file."""

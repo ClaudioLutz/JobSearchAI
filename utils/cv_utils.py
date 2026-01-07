@@ -10,19 +10,14 @@ Story 2.1: Database Foundation
 
 import hashlib
 import json
-import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
 import sqlite3
 
-# Set up logging
-logger = logging.getLogger("cv_utils")
-if not logger.handlers:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("cv_utils")
 
 
 def generate_cv_key(cv_path: str) -> str:

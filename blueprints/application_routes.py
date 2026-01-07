@@ -9,14 +9,15 @@ Story 9.2: API & Route Integration
 from flask import Blueprint, request, jsonify
 from flask_login import login_required
 from services.application_service import (
-    update_application_status, 
+    update_application_status,
     get_application_status,
     get_application_by_job_match_id
 )
 from models.application_status import ApplicationStatus
-import logging
 
-logger = logging.getLogger(__name__)
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("dashboard.application")
 
 application_bp = Blueprint('application', __name__, url_prefix='/api/applications')
 

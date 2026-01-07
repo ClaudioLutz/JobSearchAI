@@ -14,6 +14,11 @@ from scrapegraphai.graphs import SmartScraperGraph
 # Add the parent directory to the Python path to import config
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Initialize centralized logging
+from utils.logging_config import setup_logging, get_logger
+setup_logging()
+scraper_logger = get_logger("job_scraper")
+
 # Create Flask app for health checks and API endpoints
 app = Flask(__name__)
 
@@ -95,35 +100,10 @@ def load_config():
 # Get configuration
 CONFIG = load_config()
 
-# Set up logging
-def setup_logging():
-    if CONFIG is None:
-        # Default logging configuration if CONFIG is None
-        log_dir = "job-data-acquisition/logs"
-        log_level = "INFO"
-    else:
-        log_dir = CONFIG["logging"]["log_directory"]
-        log_level = CONFIG["logging"]["log_level"]
-    
-    os.makedirs(log_dir, exist_ok=True)
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = f"{log_dir}/scraper_{timestamp}.log"
-    
-    logging.basicConfig(
-        level=getattr(logging, log_level),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ]
-    )
-    
-    logger = logging.getLogger("job_scraper")
-    if CONFIG is None:
-        logger.error("Configuration not loaded. Using default logging settings.")
-    
-    return logger
+# Set up logging - uses centralized logging from utils/logging_config.py
+def setup_logging_legacy():
+    """Legacy function - returns the centralized logger for backward compatibility."""
+    return get_logger("job_scraper")
 
 # Define the extraction prompt
 EXTRACTION_PROMPT = """
@@ -254,7 +234,7 @@ def health_check():
 def scrape_endpoint():
     """API endpoint to trigger scraping"""
     try:
-        logger = setup_logging()
+        logger = get_logger("job_scraper")
         logger.info("Scraping request received via API")
         
         output_file = run_scraper()
@@ -318,7 +298,7 @@ def run_scraper():
     - Correct search term handling
     - Better performance and cost efficiency
     """
-    logger = setup_logging()
+    logger = get_logger("job_scraper")
     logger.warning("Using deprecated run_scraper() function")
     
     if CONFIG is None:
@@ -418,7 +398,7 @@ def run_scraper_with_deduplication(search_term, cv_path, max_pages=None):
         - URL normalization for accurate matching
         - Comprehensive metrics tracking and logging
     """
-    logger = setup_logging()
+    logger = get_logger("job_scraper")
     
     # Initialize metrics
     metrics = {

@@ -5,7 +5,6 @@ This module provides functions for generating motivation letters and email texts
 using the OpenAI API and converting the generated content to HTML format.
 """
 
-import logging
 import json
 from pathlib import Path
 
@@ -14,7 +13,7 @@ from config import config, get_openai_api_key, get_openai_defaults
 
 # Import utilities
 from utils.file_utils import (
-    save_json_file, 
+    save_json_file,
     ensure_output_directory,
     create_application_folder,
     create_metadata_file,
@@ -25,11 +24,9 @@ from utils.file_utils import (
 from utils.api_utils import openai_client, generate_json_from_prompt
 from utils.decorators import handle_exceptions, log_execution_time
 
-# Set up logger for this module
-logger = logging.getLogger("letter_generation_utils")
-# Configure logging basic setup if needed when run standalone
-if not logger.hasHandlers():
-     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("letter_generation_utils")
 
 
 @handle_exceptions(default_return="<p>Error generating HTML content</p>")

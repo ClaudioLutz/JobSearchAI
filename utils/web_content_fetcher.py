@@ -7,12 +7,13 @@ Uses multiple strategies with automatic fallback:
 3. Simple requests (last resort fallback)
 """
 
-import logging
 import requests
 from typing import Optional, Tuple
 from urllib.parse import quote
 
-logger = logging.getLogger(__name__)
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("web_content_fetcher")
 
 # Jina Reader API - free, handles JS/PDF/dynamic content
 JINA_READER_BASE = "https://r.jina.ai/"

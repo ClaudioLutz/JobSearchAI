@@ -5,7 +5,6 @@ This module provides LLM-based extraction of job posting details from raw text,
 using Pydantic models for validation and Instructor for structured output.
 """
 
-import logging
 from typing import Optional, Dict, Any
 
 import instructor
@@ -14,8 +13,9 @@ from openai import OpenAI
 
 from config import get_openai_api_key, get_openai_defaults
 
-# Set up logging
-logger = logging.getLogger(__name__)
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("job_text_extractor")
 
 # German extraction prompt matching existing style
 EXTRACTION_SYSTEM_PROMPT = """Du bist ein Experte für die Extraktion strukturierter Daten aus Stellenanzeigen.

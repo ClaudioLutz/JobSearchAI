@@ -1,6 +1,5 @@
 import os
 import json
-import logging
 import threading
 import urllib.parse
 import traceback
@@ -25,9 +24,11 @@ from utils.decorators import admin_required
 from services.application_service import update_application_status, get_application_status
 from utils.db_utils import JobMatchDatabase
 
-motivation_letter_bp = Blueprint('motivation_letter', __name__, url_prefix='/motivation_letter')
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("dashboard.motivation_letter")
 
-logger = logging.getLogger("dashboard.motivation_letter") # Use a child logger
+motivation_letter_bp = Blueprint('motivation_letter', __name__, url_prefix='/motivation_letter')
 
 # Helper function to get job details - uses the function attached to current_app
 # Note: This might be redundant if get_job_details from job_details_utils is always used now.

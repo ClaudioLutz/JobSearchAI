@@ -6,7 +6,6 @@ particularly OpenAI API operations which are used across the application.
 """
 
 import json
-import logging
 import time
 from typing import Any, Dict, List, Optional, Union, cast, Literal
 
@@ -19,8 +18,9 @@ from utils.decorators import handle_exceptions, retry, cache_result
 ReasoningEffort = Literal["none", "low", "medium", "high"]
 Verbosity = Literal["low", "medium", "high"]
 
-# Set up logging
-logger = logging.getLogger(__name__)
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("api_utils")
 
 class OpenAIClient:
     """

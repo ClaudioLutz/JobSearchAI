@@ -1,6 +1,5 @@
 import os
 import json
-import logging
 import urllib.parse
 from datetime import datetime
 from pathlib import Path
@@ -14,12 +13,11 @@ sys.path.append('.') # Add project root to path
 from process_cv.cv_processor import extract_cv_text, summarize_cv
 from utils.decorators import admin_required
 
-# Assuming helper functions and progress tracking are accessible via current_app or imported
-# from dashboard import allowed_file, logger # Example if helpers are in dashboard
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("dashboard.cv")
 
 cv_bp = Blueprint('cv', __name__, url_prefix='/cv')
-
-logger = logging.getLogger("dashboard.cv") # Use a child logger
 
 # Helper function (consider moving to a shared utils module later)
 def allowed_file(filename):

@@ -10,18 +10,13 @@ provides a unified interface for accessing them.
 
 import os
 import json
-import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, Union, List
 from dotenv import load_dotenv
 
-# Set up logging
-logger = logging.getLogger("config")
-if not logger.handlers:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("config")
 
 class ConfigManager:
     """

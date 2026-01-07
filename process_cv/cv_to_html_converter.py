@@ -3,19 +3,15 @@ import fitz
 import openai
 import os
 import json
-import logging
+import sys
 from dotenv import load_dotenv
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("cv_to_html_converter.log"),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger("cv_to_html_converter")
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("cv_to_html_converter")
 
 # Load environment variables
 # Load environment variables from the .env file located next to this script

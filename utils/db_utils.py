@@ -10,7 +10,6 @@ Story 2.1: Database Foundation
 
 import sqlite3
 import json
-import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
@@ -19,13 +18,9 @@ from contextlib import contextmanager
 from utils.url_utils import URLNormalizer
 from models.application_status import ApplicationStatus
 
-# Set up logging
-logger = logging.getLogger("db_utils")
-if not logger.handlers:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("db_utils")
 
 
 class JobMatchDatabase:

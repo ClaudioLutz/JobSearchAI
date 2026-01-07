@@ -6,7 +6,6 @@ leveraging the centralized configuration for consistent path resolution.
 """
 
 import json
-import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union, cast
@@ -14,8 +13,9 @@ from typing import Any, Dict, List, Optional, Union, cast
 # Import the configuration module
 from config import config
 
-# Set up logging
-logger = logging.getLogger(__name__)
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("file_utils")
 
 def get_latest_file(
     directory: Union[str, Path], 

@@ -16,10 +16,12 @@ import json
 import re
 from datetime import datetime
 import shutil
-import logging
+
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("dashboard.settings")
 
 bp = Blueprint('settings', __name__, url_prefix='/api/settings')
-logger = logging.getLogger(__name__)
 
 # Configuration
 SETTINGS_FILE = Path('job-data-acquisition/settings.json')

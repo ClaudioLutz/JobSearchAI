@@ -5,16 +5,15 @@ Handles email sending via Gmail SMTP for job application submissions.
 
 import smtplib
 import os
-import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 from pathlib import Path
 from typing import Tuple
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("email_sender")
 
 
 class EmailSender:

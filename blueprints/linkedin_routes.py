@@ -1,4 +1,3 @@
-import logging
 import json
 from pathlib import Path
 from flask import Blueprint, request, jsonify, current_app
@@ -7,8 +6,11 @@ from services.linkedin_generator import generate_linkedin_messages
 from job_details_utils import get_job_details
 from utils.decorators import admin_required
 
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("dashboard.linkedin")
+
 linkedin_bp = Blueprint('linkedin', __name__, url_prefix='/linkedin')
-logger = logging.getLogger("dashboard.linkedin")
 
 @linkedin_bp.route('/generate', methods=['POST'])
 @login_required

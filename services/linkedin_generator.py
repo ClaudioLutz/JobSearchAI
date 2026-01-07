@@ -5,11 +5,12 @@ This module provides functions for generating LinkedIn connection requests and m
 using the OpenAI API.
 """
 
-import logging
 from typing import Dict, Optional, Any
 from utils.api_utils import generate_json_from_prompt
 
-logger = logging.getLogger("linkedin_generator")
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("linkedin_generator")
 
 # Character limit constants
 CONNECTION_REQUEST_MAX_CHARS = 300

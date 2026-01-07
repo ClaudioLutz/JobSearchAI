@@ -1,6 +1,5 @@
 import os
 import json
-import logging
 import threading
 import urllib.parse
 import importlib.util
@@ -19,13 +18,13 @@ sys.path.append('.')
 
 # Import necessary functions from other modules
 from job_matcher import match_jobs_with_cv, generate_report
-# Assuming get_job_details_for_url might be needed and moved to a utils module or kept in main app
-# from dashboard import get_job_details_for_url # Example
 from utils.decorators import admin_required
 
-job_matching_bp = Blueprint('job_matching', __name__, url_prefix='/job_matching')
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("dashboard.job_matching")
 
-logger = logging.getLogger("dashboard.job_matching") # Use a child logger
+job_matching_bp = Blueprint('job_matching', __name__, url_prefix='/job_matching')
 
 # Placeholder for get_job_details_for_url if it's moved/shared
 # This function is complex and might be better in a dedicated 'utils' or 'helpers' module

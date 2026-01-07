@@ -14,6 +14,11 @@ import urllib.parse
 import sys
 sys.path.append('.')
 
+# Initialize centralized logging
+from utils.logging_config import setup_logging, get_logger
+setup_logging()
+logger = get_logger("dashboard")
+
 # Import necessary functions used only in this file or passed to blueprints
 # from job_matcher import load_latest_job_data # Keep if used in index or get_job_details
 
@@ -245,18 +250,7 @@ def query_job_matches(filters=None, sort_by='overall_match', sort_order='DESC', 
         db.close()
 
 
-# --- Logging Setup ---
-# Configure logging globally here or within create_app
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("dashboard.log"), # Log file in the root directory
-        logging.StreamHandler()
-    ]
-)
-# Get the root logger for the dashboard application
-logger = logging.getLogger("dashboard")
+# --- Logging is configured via utils/logging_config.py ---
 
 
 # --- Application Factory ---

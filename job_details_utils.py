@@ -1,4 +1,3 @@
-import logging
 import json
 import openai
 from pathlib import Path
@@ -14,11 +13,9 @@ from utils.file_utils import load_json_file, flatten_nested_job_data
 from utils.api_utils import openai_client, generate_json_from_prompt
 from utils.decorators import handle_exceptions, log_execution_time, retry
 
-# Set up logger for this module
-logger = logging.getLogger("job_details_utils")
-# Configure logging basic setup if needed when run standalone
-if not logger.hasHandlers():
-     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("job_details_utils")
 
 # Import the graph scraper utility
 # Assuming the function is now get_job_details_with_graphscrapeai based on previous steps

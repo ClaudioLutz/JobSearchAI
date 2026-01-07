@@ -1,6 +1,5 @@
 import os
 import json
-import logging
 import threading
 import importlib.util
 from pathlib import Path
@@ -9,14 +8,15 @@ from flask_login import login_required
 from werkzeug.utils import secure_filename
 
 # Assuming operation tracking functions are accessible, e.g., via current_app or a shared module
-# from dashboard import start_operation, update_operation_progress, complete_operation, logger # Example
 from utils.decorators import admin_required
 from utils.job_text_extractor import get_job_details_from_text
 from job_details_utils import get_job_details_automatic
 
-job_data_bp = Blueprint('job_data', __name__, url_prefix='/job_data')
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("dashboard.job_data")
 
-logger = logging.getLogger("dashboard.job_data") # Use a child logger
+job_data_bp = Blueprint('job_data', __name__, url_prefix='/job_data')
 
 
 @job_data_bp.route('/extract-from-text', methods=['POST'])

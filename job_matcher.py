@@ -1,11 +1,14 @@
 import json
-import logging
 from datetime import datetime
 from pathlib import Path
 
 # Add the current directory to the Python path to find modules
 import sys
 sys.path.append('.')
+
+# Set up logging using centralized configuration
+from utils.logging_config import get_logger
+logger = get_logger("job_matcher")
 
 # Import from existing modules
 from process_cv.cv_processor import extract_cv_text, summarize_cv
@@ -18,10 +21,10 @@ from utils.cv_utils import generate_cv_key
 # Import from centralized configuration and utilities
 from config import config, get_job_matcher_defaults
 from utils.file_utils import (
-    get_latest_file, 
-    load_json_file, 
-    save_json_file, 
-    flatten_nested_job_data, 
+    get_latest_file,
+    load_json_file,
+    save_json_file,
+    flatten_nested_job_data,
     ensure_output_directory,
     create_timestamped_filename
 )
@@ -30,17 +33,6 @@ from utils.decorators import handle_exceptions, retry, log_execution_time
 from utils.url_utils import URLNormalizer
 from utils.db_utils import JobMatchDatabase
 from utils.cv_utils import generate_cv_key
-
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("job_matcher.log"),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger("job_matcher")
 
 # OpenAI client is imported from api_utils and already initialized
 
